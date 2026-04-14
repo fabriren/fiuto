@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # ================================================================
-#  ir_fiuto.sh  –  v2.6
+#  fiuto.sh  –  v2.6
 #  Toolkit DFIR unificato per analisi di disco Windows offline
 #
 #  Uso:
-#    ./ir_fiuto.sh                        # menu interattivo
-#    ./ir_fiuto.sh /mnt/windows           # specifica la root
-#    ./ir_fiuto.sh /mnt/windows --all     # esegui tutto
-#    ./ir_fiuto.sh /mnt/windows --module 3  # modulo specifico
+#    ./fiuto.sh                        # menu interattivo
+#    ./fiuto.sh /mnt/windows           # specifica la root
+#    ./fiuto.sh /mnt/windows --all     # esegui tutto
+#    ./fiuto.sh /mnt/windows --module 3  # modulo specifico
 # ================================================================
 
 set -uo pipefail
@@ -641,7 +641,7 @@ html_footer() {
     local SRC="$2"
     cat << HTMLEOF
 <footer>
-  <div>ir_fiuto.sh — generato il ${SCAN}</div>
+  <div>fiuto.sh — generato il ${SCAN}</div>
   <div>Sorgente: <span>${SRC}</span></div>
 </footer>
 </body></html>
@@ -8177,7 +8177,7 @@ html_out = f"""<!DOCTYPE html>
 </main>
 <footer>
   <span>PAD Offline</span>
-  <span>ir_fiuto.sh — DFIR Toolkit</span>
+  <span>fiuto.sh — DFIR Toolkit</span>
 </footer>
 </body></html>"""
 
@@ -8751,15 +8751,15 @@ main() {
         case "$1" in
             -h|--help)
                 echo ""
-                echo -e "${CYAN}${BOLD}ir_fiuto.sh${RESET} — Toolkit DFIR per analisi di disco Windows offline"
+                echo -e "${CYAN}${BOLD}fiuto.sh${RESET} — Toolkit DFIR per analisi di disco Windows offline"
                 echo ""
                 echo -e "  ${BOLD}Uso:${RESET}"
-                echo -e "    ./ir_fiuto.sh                            # menu interattivo"
-                echo -e "    ./ir_fiuto.sh /mnt/windows               # imposta root e apre il menu"
-                echo -e "    ./ir_fiuto.sh /mnt/windows --all         # esegui tutti i moduli"
-                echo -e "    ./ir_fiuto.sh /mnt/windows --module 3    # esegui modulo specifico"
-                echo -e "    ./ir_fiuto.sh /mnt/windows --modules 1,3,5-8  # esegui selezione"
-                echo -e "    ./ir_fiuto.sh /mnt/windows --all --ioc /path/to/ioc.txt  # con IoC"
+                echo -e "    ./fiuto.sh                            # menu interattivo"
+                echo -e "    ./fiuto.sh /mnt/windows               # imposta root e apre il menu"
+                echo -e "    ./fiuto.sh /mnt/windows --all         # esegui tutti i moduli"
+                echo -e "    ./fiuto.sh /mnt/windows --module 3    # esegui modulo specifico"
+                echo -e "    ./fiuto.sh /mnt/windows --modules 1,3,5-8  # esegui selezione"
+                echo -e "    ./fiuto.sh /mnt/windows --all --ioc /path/to/ioc.txt  # con IoC"
                 echo ""
                 echo -e "  ${BOLD}Moduli disponibili (1-38):${RESET}"
                 echo -e "    1  PowerShell History        2  Notepad TabState"
