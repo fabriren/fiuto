@@ -7,7 +7,7 @@
 ## 📋 Caratteristiche Principali
 
 ### Copertura Completa di Artefatti Windows
-fiuto raccoglie e analizza:
+FIUTO raccoglie e analizza:
 - **Cronologie di esecuzione** (Prefetch, AmCache, ShimCache, BAM)
 - **Artefatti di persistenza** (Run Keys, Scheduled Tasks, Services, WMI)
 - **Cronologia di navigazione** (Browser history, URL MRU, TypedPaths)
