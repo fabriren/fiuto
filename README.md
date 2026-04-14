@@ -322,3 +322,5 @@ fiuto è uno strumento di forensica digitale legittimo per analisi offline autor
 ---
 
 **Ultima modifica:** 2026-04-14 | **Versione:** 2.6
+
+<img width="970" height="1061" alt="image" src="https://github.com/user-attachments/assets/75779082-ffc5-42d2-96e6-db35eafa497c" />
