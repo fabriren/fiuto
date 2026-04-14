@@ -1,6 +1,6 @@
-# fiuto 🔍
+# FIUTO 🔍
 
-**fiuto** è un toolkit DFIR (Digital Forensics and Incident Response) unificato per l'analisi completa di dischi Windows offline. Automatizza l'estrazione e l'analisi di 38+ artefatti critici di forensica digitale, generando report HTML dettagliati per investigazioni rapide ed efficaci.
+**FIUTO** è un toolkit DFIR (Digital Forensics and Incident Response) unificato per l'analisi completa di dischi Windows offline. Automatizza l'estrazione e l'analisi di 38+ artefatti critici di forensica digitale, generando report HTML dettagliati per investigazioni rapide ed efficaci.
 
 ---
 
