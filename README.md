@@ -60,7 +60,7 @@ Lo script utilizza internamente helper bash per:
 
 1. **Clona il repository**
    ```bash
-   git clone https://github.com/yourusername/fiuto.git
+   git clone https://github.com/fabriren/fiuto.git
    cd fiuto
    ```
 
