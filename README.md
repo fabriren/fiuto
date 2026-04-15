@@ -163,7 +163,7 @@ fiuto_reports/
 | 35 | JumpLists | Recent Destinations | App user interaction |
 | 36 | Network Artifacts | Registry SYSTEM | DNS, interfaces, networks |
 | 37 | Master Timeline | (Aggregated) | Cross-artifact timeline |
-| 38 | PAD Offline | NTDS.dit | Active Directory Panoramic |
+| 38 | PAD Offline | NTDS.dit | Advanced Active Directory |
 
 ---
 
@@ -292,7 +292,11 @@ If you have improvements, bug reports, or additional modules:
 
 ## ⚖️ License
 
-This project is distributed under the **MIT License**.
+This project is **free** and distributed under the **MIT License**.
+
+If FIUTO has been useful to you and you'd like to support its development, a small donation via PayPal is always appreciated — but entirely optional! 🙏
+
+[![Donate via PayPal](https://img.shields.io/badge/Donate-PayPal-blue.svg)](https://paypal.me/rendina)
 
 ---
 
@@ -488,7 +492,7 @@ fiuto_reports/
 | 35 | JumpLists | Recent Destinations | Interazione utente app |
 | 36 | Network Artifacts | Registry SYSTEM | DNS, interfacce, reti |
 | 37 | Master Timeline | (Aggregato) | Timeline cross-artefatto |
-| 38 | PAD Offline | NTDS.dit | Panoramica Active Directory |
+| 38 | PAD Offline | NTDS.dit | Active Directory avanzato |
 
 ---
 
@@ -617,7 +621,11 @@ Se hai miglioramenti, segnalazioni di bug o moduli aggiuntivi:
 
 ## ⚖️ Licenza
 
-Questo progetto è distribuito sotto licenza **MIT**.
+Questo progetto è **gratuito** e distribuito sotto licenza **MIT**.
+
+Se FIUTO ti è stato utile e vuoi supportarne lo sviluppo, una piccola donazione tramite PayPal è sempre apprezzata — ma assolutamente facoltativa! 🙏
+
+[![Dona con PayPal](https://img.shields.io/badge/Dona-PayPal-blue.svg)](https://paypal.me/rendina)
 
 ---
 
@@ -648,13 +656,7 @@ FIUTO è uno strumento per velocizzare le analisi forensi digitale legittimo, da
 
 ---
 
-**Last update:** 2026-04-15 | **Version:** 1.0 
+**Last update:** 2026-04-15 | **Version:** 2.7 (Bilingual)
 
-<img width="983" height="400" alt="image" src="https://github.com/user-attachments/assets/b8a9117f-5b29-4882-a0db-fe560a30c45e" />
-
-<img width="973" height="1014" alt="image" src="https://github.com/user-attachments/assets/b5ec0335-db89-4732-96e3-584b54007c02" />
-
-<img width="1852" height="915" alt="image" src="https://github.com/user-attachments/assets/c9fb9a77-85db-4d28-9e4d-597c06160b03" />
-
-<img width="1865" height="758" alt="image" src="https://github.com/user-attachments/assets/26ffef22-5f6a-4ba0-a347-113318473d14" />
-
+<img width="982" height="574" alt="image" src="https://github.com/user-attachments/assets/0ddc9023-0736-4fe0-ae47-1e6fb6c7c003" />
+<img width="983" height="934" alt="image" src="https://github.com/user-attachments/assets/3d8a3c09-fe3c-4711-baca-9d3e8c65bff7" />
