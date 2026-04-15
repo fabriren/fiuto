@@ -492,7 +492,9 @@ PYEOF
 print_host_info_table() {
     local TITLE="$([ "$LANG" = "it" ] && echo "INFORMAZIONI MACCHINA TARGET" || echo "TARGET MACHINE INFORMATION")"
     echo -e "  ${CYAN}${BOLD}┌────────────────────────────────────────────────────────────────────────────┐${RESET}"
-    printf "  ${CYAN}${BOLD}│%*s${RESET} ${CYAN}${BOLD}│${RESET}\n" $(( (76 + ${#TITLE}) / 2 )) "$TITLE"
+    local _T=${#TITLE} _LEFT=$(( (76 - ${#TITLE}) / 2 )) _RIGHT
+    _RIGHT=$(( 76 - ${#TITLE} - _LEFT ))
+    printf "  ${CYAN}${BOLD}│%*s%*s│${RESET}\n" $(( _LEFT + _T )) "$TITLE" $_RIGHT ""
     echo -e "  ${CYAN}${BOLD}├────────────────────────────────────────────────────────────────────────────┤${RESET}"
     printf "  ${CYAN}${BOLD}│${RESET}  %-18s : ${WHITE}${BOLD}%-52s${RESET} ${CYAN}${BOLD}│${RESET}\n" "$(t hostname)" "${HOST_NAME:-N/A}"
     printf "  ${CYAN}${BOLD}│${RESET}  %-18s : %-52s ${CYAN}${BOLD}│${RESET}\n" "$(t os)" "${OS_VER:-N/A}"
@@ -7097,28 +7099,73 @@ SCRIPTEOF
     open_report_prompt "$REPORT_HTML"
 }
 
-# Esegue un modulo in modalità batch e registra il risultato in SUMMARY_TABLE
+# Esegue un modulo in modalità batch e registra il risultato in SUMMARY_TABLE.
+# Durante l'esecuzione mostra il suggerimento ESC; premendo ESC il modulo viene
+# interrotto e si passa al successivo.
 run_batch_module() {
     local mod_num="$1"
     local mod_func="$2"
     local mod_name="$3"
     local total_mods="${4:-38}"
+    local _ESC_HINT; _ESC_HINT="$(L "[ESC: salta modulo]" "[ESC: skip module]")"
 
-    echo -ne "  ${CYAN}[*]${RESET} [${mod_num}/${total_mods}] Esecuzione modulo $mod_num ($mod_name)... \r"
+    echo -ne "  ${CYAN}[*]${RESET} [${mod_num}/${total_mods}] $(L "Esecuzione modulo" "Running module") $mod_num ($mod_name)...  ${DIM}${_ESC_HINT}${RESET}\r"
     log_msg "[BATCH] Modulo $mod_num: $mod_name"
 
-    local before_reports=${#GENERATED_REPORTS[@]}
-    $mod_func >/dev/null 2>&1
-    local after_reports=${#GENERATED_REPORTS[@]}
+    # I report generati dal subshell vengono scritti su un file temp
+    # perché gli array bash non si propagano al processo padre.
+    local _REP_TMP; _REP_TMP=$(mktemp)
 
-    if (( after_reports > before_reports )); then
+    (
+        # Override locale: scrive il path nel file temp invece dell'array
+        register_report() { [[ -n "${1:-}" && -f "$1" ]] && echo "$1" >> "$_REP_TMP"; }
+        $mod_func >/dev/null 2>&1
+    ) &
+    local MOD_PID=$!
+
+    # Monitoraggio tasto ESC (solo se /dev/tty è disponibile)
+    local SKIPPED=0
+    local _OLD_STTY=""
+    if [[ -c /dev/tty ]]; then
+        _OLD_STTY=$(stty -g </dev/tty 2>/dev/null) || true
+        stty -echo -icanon min 0 time 0 </dev/tty 2>/dev/null || true
+        while kill -0 "$MOD_PID" 2>/dev/null; do
+            local KEY=""
+            IFS= read -r -s -t 0.2 -N 1 KEY </dev/tty 2>/dev/null || true
+            if [[ "$KEY" == $'\033' ]]; then
+                kill "$MOD_PID" 2>/dev/null
+                SKIPPED=1
+                break
+            fi
+        done
+        [[ -n "$_OLD_STTY" ]] && stty "$_OLD_STTY" </dev/tty 2>/dev/null || true
+    fi
+
+    wait "$MOD_PID" 2>/dev/null
+
+    if [[ $SKIPPED -eq 1 ]]; then
+        printf '\r\033[K'
+        echo -e "  ${YELLOW}[⏭]${RESET} [${mod_num}/${total_mods}] $mod_name — $(L "annullato (ESC)" "cancelled (ESC)")"
+        SUMMARY_TABLE+=("$mod_num|$mod_name|SKIP|$(L "annullato" "cancelled")")
+        rm -f "$_REP_TMP"
+        return
+    fi
+
+    # Importa i report generati nel subshell
+    if [[ -s "$_REP_TMP" ]]; then
+        while IFS= read -r _rep; do
+            [[ -n "$_rep" && -f "$_rep" ]] && GENERATED_REPORTS+=("$_rep")
+        done < "$_REP_TMP"
         local rep_path="${GENERATED_REPORTS[-1]}"
+        printf '\r\033[K'
         echo -e "  ${GREEN}[✓]${RESET} [${mod_num}/${total_mods}] $mod_name — report: ${DIM}${rep_path}${RESET}"
         SUMMARY_TABLE+=("$mod_num|$mod_name|SI|$rep_path")
     else
-        echo -e "  ${DIM}[i] [${mod_num}/${total_mods}] $mod_name — nessun risultato${RESET}                     "
+        printf '\r\033[K'
+        echo -e "  ${DIM}[i] [${mod_num}/${total_mods}] $mod_name — $(L "nessun risultato" "no results")${RESET}"
         SUMMARY_TABLE+=("$mod_num|$mod_name|NO|-")
     fi
+    rm -f "$_REP_TMP"
 }
 
 # ================================================================
@@ -8453,15 +8500,24 @@ run_all_modules() {
 
     echo ""
     section_header "$(L "Riepilogo Scansione Globale" "Global Scan Summary")" "$GREEN"
-    echo -e "  ${BOLD}MOD  NOME MODULO                        EVIDENZE     FILE GENERATI${RESET}"
+    local _hdr_mod;    _hdr_mod="$(L    "MOD" "MOD")"
+    local _hdr_name;   _hdr_name="$(L  "NOME MODULO" "MODULE NAME")"
+    local _hdr_evid;   _hdr_evid="$(L  "EVIDENZE" "FINDINGS")"
+    local _hdr_file;   _hdr_file="$(L  "FILE GENERATI" "GENERATED FILES")"
+    local _lbl_found;  _lbl_found="$(L "TROVATE" "FOUND")"
+    local _lbl_none;   _lbl_none="$(L  "NESSUNA" "NONE")"
+    local _lbl_skip;   _lbl_skip="$(L  "SALTATO" "SKIPPED")"
+    printf "  ${BOLD}%-4s %-32s %-12s %s${RESET}\n" "$_hdr_mod" "$_hdr_name" "$_hdr_evid" "$_hdr_file"
     echo "  ─────────────────────────────────────────────────────────────────────────────────────────"
     for row in "${SUMMARY_TABLE[@]}"; do
         IFS='|' read -r mnum mname msy mpath <<< "$row"
         if [[ "$msy" == "SI" ]]; then
             local rel_path="${mpath#$REPORT_BASE_DIR/}"
-            printf "  ${CYAN}%02d${RESET}   ${BOLD}%-32s${RESET} ${GREEN}%-10s${RESET}   ${DIM}%s${RESET}\n" "$mnum" "$mname" "TROVATE" "$rel_path"
+            printf "  ${CYAN}%02d${RESET}   ${BOLD}%-32s${RESET} ${GREEN}%-12s${RESET} ${DIM}%s${RESET}\n" "$mnum" "$mname" "$_lbl_found" "$rel_path"
+        elif [[ "$msy" == "SKIP" ]]; then
+            printf "  ${CYAN}%02d${RESET}   %-32s ${YELLOW}%-12s${RESET} ${DIM}%s${RESET}\n" "$mnum" "$mname" "$_lbl_skip" "$mpath"
         else
-            printf "  ${CYAN}%02d${RESET}   %-32s ${DIM}%-10s${RESET}   ${DIM}-${RESET}\n" "$mnum" "$mname" "NESSUNA"
+            printf "  ${CYAN}%02d${RESET}   %-32s ${DIM}%-12s${RESET} ${DIM}-${RESET}\n" "$mnum" "$mname" "$_lbl_none"
         fi
     done
     echo ""
@@ -8553,7 +8609,7 @@ autodetect_win_root() {
     local -a ALL_PATHS=("${FOUND[@]}" "${EXTRA_PATHS[@]}")
 
     echo ""
-    echo -e "  ${CYAN}${BOLD}Volumi Windows rilevati:${RESET}"
+    echo -e "  ${CYAN}${BOLD}$(L "Volumi Windows rilevati:" "Detected Windows volumes:")${RESET}"
     echo ""
     local IDX=1
     for MNT in "${FOUND[@]}"; do
@@ -8564,7 +8620,7 @@ autodetect_win_root() {
         [[ -n "$USERS_DIR" ]] && \
             USER_COUNT=$(find "$USERS_DIR" -maxdepth 1 -mindepth 1 -type d 2>/dev/null \
                 | grep -ciEv '/(Public|Default|Default User|All Users)$' || true)
-        echo -e "  ${GREEN}[${IDX}]${RESET}  ${BOLD}${MNT}${RESET} ${MAGENTA}(${LABEL})${RESET}  ${CYAN}${USER_COUNT} utenti${RESET}"
+        echo -e "  ${GREEN}[${IDX}]${RESET}  ${BOLD}${MNT}${RESET} ${MAGENTA}(${LABEL})${RESET}  ${CYAN}${USER_COUNT} $(L "utenti" "users")${RESET}"
         IDX=$((IDX + 1))
     done
     # Mostra le opzioni Windows.old con indicatore visivo
@@ -8577,19 +8633,19 @@ autodetect_win_root() {
         [[ -n "$USERS_DIR" ]] && \
             USER_COUNT=$(find "$USERS_DIR" -maxdepth 1 -mindepth 1 -type d 2>/dev/null \
                 | grep -ciEv '/(Public|Default|Default User|All Users)$' || true)
-        echo -e "  ${YELLOW}[${IDX}]${RESET}  ${BOLD}${WOLD}${RESET}  ${YELLOW}★ Windows.old${RESET} ${DIM}(da ${BASE})${RESET}  ${CYAN}${USER_COUNT} utenti${RESET}"
+        echo -e "  ${YELLOW}[${IDX}]${RESET}  ${BOLD}${WOLD}${RESET}  ${YELLOW}★ Windows.old${RESET} ${DIM}($(L "da" "from") ${BASE})${RESET}  ${CYAN}${USER_COUNT} $(L "utenti" "users")${RESET}"
         IDX=$((IDX + 1))
     done
     echo ""
 
     local CHOICE
     if [[ ${#ALL_PATHS[@]} -eq 1 ]]; then
-        echo -ne "  ${YELLOW}[?]${RESET} Usare ${BOLD}${ALL_PATHS[0]}${RESET} come root Windows? [S/n]: "
+        echo -ne "  ${YELLOW}[?]${RESET} $(L "Usare" "Use") ${BOLD}${ALL_PATHS[0]}${RESET} $(L "come root Windows? [S/n]:" "as Windows root? [Y/n]:") "
         read -r CHOICE || true
         [[ "${CHOICE,,}" == "n" ]] && return 1
         _apply_win_root "${ALL_PATHS[0]}"; return 0
     fi
-    echo -ne "  ${YELLOW}[?]${RESET} Seleziona numero, inserisci path manuale, o [N] per saltare: "
+    echo -ne "  ${YELLOW}[?]${RESET} $(L "Seleziona numero, inserisci path manuale, o [N] per saltare:" "Select number, enter manual path, or [N] to skip:") "
     read -r CHOICE || true
     case "${CHOICE,,}" in
         n|"") return 1 ;;
@@ -8654,7 +8710,7 @@ setup_report_dir() {
     local SUGGESTED_DEFAULT="${INVOCATION_DIR}/${HOST_NAME:-CASE}_fiuto_${TS}"
     echo ""
     echo -e "  ${CYAN}${BOLD}╔══════════════════════════════════════════════════════╗${RESET}"
-    echo -e "  ${CYAN}${BOLD}║  $(L "Configurazione cartella di output dei report" "Report output directory setup")  ║${RESET}"
+    echo -e "  ${CYAN}${BOLD}║  $(L "Configurazione cartella di output dei report" "Report output directory setup               ")        ║ ${RESET}"
     echo -e "  ${CYAN}${BOLD}╚══════════════════════════════════════════════════════╝${RESET}"
     echo ""
     local _PARENT_OK=false
@@ -8723,7 +8779,7 @@ print_menu() {
     local _MENU_TITLE _SELECT_MODULE _NOT_SET _WRITABLE _READONLY _NOT_CREATED _PARENT_RO
     local _REPORT_DIR_LABEL _WIN_ROOT_LABEL _DEBUG_LABEL _RUN_ALL _QUIT _CHOICE_LABEL
     local _REPORTS_LABEL
-    _MENU_TITLE="$(L "SELEZIONA UN MODULO" "SELECT A MODULE")"
+    _MENU_TITLE="$(L "SELEZIONA UN MODULO" "SELECT A MODULE    ")"
     _SELECT_MODULE="$(L "Seleziona" "Select")"
     _NOT_SET="$(L "non impostata" "not set")"
     _WRITABLE="$(L "scrivibile" "writable")"
@@ -8731,8 +8787,8 @@ print_menu() {
     _NOT_CREATED="$(L "OK (non ancora creata)" "OK (not yet created)")"
     _PARENT_RO="$(L "PARENT NON SCRIVIBILE" "PARENT NOT WRITABLE")"
     _REPORT_DIR_LABEL="$(L "Imposta dir report" "Set report dir")"
-    _WIN_ROOT_LABEL="$(L "Imposta root Windows" "Set Windows root")"
-    _DEBUG_LABEL="$(L "Debug mount attivi" "Debug active mounts")"
+    _WIN_ROOT_LABEL="$(L "Imposta root Windows" "Set Windows root    ")"
+    _DEBUG_LABEL="$(L "Debug mount attivi " "Debug active mounts")"
     _DIAG="$(L "Diagnostica volumi montati" "Diagnose mounted volumes")"
     _RUN_ALL="$(L "Esegui TUTTI i moduli" "Run ALL modules")"
     _QUIT="$(L "Esci" "Quit")"
@@ -8740,7 +8796,7 @@ print_menu() {
     _REPORTS_LABEL="$(L "Report generati" "Generated reports")"
 
     echo -e "  ${CYAN}${BOLD}╔══════════════════════════════════════════════════╗${RESET}"
-    echo -e "  ${CYAN}${BOLD}║           F I U T O  —  ${_MENU_TITLE}  ║${RESET}"
+    echo -e "  ${CYAN}${BOLD}║           F I U T O  —  ${_MENU_TITLE}      ║ ${RESET}"
     echo -e "  ${CYAN}${BOLD}╚══════════════════════════════════════════════════╝${RESET}"
     echo ""
     if [[ -n "$REPORT_BASE_DIR" ]]; then
@@ -8764,7 +8820,7 @@ print_menu() {
         local _CONF_MSG="$(L "non impostata — premi [P] per configurare" "not set — press [P] to configure")"
         echo -e "  ${WHITE}[P]${RESET}  ${BOLD}Report dir:${RESET} ${RED}${_CONF_MSG}${RESET}"
     fi
-    echo -e "  ${WHITE}[R]${RESET}  ${BOLD}${_WIN_ROOT_LABEL}${RESET}              ${DIM}${WIN_ROOT:-($_NOT_SET)}${RESET}"
+    echo -e "  ${WHITE}[R]${RESET}  ${BOLD}${_WIN_ROOT_LABEL}${RESET}          ${DIM}${WIN_ROOT:-($_NOT_SET)}${RESET}"
     echo -e "  ${YELLOW}[D]${RESET}  ${BOLD}${_DEBUG_LABEL}${RESET}           ${DIM}${_DIAG}${RESET}"
     echo ""
     echo -e "  ${MAGENTA}[1]${RESET}  PowerShell History            ${DIM}PSReadLine *_history.txt${RESET}"
@@ -8786,7 +8842,7 @@ print_menu() {
   echo -e "  ${CYAN}[17]${RESET} Browser History               ${DIM}Chrome / Edge / Firefox${RESET}"
   echo -e "  ${MAGENTA}[18]${RESET} UserAssist / RunMRU           ${DIM}$(L "Attività interattiva utente" "Interactive user activity")${RESET}"
   echo -e "  ${CYAN}[19]${RESET} ShellBags                     ${DIM}$(L "Navigazione cartelle (anche cancellate)" "Folder navigation (including deleted)")${RESET}"
-  echo -e "  ${RED}[20]${RESET} SAM — $(L "Hash Locali" "Local Hashes")            ${DIM}$(L "Hash NTLM account (impacket)" "NTLM account hashes (impacket)")${RESET}"
+  echo -e "  ${RED}[20]${RESET} SAM — $(L "Hash Locali " "Local Hashes")            ${DIM}$(L "Hash NTLM account (impacket)" "NTLM account hashes (impacket)")${RESET}"
   echo -e "  ${YELLOW}[21]${RESET} MFT Timeline                  ${DIM}Master File Table + timestomping${RESET}"
   echo -e "  ${GREEN}[22]${RESET} OpenSave / LastVisited MRU    ${DIM}$(L "File aperti/salvati via dialogo" "Files opened/saved via dialog")${RESET}"
   echo -e "  ${CYAN}[23]${RESET} USN Journal                   ${DIM}\$UsnJrnl:\$J — $(L "change log NTFS" "NTFS change log")${RESET}"
@@ -9129,7 +9185,9 @@ main() {
                     clear
                     echo -e "${CYAN}${BOLD}"
                     echo "  ╔══════════════════════════════════════════════════════════╗"
-                    echo "  ║         FIUTO — Report generati in questa sessione       ║"
+                    local _bt; _bt="$(L "FIUTO — Report generati in questa sessione" "FIUTO — Reports generated in this session")"
+                    local _btl=$(( (58 - ${#_bt}) / 2 )) _btr=$(( 58 - ${#_bt} - (58 - ${#_bt}) / 2 ))
+                    printf "  ║%*s%s%*s║\n" "$_btl" "" "$_bt" "$_btr" ""
                     echo "  ╚══════════════════════════════════════════════════════════╝"
                     echo -e "${RESET}"
                     _IDX=0
@@ -9143,10 +9201,10 @@ main() {
                             echo ""
                         fi
                     done
-                    echo -e "  ${DIM}Apri con: xdg-open \"<percorso>\"${RESET}"
+                    echo -e "  ${DIM}$(L "Apri con:" "Open with:") xdg-open \"<$(L "percorso" "path")>\"${RESET}"
                     echo ""
                 fi
-                echo -e "  ${DIM}Uscita.${RESET}"; echo ""; exit 0 ;;
+                echo -e "  ${DIM}$(L "Uscita." "Exiting.")${RESET}"; echo ""; exit 0 ;;
             *)  warn "$(L "Scelta non valida:" "Invalid choice:") '$CHOICE'"; sleep 1 ;;
         esac
     done
