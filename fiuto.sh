@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ================================================================
-#  fiuto.sh  –  v2.6
+#  fiuto.sh  –  v1.0
 #  Toolkit DFIR unificato per analisi di disco Windows offline
 #
 #  Uso:
@@ -104,6 +104,120 @@ unset -f _detect_python
 PY3_VERSION="$("$PY3" --version 2>&1 | awk '{print $2}')"
 
 # ================================================================
+#  LANGUAGE SUPPORT / SUPPORTO LINGUE
+# ================================================================
+
+export LANG="en"  # Default: English / Default: Italiano (EXPORTED for persistence)
+
+# L "testo italiano" "english text" — restituisce il testo nella lingua corrente
+L() { [[ "${LANG:-en}" == "it" ]] && printf '%s' "$1" || printf '%s' "$2"; }
+
+# Funzione per selezionare la lingua all'avvio
+select_language() {
+    echo ""
+    echo -e "${CYAN}${BOLD}Select Language / Selezionare Lingua${RESET}"
+    echo -e "${CYAN}${BOLD}═══════════════════════════════════════${RESET}"
+    echo ""
+    echo "  1) English"
+    echo "  2) Italiano"
+    echo ""
+    echo -ne "${YELLOW}[?]${RESET} Choose / Scegli [1-2, default=1]: "
+    read -r LANG_CHOICE
+    if [[ "$LANG_CHOICE" == "2" ]]; then
+        export LANG="it"
+    else
+        export LANG="en"
+    fi
+    echo ""
+}
+
+# Funzione di traduzione per stringhe
+t() {
+    local KEY="$1"
+    case "$LANG:$KEY" in
+        # === BANNER & SETUP ===
+        "en:root_not_set") echo "Windows root not set. Use option [R] from menu." ;;
+        "it:root_not_set") echo "Root Windows non impostata. Usa l'opzione [R] dal menu." ;;
+
+        "en:root_invalid") echo "Directory Users or Windows not found in:" ;;
+        "it:root_invalid") echo "Directory Users o Windows non trovata in:" ;;
+
+        "en:hostname_prompt") echo "Enter a name for the case/machine" ;;
+        "it:hostname_prompt") echo "Inserisci un nome per il caso/macchina" ;;
+
+        "en:machine_info") echo "TARGET MACHINE INFORMATION" ;;
+        "it:machine_info") echo "INFORMAZIONI MACCHINA TARGET" ;;
+
+        "en:hostname") echo "Hostname" ;;
+        "it:hostname") echo "Hostname" ;;
+
+        "en:os") echo "Operating System" ;;
+        "it:os") echo "Sistema Operativo" ;;
+
+        "en:ip") echo "IP Address" ;;
+        "it:ip") echo "Indirizzo IP" ;;
+
+        "en:domain") echo "Domain" ;;
+        "it:domain") echo "Dominio" ;;
+
+        # === MESSAGES ===
+        "en:press_key") echo "Press any key to return to menu..." ;;
+        "it:press_key") echo "Premi qualsiasi tasto per tornare al menu..." ;;
+
+        "en:open_browser") echo "Open report in browser?" ;;
+        "it:open_browser") echo "Aprire il report nel browser?" ;;
+
+        "en:generate_html") echo "Generate HTML report?" ;;
+        "it:generate_html") echo "Generare report HTML?" ;;
+
+        "en:ioc_not_found") echo "IoC file not found:" ;;
+        "it:ioc_not_found") echo "File IoC non trovato:" ;;
+
+        "en:ioc_loaded") echo "IoC loaded:" ;;
+        "it:ioc_loaded") echo "IoC caricati:" ;;
+
+        "en:hive_not_found") echo "Registry hives not found, unable to retrieve machine info automatically." ;;
+        "it:hive_not_found") echo "Hive di registro non trovati, impossibile recuperare info macchina automaticamente." ;;
+
+        "en:retrieving_info") echo "Retrieving machine information..." ;;
+        "it:retrieving_info") echo "Recupero informazioni macchina in corso..." ;;
+
+        # === MAIN MENU & BATCH ===
+        "en:batch_running") echo "Running all modules in batch mode..." ;;
+        "it:batch_running") echo "Esecuzione di tutti i moduli in modalità batch..." ;;
+
+        "en:batch_report_dir") echo "Report base directory:" ;;
+        "it:batch_report_dir") echo "Report base dir:" ;;
+
+        "en:batch_started") echo "=== FIUTO started in batch mode — WIN_ROOT=" ;;
+        "it:batch_started") echo "=== FIUTO avviato in modalità batch — WIN_ROOT=" ;;
+
+        "en:specify_root_all") echo "Specify the root: $0 /mnt/windows --all" ;;
+        "it:specify_root_all") echo "Specifica la root: $0 /mnt/windows --all" ;;
+
+        "en:specify_root_module") echo "Specify the root: $0 /mnt/windows --module N" ;;
+        "it:specify_root_module") echo "Specifica la root: $0 /mnt/windows --module N" ;;
+
+        "en:dir_not_found") echo "Directory not found:" ;;
+        "it:dir_not_found") echo "Directory non trovata:" ;;
+
+        "en:searching_mounts") echo "Automatically searching for mounted Windows volumes..." ;;
+        "it:searching_mounts") echo "Ricerca automatica di volumi Windows montati..." ;;
+
+        "en:no_windows_found") echo "No Windows volume detected automatically." ;;
+        "it:no_windows_found") echo "Nessun volume Windows rilevato automaticamente." ;;
+
+        "en:enter_windows_root") echo "Enter the Windows root path (or ENTER to skip):" ;;
+        "it:enter_windows_root") echo "Inserisci il path della root Windows (o INVIO per saltare):" ;;
+
+        "en:unable_detect_hostname") echo "Unable to detect machine name automatically." ;;
+        "it:unable_detect_hostname") echo "Impossibile rilevare il nome macchina automaticamente." ;;
+
+        *) echo "$KEY" ;;
+    esac
+}
+
+# ================================================================
 #  UTILITIES
 # ================================================================
 
@@ -120,32 +234,42 @@ print_banner() {
     echo "  ║      ╚═╝       ╚═╝   ╚═════╝      ╚═╝      ╚═════╝       ║"
     echo "  ║                                                          ║"
     echo -e "  ║    ${CYAN}${BOLD}F${RESET}${CYAN}orensic ${BOLD}I${RESET}${CYAN}nvestigation ${BOLD}U${RESET}${CYAN}tility ${BOLD}T${RESET}${CYAN}ool for ${BOLD}O${RESET}${CYAN}ffline${RESET}       ${CYAN}${BOLD}║"
-    echo -e "  ║                    ${MAGENTA}${BOLD}v2.6 - zi®iginal${RESET}${CYAN}                      ║"
+    echo -e "  ║                    ${MAGENTA}${BOLD}v1.0 - zi®iginal${RESET}${CYAN}                      ║"
     echo "  ╚══════════════════════════════════════════════════════════╝"
     echo -e "${RESET}"
-    echo -e "  ${DIM}Data:   $(date '+%d/%m/%Y %H:%M:%S')${RESET}"
-    echo -ne "  ${DIM}Root:   ${WIN_ROOT:-non impostata}${RESET}"
+    local DATE_LABEL="$([ "$LANG" = "it" ] && echo "Data" || echo "Date")"
+    local ROOT_LABEL="$([ "$LANG" = "it" ] && echo "Root" || echo "Root")"
+    local PYTHON_LABEL="$([ "$LANG" = "it" ] && echo "Python" || echo "Python")"
+    local REPORT_LABEL="$([ "$LANG" = "it" ] && echo "Report" || echo "Report")"
+    local NOT_SET_LABEL="$([ "$LANG" = "it" ] && echo "non impostata" || echo "not set")"
+    local WRITABLE_LABEL="$([ "$LANG" = "it" ] && echo "scrivibile" || echo "writable")"
+    local READONLY_LABEL="$([ "$LANG" = "it" ] && echo "sola lettura!" || echo "read-only!")"
+    local CREATE_OK_LABEL="$([ "$LANG" = "it" ] && echo "creazione OK" || echo "creation OK")"
+    local PARENT_NOT_OK_LABEL="$([ "$LANG" = "it" ] && echo "parent non scrivibile!" || echo "parent not writable!")"
+
+    echo -e "  ${DIM}${DATE_LABEL}:   $(date '+%d/%m/%Y %H:%M:%S')${RESET}"
+    echo -ne "  ${DIM}${ROOT_LABEL}:   ${WIN_ROOT:-$NOT_SET_LABEL}${RESET}"
     [[ -n "$HOST_NAME" ]] && echo -ne "  ${CYAN}${BOLD}[${HOST_NAME}]${RESET}"
     echo ""
-    echo -e "  ${DIM}Python: ${PY3} (${PY3_VERSION})${RESET}"
+    echo -e "  ${DIM}${PYTHON_LABEL}: ${PY3} (${PY3_VERSION})${RESET}"
     if [[ -n "$REPORT_BASE_DIR" ]]; then
         local _RD_INFO=""
         if [[ -d "$REPORT_BASE_DIR" ]]; then
             if [[ -w "$REPORT_BASE_DIR" ]]; then
-                _RD_INFO="${GREEN}[scrivibile]${RESET}"
+                _RD_INFO="${GREEN}[${WRITABLE_LABEL}]${RESET}"
             else
-                _RD_INFO="${RED}[sola lettura!]${RESET}"
+                _RD_INFO="${RED}[${READONLY_LABEL}]${RESET}"
             fi
         else
             # non ancora creata: verifichiamo il parent
             local _RD_PARENT; _RD_PARENT=$(dirname "$REPORT_BASE_DIR")
             if [[ -w "$_RD_PARENT" ]]; then
-                _RD_INFO="${GREEN}[creazione OK]${RESET}"
+                _RD_INFO="${GREEN}[${CREATE_OK_LABEL}]${RESET}"
             else
-                _RD_INFO="${RED}[parent non scrivibile!]${RESET}"
+                _RD_INFO="${RED}[${PARENT_NOT_OK_LABEL}]${RESET}"
             fi
         fi
-        echo -e "  ${DIM}Report: ${BOLD}${REPORT_BASE_DIR}${RESET}  ${_RD_INFO}"
+        echo -e "  ${DIM}${REPORT_LABEL}: ${BOLD}${REPORT_BASE_DIR}${RESET}  ${_RD_INFO}"
     fi
     echo ""
 }
@@ -208,7 +332,7 @@ portable_timeout() {
 # Pausa "premi un tasto per tornare al menu" — evita la ripetizione 33 volte in main()
 return_to_menu() {
     echo ""
-    echo -ne "  ${YELLOW}Premi qualsiasi tasto per tornare al menu...${RESET}"
+    echo -ne "  ${YELLOW}$(t press_key)${RESET}"
     pause_key
 }
 
@@ -218,7 +342,9 @@ open_report_prompt() {
     local RPATH="$1"
     [[ "${BATCH_MODE:-false}" == "true" ]] && return 0
     local RESP
-    echo -ne "  ${YELLOW}[?]${RESET} Aprire il report nel browser? [S/n]: "
+    local YES_LABEL="$([ "$LANG" = "it" ] && echo "S" || echo "Y")"
+    local NO_LABEL="$([ "$LANG" = "it" ] && echo "n" || echo "n")"
+    echo -ne "  ${YELLOW}[?]${RESET} $(t open_browser) [${YES_LABEL}/${NO_LABEL}]: "
     read -r RESP
     [[ "${RESP,,}" != "n" ]] && xdg-open "$RPATH" 2>/dev/null &
 }
@@ -227,15 +353,15 @@ open_report_prompt() {
 load_ioc_file() {
     local IOCFILE="$1"
     if [[ ! -f "$IOCFILE" ]]; then
-        warn "File IoC non trovato: $IOCFILE"
+        warn "$(t ioc_not_found) $IOCFILE"
         return 1
     fi
     while IFS= read -r LINE || [[ -n "$LINE" ]]; do
         [[ -z "$LINE" || "$LINE" == \#* ]] && continue
         IOC_LIST+=("$LINE")
     done < "$IOCFILE"
-    ok "IoC caricati: ${#IOC_LIST[@]} da $IOCFILE"
-    log_msg "[IOC] Caricati ${#IOC_LIST[@]} IoC da $IOCFILE"
+    ok "$(t ioc_loaded) ${#IOC_LIST[@]} from $IOCFILE"
+    log_msg "[IOC] Loaded ${#IOC_LIST[@]} IoCs from $IOCFILE"
 }
 
 # Controlla se una stringa contiene un IoC caricato; ritorna 0 se trovato
@@ -276,9 +402,9 @@ gather_host_info() {
     local SOFTWARE_HIVE; SOFTWARE_HIVE=$(get_hive "SOFTWARE")
     
     if [[ -z "$SYSTEM_HIVE" && -z "$SOFTWARE_HIVE" ]]; then
-        warn "Hive di registro non trovati, impossibile recuperare info macchina automaticamente."
+        warn "$(t hive_not_found)"
     else
-        info "Recupero informazioni macchina in corso..."
+        info "$(t retrieving_info)"
         
         local INFO_JSON
         INFO_JSON=$("$PY3" - "$SYSTEM_HIVE" "$SOFTWARE_HIVE" << 'PYEOF' 2>/dev/null
@@ -352,24 +478,26 @@ PYEOF
 
     # Fallback Hostname
     if [[ -z "$HOST_NAME" ]]; then
-        warn "Impossibile rilevare il nome macchina automaticamente."
+        local UNABLE_MSG="$([ "$LANG" = "it" ] && echo "Impossibile rilevare il nome macchina automaticamente." || echo "Unable to detect machine name automatically.")"
+        warn "$UNABLE_MSG"
         local _SUGGESTED_NAME; _SUGGESTED_NAME=$(basename "$WIN_ROOT")
-        echo -ne "  ${YELLOW}[?]${RESET} Inserisci un nome per il caso/macchina [${BOLD}${_SUGGESTED_NAME}${RESET}]: "
+        echo -ne "  ${YELLOW}[?]${RESET} $(t hostname_prompt) [${BOLD}${_SUGGESTED_NAME}${RESET}]: "
         read -r HOST_NAME
         [[ -z "$HOST_NAME" ]] && HOST_NAME="$_SUGGESTED_NAME"
     fi
-    
+
     print_host_info_table
 }
 
 print_host_info_table() {
+    local TITLE="$([ "$LANG" = "it" ] && echo "INFORMAZIONI MACCHINA TARGET" || echo "TARGET MACHINE INFORMATION")"
     echo -e "  ${CYAN}${BOLD}┌────────────────────────────────────────────────────────────────────────────┐${RESET}"
-    echo -e "  ${CYAN}${BOLD}│                    INFORMAZIONI MACCHINA TARGET                            │${RESET}"
+    printf "  ${CYAN}${BOLD}│%*s${RESET} ${CYAN}${BOLD}│${RESET}\n" $(( (76 + ${#TITLE}) / 2 )) "$TITLE"
     echo -e "  ${CYAN}${BOLD}├────────────────────────────────────────────────────────────────────────────┤${RESET}"
-    printf "  ${CYAN}${BOLD}│${RESET}  %-18s : ${WHITE}${BOLD}%-52s${RESET} ${CYAN}${BOLD}│${RESET}\n" "Hostname" "${HOST_NAME:-N/A}"
-    printf "  ${CYAN}${BOLD}│${RESET}  %-18s : %-52s ${CYAN}${BOLD}│${RESET}\n" "Sistema Operativo" "${OS_VER:-N/A}"
-    printf "  ${CYAN}${BOLD}│${RESET}  %-18s : %-52s ${CYAN}${BOLD}│${RESET}\n" "Indirizzo IP" "${IP_ADDR:-N/A}"
-    printf "  ${CYAN}${BOLD}│${RESET}  %-18s : %-52s ${CYAN}${BOLD}│${RESET}\n" "Dominio" "${DOMAIN_NAME:-N/A}"
+    printf "  ${CYAN}${BOLD}│${RESET}  %-18s : ${WHITE}${BOLD}%-52s${RESET} ${CYAN}${BOLD}│${RESET}\n" "$(t hostname)" "${HOST_NAME:-N/A}"
+    printf "  ${CYAN}${BOLD}│${RESET}  %-18s : %-52s ${CYAN}${BOLD}│${RESET}\n" "$(t os)" "${OS_VER:-N/A}"
+    printf "  ${CYAN}${BOLD}│${RESET}  %-18s : %-52s ${CYAN}${BOLD}│${RESET}\n" "$(t ip)" "${IP_ADDR:-N/A}"
+    printf "  ${CYAN}${BOLD}│${RESET}  %-18s : %-52s ${CYAN}${BOLD}│${RESET}\n" "$(t domain)" "${DOMAIN_NAME:-N/A}"
     echo -e "  ${CYAN}${BOLD}└────────────────────────────────────────────────────────────────────────────┘${RESET}"
     echo ""
 }
@@ -380,12 +508,15 @@ dim_msg() { echo -e "  ${DIM}[-] $*${RESET}"; log_msg "[DIM]  $*"; }
 # Chiede conferma S/n, default S
 ask_yn() {
     local PROMPT="$1"
+    local YES_LABEL="$([ "$LANG" = "it" ] && echo "S" || echo "Y")"
+    local NO_LABEL="$([ "$LANG" = "it" ] && echo "n" || echo "n")"
+    local AUTO_LABEL="$([ "$LANG" = "it" ] && echo "auto" || echo "auto")"
     if [[ "${BATCH_MODE:-false}" == "true" ]]; then
-        echo -e "  ${DIM}[auto] ${PROMPT} → S${RESET}"
+        echo -e "  ${DIM}[${AUTO_LABEL}] ${PROMPT} → ${YES_LABEL}${RESET}"
         return 0
     fi
     local RESP
-    echo -ne "  ${YELLOW}[?]${RESET} ${PROMPT} [S/n]: "
+    echo -ne "  ${YELLOW}[?]${RESET} ${PROMPT} [${YES_LABEL}/${NO_LABEL}]: "
     read -r RESP
     [[ "${RESP,,}" != "n" ]]
 }
@@ -434,7 +565,7 @@ ci_find_file() {
 # Verifica che WIN_ROOT sia impostata e contenga una struttura Windows
 check_win_root() {
     if [[ -z "$WIN_ROOT" ]]; then
-        err "Root Windows non impostata. Usa l'opzione [R] dal menu."
+        err "$(t root_not_set)"
         return 1
     fi
     if [[ ! -d "$WIN_ROOT/Users" && ! -d "$WIN_ROOT/Windows" ]]; then
@@ -442,7 +573,7 @@ check_win_root() {
         local FOUND
         FOUND=$(find "$WIN_ROOT" -maxdepth 2 -type d \( -iname "Users" -o -iname "Windows" \) 2>/dev/null | head -1)
         if [[ -z "$FOUND" ]]; then
-            err "Directory Users o Windows non trovata in: $WIN_ROOT"
+            err "$(t root_invalid) $WIN_ROOT"
             return 1
         fi
     fi
@@ -666,12 +797,12 @@ module_ps_history() {
         local PSRL_DIR
         PSRL_DIR=$(ci_find_dir "$USER_DIR" "$PSREADLINE_REL")
         if [[ -z "$PSRL_DIR" || ! -d "$PSRL_DIR" ]]; then
-            dim_msg "$USERNAME — PSReadLine non trovata"
+            dim_msg "$USERNAME — $(L "PSReadLine non trovata" "PSReadLine not found")"
             continue
         fi
         mapfile -t HIST_FILES < <(find "$PSRL_DIR" -maxdepth 1 -iname "*_history.txt" -type f 2>/dev/null)
         if [[ ${#HIST_FILES[@]} -eq 0 ]]; then
-            warn "$USERNAME — PSReadLine trovata ma nessun history"
+            warn "$USERNAME — $(L "PSReadLine trovata ma nessun history" "PSReadLine found but no history")"
             continue
         fi
         declare -a SORT_LIST=()
@@ -748,9 +879,9 @@ except: pass
     done < <(get_user_homes)
 
     separator
-    info "Utenti con history: ${BOLD}$TOTAL_USERS${RESET}  |  File totali: ${BOLD}$TOTAL_FILES"
+    info "$(L "Utenti con history:" "Users with history:") ${BOLD}$TOTAL_USERS${RESET}  |  File totali: ${BOLD}$TOTAL_FILES"
 
-    [[ $TOTAL_FILES -eq 0 ]] && { warn "Nessun file history trovato."; return 0; }
+    [[ $TOTAL_FILES -eq 0 ]] && { warn "$(L "Nessun file history trovato." "No history file found.")"; return 0; }
     ask_yn "Generare report HTML?" || return 0
 
     local REPORT_HTML; REPORT_HTML=$(prepare_report_dir "ps_history")
@@ -877,7 +1008,7 @@ PYEOF
     } > "$REPORT_HTML"
 
     register_report "$REPORT_HTML"
-    ok "Report salvato: ${BOLD}$REPORT_HTML"
+    ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
     open_report_prompt "$REPORT_HTML"
 }
 
@@ -889,15 +1020,15 @@ module_ifeo() {
     check_win_root || return 1
 
     if ! check_regipy; then
-        warn "regipy non trovato per ${PY3} (${PY3_VERSION})"
-        warn "Installalo con: pip install regipy  oppure  ${PY3} -m pip install regipy"
+        warn "$(L "regipy non trovato per" "regipy not found for") ${PY3} (${PY3_VERSION})"
+        warn "$(L "Installalo con: pip install regipy  oppure" "Install it with: pip install regipy  or")  ${PY3} -m pip install regipy"
         return 1
     fi
 
     local HIVE
     HIVE=$(get_hive "SOFTWARE")
     if [[ -z "$HIVE" || ! -f "$HIVE" ]]; then
-        err "Hive SOFTWARE non trovato in $WIN_ROOT"
+        err "$(L "Hive SOFTWARE non trovato in" "SOFTWARE hive not found in") $WIN_ROOT"
         return 1
     fi
 
@@ -958,9 +1089,9 @@ PYEOF
     done
 
     separator
-    info "Voci con Debugger/GFlags: ${BOLD}$FOUND_COUNT${RESET}  |  Sospette: ${RED}${BOLD}$SUSPICIOUS_COUNT${RESET}"
+    info "$(L "Voci con Debugger/GFlags:" "Entries with Debugger/GFlags:") ${BOLD}$FOUND_COUNT${RESET}  |  Sospette: ${RED}${BOLD}$SUSPICIOUS_COUNT${RESET}"
 
-    [[ $FOUND_COUNT -eq 0 ]] && { ok "Nessuna voce IFEO con Debugger/GFlags trovata."; return 0; }
+    [[ $FOUND_COUNT -eq 0 ]] && { ok "$(L "Nessuna voce IFEO con Debugger/GFlags trovata." "No IFEO entries with Debugger/GFlags found.")"; return 0; }
     ask_yn "Generare report HTML?" || return 0
 
     local REPORT_HTML; REPORT_HTML=$(prepare_report_dir "ifeo")
@@ -1009,7 +1140,7 @@ PYEOF
     } > "$REPORT_HTML"
 
     register_report "$REPORT_HTML"
-    ok "Report salvato: ${BOLD}$REPORT_HTML"
+    ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
     open_report_prompt "$REPORT_HTML"
 }
 
@@ -1021,19 +1152,19 @@ module_bam() {
     check_win_root || return 1
 
     if ! check_regipy; then
-        warn "regipy non trovato per ${PY3} (${PY3_VERSION})"
-        warn "Installalo con: pip install regipy  oppure  ${PY3} -m pip install regipy"
+        warn "$(L "regipy non trovato per" "regipy not found for") ${PY3} (${PY3_VERSION})"
+        warn "$(L "Installalo con: pip install regipy  oppure" "Install it with: pip install regipy  or")  ${PY3} -m pip install regipy"
         return 1
     fi
 
     local HIVE
     HIVE=$(get_hive "SYSTEM")
     if [[ -z "$HIVE" || ! -f "$HIVE" ]]; then
-        err "Hive SYSTEM non trovato"
+        err "$(L "Hive SYSTEM non trovato" "SYSTEM hive not found")"
         return 1
     fi
 
-    info "Parsing hive SYSTEM: $HIVE"
+    info "$(L "Parsing hive SYSTEM:" "Parsing SYSTEM hive:") $HIVE"
 
     # Tenta entrambi i ControlSet
     local BAM_DATA
@@ -1097,7 +1228,7 @@ PYEOF
 
     local TOTAL=${#BAM_ENTRIES[@]}
     if [[ $TOTAL -eq 0 ]]; then
-        warn "Nessuna voce BAM trovata."
+        warn "$(L "Nessuna voce BAM trovata." "No BAM entries found.")"
         return 0
     fi
 
@@ -1117,7 +1248,7 @@ PYEOF
     done
 
     separator
-    info "Totale eseguibili tracciati: ${BOLD}$TOTAL${RESET}  |  SID distinti: ${BOLD}$SID_COUNT"
+    info "$(L "Totale eseguibili tracciati:" "Total tracked executables:") ${BOLD}$TOTAL${RESET}  |  SID distinti: ${BOLD}$SID_COUNT"
     ask_yn "Generare report HTML?" || return 0
 
     local REPORT_HTML; REPORT_HTML=$(prepare_report_dir "bam")
@@ -1176,7 +1307,7 @@ PYEOF
     } > "$REPORT_HTML"
 
     register_report "$REPORT_HTML"
-    ok "Report salvato: ${BOLD}$REPORT_HTML"
+    ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
     open_report_prompt "$REPORT_HTML"
 }
 
@@ -1184,7 +1315,7 @@ PYEOF
 #  MODULO 4 — Cache RDP (Terminal Server Client)
 # ================================================================
 module_rdp_cache() {
-    section_header "Cache RDP — Terminal Server Client" "$CYAN"
+    section_header "$(L "Cache RDP — Terminal Server Client" "RDP Cache — Terminal Server Client")" "$CYAN"
     check_win_root || return 1
 
     local RDP_REL="AppData/Local/Microsoft/Terminal Server Client/Cache"
@@ -1197,7 +1328,7 @@ module_rdp_cache() {
         local CACHE_DIR
         CACHE_DIR=$(ci_find_dir "$USER_DIR" "$RDP_REL")
         if [[ -z "$CACHE_DIR" || ! -d "$CACHE_DIR" ]]; then
-            dim_msg "$USERNAME — Cache RDP non trovata"
+            dim_msg "$USERNAME — $(L "Cache RDP non trovata" "RDP cache not found")"
             continue
         fi
         mapfile -t CACHE_FILES < <(find "$CACHE_DIR" -maxdepth 1 -type f \( -iname "*.bmc" -o -iname "*.bin" \) -printf "%T@ %p\n" 2>/dev/null | sort -rn | cut -d' ' -f2-)
@@ -1206,10 +1337,10 @@ module_rdp_cache() {
         fi
         local COUNT=${#CACHE_FILES[@]}
         if [[ $COUNT -eq 0 ]]; then
-            warn "$USERNAME — Directory cache trovata ma vuota"
+            warn "$USERNAME — $(L "Directory cache trovata ma vuota" "Cache directory found but empty")"
             continue
         fi
-        ok "$USERNAME — $COUNT file cache trovati in: $CACHE_DIR"
+        ok "$USERNAME — $COUNT $(L "file cache trovati in:" "cache files found in:") $CACHE_DIR"
         local FILES_INFO=""
         for F in "${CACHE_FILES[@]}"; do
             local FNAME; FNAME=$(basename "$F")
@@ -1227,7 +1358,7 @@ module_rdp_cache() {
 
     # Cerca anche server RDP nel registro
     echo ""
-    info "Ricerca server RDP recenti nel registro (NTUSER.DAT)..."
+    info "$(L "Ricerca server RDP recenti nel registro (NTUSER.DAT)..." "Searching recent RDP servers in registry (NTUSER.DAT)...")"
     while IFS= read -r USER_DIR; do
         local USERNAME
         USERNAME=$(basename "$USER_DIR")
@@ -1261,7 +1392,7 @@ except: pass
 PYEOF
 )
             if [[ -n "$RDP_SERVERS" ]]; then
-                echo -e "  ${GREEN}${BOLD}$USERNAME — Server RDP trovati:${RESET}"
+                echo -e "  ${GREEN}${BOLD}$USERNAME — $(L "Server RDP trovati:" "RDP servers found:")${RESET}"
                 while IFS=$'\t' read -r HOST UNAME; do
                     printf "      ${CYAN}%-40s${RESET}  ${DIM}utente: %s${RESET}\n" "$HOST" "${UNAME:--}"
                 done <<< "$RDP_SERVERS"
@@ -1270,16 +1401,16 @@ PYEOF
     done < <(get_user_homes)
 
     separator
-    info "Utenti con cache RDP: ${BOLD}$TOTAL_USERS${RESET}  |  File totali: ${BOLD}$TOTAL_FILES"
+    info "Utenti con cache RDP: ${BOLD}$TOTAL_USERS${RESET}  |  $(L "File totali:" "Total files:") ${BOLD}$TOTAL_FILES"
 
     if [[ $TOTAL_FILES -gt 0 ]]; then
         echo ""
-        info "${BOLD}Per analizzare le tile bitmap della cache usa bmc-tools:${RESET}"
+        info "${BOLD}$(L "Per analizzare le tile bitmap della cache usa bmc-tools:" "To analyze cache bitmap tiles use bmc-tools:")${RESET}"
         echo -e "    ${DIM}git clone https://github.com/ANSSI-FR/bmc-tools${RESET}"
         echo -e "    ${DIM}"$PY3" bmc-tools.py -s <dir_cache> -d ./output/ -b${RESET}"
     fi
 
-    [[ $TOTAL_FILES -eq 0 ]] && { warn "Nessun file cache RDP trovato."; return 0; }
+    [[ $TOTAL_FILES -eq 0 ]] && { warn "$(L "Nessun file cache RDP trovato." "No RDP cache files found.")"; return 0; }
     ask_yn "Generare report HTML?" || return 0
 
     local REPORT_HTML; REPORT_HTML=$(prepare_report_dir "rdp_cache")
@@ -1335,7 +1466,7 @@ PYEOF
     } > "$REPORT_HTML"
 
     register_report "$REPORT_HTML"
-    ok "Report salvato: ${BOLD}$REPORT_HTML"
+    ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
     open_report_prompt "$REPORT_HTML"
 }
 
@@ -1343,18 +1474,18 @@ PYEOF
 #  MODULO 5 — Run Keys & Persistenza nel Registro
 # ================================================================
 module_run_keys() {
-    section_header "Run Keys & Persistenza Registro" "$ORANGE"
+    section_header "$(L "Run Keys & Persistenza Registro" "Run Keys & Registry Persistence")" "$ORANGE"
     check_win_root || return 1
 
     if ! check_regipy; then
-        warn "regipy non trovato per ${PY3} (${PY3_VERSION})"
-        warn "Installalo con: pip install regipy  oppure  ${PY3} -m pip install regipy"
+        warn "$(L "regipy non trovato per" "regipy not found for") ${PY3} (${PY3_VERSION})"
+        warn "$(L "Installalo con: pip install regipy  oppure" "Install it with: pip install regipy  or")  ${PY3} -m pip install regipy"
         return 1
     fi
 
     local HIVE_SW
     HIVE_SW=$(get_hive "SOFTWARE")
-    [[ -z "$HIVE_SW" ]] && { err "Hive SOFTWARE non trovato"; return 1; }
+    [[ -z "$HIVE_SW" ]] && { err "$(L "Hive SOFTWARE non trovato" "SOFTWARE hive not found")"; return 1; }
 
     declare -a ALL_ENTRIES=()
 
@@ -1368,7 +1499,7 @@ module_run_keys() {
         "Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Run"
     )
 
-    info "Scansione hive SOFTWARE (HKLM)..."
+    info "$(L "Scansione hive SOFTWARE (HKLM)..." "Scanning SOFTWARE hive (HKLM)...")"
     for KEY in "${SW_KEYS[@]}"; do
         local VALS
         VALS=$("$PY3" - "$HIVE_SW" "$KEY" << 'PYEOF' 2>/dev/null || true
@@ -1437,8 +1568,8 @@ PYEOF
     done
 
     separator
-    info "Voci totali trovate: ${BOLD}$TOTAL"
-    [[ $TOTAL -eq 0 ]] && { ok "Nessuna voce Run trovata."; return 0; }
+    info "$(L "Voci totali trovate:" "Total entries found:") ${BOLD}$TOTAL"
+    [[ $TOTAL -eq 0 ]] && { ok "$(L "Nessuna voce Run trovata." "No Run entries found.")"; return 0; }
 
     ask_yn "Generare report HTML?" || return 0
 
@@ -1469,7 +1600,7 @@ PYEOF
     } > "$REPORT_HTML"
 
     register_report "$REPORT_HTML"
-    ok "Report salvato: ${BOLD}$REPORT_HTML"
+    ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
     open_report_prompt "$REPORT_HTML"
 }
 
@@ -1477,24 +1608,24 @@ PYEOF
 #  MODULO 6 — Prefetch
 # ================================================================
 module_prefetch() {
-    section_header "Prefetch — Eseguibili Tracciati" "$GREEN"
+    section_header "$(L "Prefetch — Eseguibili Tracciati" "Prefetch — Execution History")" "$GREEN"
     check_win_root || return 1
 
     local PREF_DIR
     PREF_DIR=$(ci_find_dir "$WIN_ROOT" "Windows/Prefetch")
     if [[ -z "$PREF_DIR" || ! -d "$PREF_DIR" ]]; then
-        warn "Directory Prefetch non trovata (potrebbe essere disabilitato o sistema su SSD)"
+        warn "$(L "Directory Prefetch non trovata (potrebbe essere disabilitato o sistema su SSD)" "Prefetch directory not found (may be disabled or SSD system)")"
         return 0
     fi
 
     mapfile -t PF_FILES < <(find "$PREF_DIR" -maxdepth 1 -iname "*.pf" -type f 2>/dev/null | sort)
     local TOTAL=${#PF_FILES[@]}
     if [[ $TOTAL -eq 0 ]]; then
-        warn "Nessun file .pf trovato"
+        warn "$(L "Nessun file .pf trovato" "No .pf files found")"
         return 0
     fi
 
-    info "Trovati $TOTAL file .pf in: $PREF_DIR"
+    info "$(L "Trovati" "Found") $TOTAL file .pf in: $PREF_DIR"
 
     # Parser Python per Prefetch (formato MAM/Uncompressed)
     declare -a PF_ENTRIES=()
@@ -1516,7 +1647,7 @@ module_prefetch() {
     done
 
     separator
-    info "File Prefetch: ${BOLD}$TOTAL"
+    info "$(L "File Prefetch:" "Prefetch Files:") ${BOLD}$TOTAL"
     ask_yn "Generare report HTML?" || return 0
 
     local REPORT_HTML; REPORT_HTML=$(prepare_report_dir "prefetch")
@@ -1548,7 +1679,7 @@ module_prefetch() {
     } > "$REPORT_HTML"
 
     register_report "$REPORT_HTML"
-    ok "Report salvato: ${BOLD}$REPORT_HTML"
+    ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
     open_report_prompt "$REPORT_HTML"
 }
 
@@ -1556,7 +1687,7 @@ module_prefetch() {
 #  MODULO 7 — Notepad TabState
 # ================================================================
 module_notepad_tabstate() {
-    section_header "Notepad TabState — Tab Rimasti Aperti" "$MAGENTA"
+    section_header "$(L "Notepad TabState — Tab Rimasti Aperti" "Notepad TabState — Open Tabs")" "$MAGENTA"
     check_win_root || return 1
 
     local NOTEPAD_PKG="Microsoft.WindowsNotepad_8wekyb3d8bbwe"
@@ -1653,21 +1784,21 @@ PYEOF
         local USERNAME; USERNAME=$(basename "$USER_DIR")
         local PACKAGES_DIR
         PACKAGES_DIR=$(ci_find_dir "$USER_DIR" "AppData/Local/Packages")
-        [[ -z "$PACKAGES_DIR" ]] && { dim_msg "$USERNAME — AppData\\Local\\Packages non trovata"; continue; }
+        [[ -z "$PACKAGES_DIR" ]] && { dim_msg "$USERNAME — $(L "AppData\\Local\\Packages non trovata" "AppData\\Local\\Packages not found")"; continue; }
         local NOTEPAD_DIR
         NOTEPAD_DIR=$(find "$PACKAGES_DIR" -maxdepth 1 -iname "${NOTEPAD_PKG}*" -type d 2>/dev/null | head -1)
-        [[ -z "$NOTEPAD_DIR" ]] && { dim_msg "$USERNAME — Notepad UWP non installato"; continue; }
+        [[ -z "$NOTEPAD_DIR" ]] && { dim_msg "$USERNAME — $(L "Notepad UWP non installato" "Notepad UWP not installed")"; continue; }
         local TABSTATE_DIR
         TABSTATE_DIR=$(ci_find_dir "$NOTEPAD_DIR" "LocalState/TabState")
-        [[ -z "$TABSTATE_DIR" || ! -d "$TABSTATE_DIR" ]] && { warn "$USERNAME — TabState non trovata"; continue; }
+        [[ -z "$TABSTATE_DIR" || ! -d "$TABSTATE_DIR" ]] && { warn "$USERNAME — $(L "TabState non trovata" "TabState not found")"; continue; }
         mapfile -t BIN_FILES < <(find "$TABSTATE_DIR" -maxdepth 1 -iname "*.bin" -type f -printf "%T@ %p\n" 2>/dev/null | sort -rn | cut -d' ' -f2-)
         if [[ ${#BIN_FILES[@]} -eq 0 ]]; then
             # Fallback se printf %T@ non è supportato (BSD/macOS)
             mapfile -t BIN_FILES < <(find "$TABSTATE_DIR" -maxdepth 1 -iname "*.bin" -type f 2>/dev/null | xargs ls -t 2>/dev/null)
         fi
         local COUNT=${#BIN_FILES[@]}
-        [[ $COUNT -eq 0 ]] && { warn "$USERNAME — TabState vuota"; continue; }
-        ok "$USERNAME — $COUNT file .bin trovati"
+        [[ $COUNT -eq 0 ]] && { warn "$USERNAME — $(L "TabState vuota" "TabState empty")"; continue; }
+        ok "$USERNAME — $COUNT $(L "file .bin trovati" ".bin files found")"
         local FILE_NAMES="" FILE_SIZES="" FILE_MTIMES="" FILE_CTIMES=""
         for BIN in "${BIN_FILES[@]}"; do
             local FNAME; FNAME=$(basename "$BIN")
@@ -1707,8 +1838,8 @@ PYEOF
     done < <(get_user_homes)
 
     separator
-    info "Utenti: ${BOLD}$TOTAL_USERS${RESET}  |  File .bin: ${BOLD}$TOTAL_FILES"
-    [[ $TOTAL_FILES -eq 0 ]] && { warn "Nessun tab Notepad trovato."; return 0; }
+    info "$(L "Utenti:" "Users:") ${BOLD}$TOTAL_USERS${RESET}  |  File .bin: ${BOLD}$TOTAL_FILES"
+    [[ $TOTAL_FILES -eq 0 ]] && { warn "$(L "Nessun tab Notepad trovato." "No Notepad tab found.")"; return 0; }
     ask_yn "Generare report HTML?" || return 0
 
     local REPORT_HTML; REPORT_HTML=$(prepare_report_dir "notepad_tabstate")
@@ -1783,7 +1914,7 @@ PYEOF
     } > "$REPORT_HTML"
 
     register_report "$REPORT_HTML"
-    ok "Report salvato: ${BOLD}$REPORT_HTML"
+    ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
     open_report_prompt "$REPORT_HTML"
 }
 
@@ -1797,7 +1928,7 @@ module_scheduled_tasks() {
     local TASKS_DIR
     TASKS_DIR=$(ci_find_dir "$WIN_ROOT" "Windows/System32/Tasks")
     if [[ -z "$TASKS_DIR" || ! -d "$TASKS_DIR" ]]; then
-        warn "Directory Tasks non trovata"
+        warn "$(L "Directory Tasks non trovata" "Tasks directory not found")"
         return 0
     fi
 
@@ -1806,7 +1937,7 @@ module_scheduled_tasks() {
         mapfile -t TASK_FILES < <(find "$TASKS_DIR" -type f ! -iname "*.job" 2>/dev/null | xargs ls -t 2>/dev/null)
     fi
     local TOTAL=${#TASK_FILES[@]}
-    info "Trovati $TOTAL task in: $TASKS_DIR"
+    info "$(L "Trovati" "Found") $TOTAL task in: $TASKS_DIR"
 
     declare -a ALL_TASKS=()
     local SUSP_COUNT=0
@@ -1864,7 +1995,7 @@ PYEOF
     done
 
     separator
-    info "Task totali: ${BOLD}$TOTAL${RESET}  |  Sospetti: ${RED}${BOLD}$SUSP_COUNT"
+    info "$(L "Task totali:" "Total tasks:") ${BOLD}$TOTAL${RESET}  |  Sospetti: ${RED}${BOLD}$SUSP_COUNT"
 
     ask_yn "Generare report HTML?" || return 0
 
@@ -1960,7 +2091,7 @@ PYEOF
     } > "$REPORT_HTML"
 
     register_report "$REPORT_HTML"
-    ok "Report salvato: ${BOLD}$REPORT_HTML"
+    ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
     open_report_prompt "$REPORT_HTML"
 }
 
@@ -1968,20 +2099,20 @@ PYEOF
 #  MODULO 9 — USB / Dispositivi Rimovibili
 # ================================================================
 module_usb() {
-    section_header "USB — Dispositivi Rimovibili" "$BLUE"
+    section_header "$(L "USB — Dispositivi Rimovibili" "USB — Removable Devices")" "$BLUE"
     check_win_root || return 1
 
     if ! check_regipy; then
-        warn "regipy non trovato per ${PY3} (${PY3_VERSION})"
-        warn "Installalo con: pip install regipy  oppure  ${PY3} -m pip install regipy"
+        warn "$(L "regipy non trovato per" "regipy not found for") ${PY3} (${PY3_VERSION})"
+        warn "$(L "Installalo con: pip install regipy  oppure" "Install it with: pip install regipy  or")  ${PY3} -m pip install regipy"
         return 1
     fi
 
     local HIVE_SYS
     HIVE_SYS=$(get_hive "SYSTEM")
-    [[ -z "$HIVE_SYS" ]] && { err "Hive SYSTEM non trovato"; return 1; }
+    [[ -z "$HIVE_SYS" ]] && { err "$(L "Hive SYSTEM non trovato" "SYSTEM hive not found")"; return 1; }
 
-    info "Parsing dispositivi USB da hive SYSTEM..."
+    info "$(L "Parsing dispositivi USB da hive SYSTEM..." "Parsing USB devices from SYSTEM hive...")"
 
     local USB_DATA
     USB_DATA=$("$PY3" - "$HIVE_SYS" << 'PYEOF' 2>/dev/null || true
@@ -2023,8 +2154,8 @@ PYEOF
     done <<< "$USB_DATA"
 
     separator
-    info "Dispositivi USB storici: ${BOLD}$TOTAL"
-    [[ $TOTAL -eq 0 ]] && { warn "Nessun dispositivo USB trovato nell'hive."; return 0; }
+    info "$(L "Dispositivi USB storici:" "Historical USB devices:") ${BOLD}$TOTAL"
+    [[ $TOTAL -eq 0 ]] && { warn "$(L "Nessun dispositivo USB trovato nell'hive." "No USB device found in hive.")"; return 0; }
     ask_yn "Generare report HTML?" || return 0
 
     local REPORT_HTML; REPORT_HTML=$(prepare_report_dir "usb")
@@ -2055,7 +2186,7 @@ PYEOF
     } > "$REPORT_HTML"
 
     register_report "$REPORT_HTML"
-    ok "Report salvato: ${BOLD}$REPORT_HTML"
+    ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
     open_report_prompt "$REPORT_HTML"
 }
 
@@ -2073,16 +2204,16 @@ module_lnk() {
         local USERNAME; USERNAME=$(basename "$USER_DIR")
         local RECENT_DIR
         RECENT_DIR=$(ci_find_dir "$USER_DIR" "AppData/Roaming/Microsoft/Windows/Recent")
-        [[ -z "$RECENT_DIR" ]] && { dim_msg "$USERNAME — Recent non trovata"; continue; }
+        [[ -z "$RECENT_DIR" ]] && { dim_msg "$USERNAME — $(L "Recent non trovata" "Recent not found")"; continue; }
 
         mapfile -t LNK_FILES < <(find "$RECENT_DIR" -maxdepth 1 -iname "*.lnk" -type f -printf "%T@ %p\n" 2>/dev/null | sort -rn | cut -d' ' -f2- | head -50)
         if [[ ${#LNK_FILES[@]} -eq 0 ]]; then
             mapfile -t LNK_FILES < <(find "$RECENT_DIR" -maxdepth 1 -iname "*.lnk" -type f 2>/dev/null | xargs ls -t 2>/dev/null | head -50)
         fi
         local COUNT=${#LNK_FILES[@]}
-        [[ $COUNT -eq 0 ]] && { dim_msg "$USERNAME — nessun .lnk trovato"; continue; }
+        [[ $COUNT -eq 0 ]] && { dim_msg "$USERNAME — $(L "nessun .lnk trovato" "no .lnk files found")"; continue; }
 
-        ok "$USERNAME — $COUNT file .lnk recenti"
+        ok "$USERNAME — $COUNT $(L "file .lnk recenti" "recent .lnk files")"
         TOTAL_USERS=$((TOTAL_USERS + 1))
 
         for LNK in "${LNK_FILES[@]}"; do
@@ -2128,7 +2259,7 @@ PYEOF
     done < <(get_user_homes)
 
     separator
-    info "Utenti: ${BOLD}$TOTAL_USERS${RESET}  |  .lnk trovati: ${BOLD}$TOTAL_LNK"
+    info "$(L "Utenti:" "Users:") ${BOLD}$TOTAL_USERS${RESET}  |  .lnk trovati: ${BOLD}$TOTAL_LNK"
     [[ $TOTAL_LNK -eq 0 ]] && return 0
     ask_yn "Generare report HTML?" || return 0
 
@@ -2164,7 +2295,7 @@ PYEOF
     } > "$REPORT_HTML"
 
     register_report "$REPORT_HTML"
-    ok "Report salvato: ${BOLD}$REPORT_HTML"
+    ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
     open_report_prompt "$REPORT_HTML"
 }
 
@@ -2172,20 +2303,20 @@ PYEOF
 #  MODULO 11 — Services (Servizi Windows)
 # ================================================================
 module_services() {
-    section_header "Services — Servizi Windows" "$RED"
+    section_header "$(L "Services — Servizi Windows" "Services — Windows Services")" "$RED"
     check_win_root || return 1
 
     if ! check_regipy; then
-        warn "regipy non trovato per ${PY3} (${PY3_VERSION})"
-        warn "Installalo con: pip install regipy  oppure  ${PY3} -m pip install regipy"
+        warn "$(L "regipy non trovato per" "regipy not found for") ${PY3} (${PY3_VERSION})"
+        warn "$(L "Installalo con: pip install regipy  oppure" "Install it with: pip install regipy  or")  ${PY3} -m pip install regipy"
         return 1
     fi
 
     local HIVE_SYS
     HIVE_SYS=$(get_hive "SYSTEM")
-    [[ -z "$HIVE_SYS" || ! -f "$HIVE_SYS" ]] && { err "Hive SYSTEM non trovato"; return 1; }
+    [[ -z "$HIVE_SYS" || ! -f "$HIVE_SYS" ]] && { err "$(L "Hive SYSTEM non trovato" "SYSTEM hive not found")"; return 1; }
 
-    info "Parsing servizi da hive SYSTEM: $HIVE_SYS"
+    info "$(L "Parsing servizi da hive SYSTEM:" "Parsing services from SYSTEM hive:") $HIVE_SYS"
     echo ""
 
     local SVCDATA
@@ -2262,8 +2393,8 @@ PYEOF
     done <<< "$SVCDATA"
 
     separator
-    info "Servizi totali: ${BOLD}$TOTAL${RESET}  |  Sospetti: ${RED}${BOLD}$SUSP_COUNT"
-    [[ $TOTAL -eq 0 ]] && { warn "Nessun servizio trovato."; return 0; }
+    info "Servizi totali: ${BOLD}$TOTAL${RESET}  |  $(L "Sospetti:" "Suspicious:") ${RED}${BOLD}$SUSP_COUNT"
+    [[ $TOTAL -eq 0 ]] && { warn "$(L "Nessun servizio trovato." "No services found.")"; return 0; }
 
     ask_yn "Generare report HTML?" || return 0
 
@@ -2352,7 +2483,7 @@ PYEOF
     } > "$REPORT_HTML"
 
     register_report "$REPORT_HTML"
-    ok "Report salvato: ${BOLD}$REPORT_HTML"
+    ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
     open_report_prompt "$REPORT_HTML"
 }
 
@@ -2363,21 +2494,21 @@ PYEOF
 #  MODULO 12 — Event Log (Security / System / PowerShell / RDP)
 # ================================================================
 module_evtx() {
-    section_header "Event Log — Analisi .evtx" "$RED"
+    section_header "$(L "Event Log — Analisi .evtx" "Event Log — .evtx Analysis")" "$RED"
     check_win_root || return 1
 
     if ! "$PY3" -c "import Evtx" 2>/dev/null; then
-        warn "python-evtx non trovato."
-        warn "Installalo con: ${PY3} -m pip install python-evtx"
+        warn "$(L "python-evtx non trovato." "python-evtx not found.")"
+        warn "$(L "Installalo con:" "Install it with:") ${PY3} -m pip install python-evtx"
         return 1
     fi
 
     local EVTX_DIR
     EVTX_DIR=$(ci_find_dir "$WIN_ROOT" "Windows/System32/winevt/Logs")
     if [[ -z "$EVTX_DIR" || ! -d "$EVTX_DIR" ]]; then
-        err "Directory Event Log non trovata"; return 1
+        err "$(L "Directory Event Log non trovata" "Event Log directory not found")"; return 1
     fi
-    info "Directory log: $EVTX_DIR"
+    info "$(L "Directory log:" "Log directory:") $EVTX_DIR"
     echo ""
 
     declare -A EVTX_MAP=(
@@ -2442,7 +2573,7 @@ PYEOF
     for EVTX_NAME in "${!EVTX_MAP[@]}"; do
         local EVTX_FILE
         EVTX_FILE=$(ci_find_file "$EVTX_DIR" "$EVTX_NAME")
-        [[ -z "$EVTX_FILE" ]] && { dim_msg "$EVTX_NAME — non trovato"; continue; }
+        [[ -z "$EVTX_FILE" ]] && { dim_msg "$EVTX_NAME — $(L "non trovato" "not found")"; continue; }
 
         local EIDS_CSV="${EVTX_MAP[$EVTX_NAME]// /,}"
         local LABEL="${EVTX_NAME%.evtx}"; LABEL="${LABEL//%4/\/}"
@@ -2455,10 +2586,10 @@ PYEOF
         local COUNT
         COUNT=$("$PY3" -c "import json,sys; d=json.load(open(sys.argv[1])); print(len(d))" \
             "$TMP_OUT" 2>/dev/null || echo 0)
-        [[ "$COUNT" -eq 0 ]] && { dim_msg "  Nessun evento corrispondente"; rm -f "$TMP_OUT"; continue; }
+        [[ "$COUNT" -eq 0 ]] && { dim_msg "  $(L "Nessun evento corrispondente" "No matching events")"; rm -f "$TMP_OUT"; continue; }
 
         TOTAL_FOUND=$((TOTAL_FOUND + COUNT))
-        ok "  $COUNT eventi trovati"
+        ok "  $COUNT $(L "eventi trovati" "events found")"
 
         # Stampa terminale
         "$PY3" - "$TMP_OUT" << 'PYEOF' 2>/dev/null || true
@@ -2503,8 +2634,8 @@ print(sum(1 for e in json.load(open(sys.argv[1])) if e.get('eid') in SUSP))
     done
 
     separator
-    info "Totale eventi: ${BOLD}$TOTAL_FOUND${RESET}  |  Sospetti: ${RED}${BOLD}$SUSP_COUNT"
-    [[ $TOTAL_FOUND -eq 0 ]] && { warn "Nessun evento trovato."; return 0; }
+    info "Totale eventi: ${BOLD}$TOTAL_FOUND${RESET}  |  $(L "Sospetti:" "Suspicious:") ${RED}${BOLD}$SUSP_COUNT"
+    [[ $TOTAL_FOUND -eq 0 ]] && { warn "$(L "Nessun evento trovato." "No events found.")"; return 0; }
     ask_yn "Generare report HTML?" || return 0
 
     local REPORT_HTML; REPORT_HTML=$(prepare_report_dir "evtx")
@@ -2599,7 +2730,7 @@ PYEOF
     } > "$REPORT_HTML"
 
     register_report "$REPORT_HTML"
-    ok "Report salvato: ${BOLD}$REPORT_HTML"
+    ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
     open_report_prompt "$REPORT_HTML"
 }
 
@@ -2608,12 +2739,12 @@ PYEOF
 #  MODULO 13 — Amcache + Shimcache (timeline esecuzione binari)
 # ================================================================
 module_amcache() {
-    section_header "Amcache + Shimcache — Timeline Binari" "$YELLOW"
+    section_header "$(L "Amcache + Shimcache — Timeline Binari" "Amcache + Shimcache — Binary Timeline")" "$YELLOW"
     check_win_root || return 1
 
     if ! check_regipy; then
-        warn "regipy non trovato per ${PY3} (${PY3_VERSION})"
-        warn "Installalo con: ${PY3} -m pip install regipy"
+        warn "$(L "regipy non trovato per" "regipy not found for") ${PY3} (${PY3_VERSION})"
+        warn "$(L "Installalo con:" "Install it with:") ${PY3} -m pip install regipy"
         return 1
     fi
 
@@ -2628,7 +2759,7 @@ module_amcache() {
     local AMC_COUNT=0
 
     if [[ -n "$AMC_PATH" ]]; then
-        info "Amcache trovato: $AMC_PATH"
+        info "$(L "Amcache trovato:" "Amcache found:") $AMC_PATH"
         local AMC_DATA
         AMC_DATA=$("$PY3" - "$AMC_PATH" << 'PYEOF' 2>/dev/null || true
 import sys
@@ -2676,9 +2807,9 @@ PYEOF
             printf "  ${DIM}%-40s${RESET}  ${CYAN}%-15s${RESET}  %s\n" \
                 "${AMC_PATH_F: -40}" "$AMC_TIME" "${AMC_SHA1:0:16}"
         done <<< "$AMC_DATA"
-        ok "Amcache: $AMC_COUNT entry"
+        ok "$(L "Amcache: $AMC_COUNT entry" "Amcache: $AMC_COUNT entries")"
     else
-        warn "Amcache.hve non trovato"
+        warn "$(L "Amcache.hve non trovato" "Amcache.hve not found")"
     fi
 
     echo ""
@@ -2690,7 +2821,7 @@ PYEOF
     local SHIM_COUNT=0
 
     if [[ -n "$SYS_HIVE" ]]; then
-        info "Shimcache da hive SYSTEM: $SYS_HIVE"
+        info "$(L "Shimcache da hive SYSTEM:" "Shimcache from SYSTEM hive:") $SYS_HIVE"
         local SHIM_DATA
         SHIM_DATA=$("$PY3" - "$SYS_HIVE" << 'PYEOF' 2>/dev/null || true
 import sys, struct, datetime
@@ -2772,9 +2903,9 @@ PYEOF
             SHIM_COUNT=$((SHIM_COUNT + 1))
             printf "  ${DIM}%-50s${RESET}  %s\n" "${SHIM_PATH: -50}" "${SHIM_TIME:--}"
         done <<< "$SHIM_DATA"
-        ok "Shimcache: $SHIM_COUNT entry"
+        ok "$(L "Shimcache: $SHIM_COUNT entry" "Shimcache: $SHIM_COUNT entries")"
     else
-        warn "Hive SYSTEM non trovato — Shimcache saltato"
+        warn "$(L "Hive SYSTEM non trovato" "SYSTEM hive not found") — Shimcache saltato"
     fi
 
     separator
@@ -2839,7 +2970,7 @@ PYEOF
     } > "$REPORT_HTML"
 
     register_report "$REPORT_HTML"
-    ok "Report salvato: ${BOLD}$REPORT_HTML"
+    ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
     open_report_prompt "$REPORT_HTML"
 }
 
@@ -2847,7 +2978,7 @@ PYEOF
 #  MODULO 14 — Recycle Bin ($Recycle.Bin)
 # ================================================================
 module_recycle_bin() {
-    section_header "Recycle Bin — File Eliminati" "$GREEN"
+    section_header "$(L "Recycle Bin — File Eliminati" "Recycle Bin — Deleted Files")" "$GREEN"
     check_win_root || return 1
 
 
@@ -2855,7 +2986,7 @@ module_recycle_bin() {
     local RB_DIR
     RB_DIR=$(find "$WIN_ROOT" -maxdepth 1 -iname "\$Recycle.Bin" -type d 2>/dev/null | head -1)
     if [[ -z "$RB_DIR" ]]; then
-        warn "\$Recycle.Bin non trovato nella root del volume"
+        warn "$(L "\$Recycle.Bin non trovato nella root del volume" "\$Recycle.Bin not found in volume root")"
         return 0
     fi
 
@@ -2933,12 +3064,12 @@ PYEOF
                 printf "  ${DIM}%-60s${RESET}  %s\n" "${ORIG_PATH: -60}" "${DEL_TIME:--}"
             fi
         done
-        [[ $SID_COUNT -gt 0 ]] && ok "  SID $SID: $SID_COUNT file"
+        [[ $SID_COUNT -gt 0 ]] && ok "  $(L "SID $SID: $SID_COUNT file" "SID $SID: $SID_COUNT files")"
     done
 
     separator
-    info "File nel cestino: ${BOLD}$TOTAL${RESET}  |  Sospetti: ${RED}${BOLD}$SUSP_COUNT"
-    [[ $TOTAL -eq 0 ]] && { warn "Cestino vuoto o nessun \$I file trovato."; return 0; }
+    info "File nel cestino: ${BOLD}$TOTAL${RESET}  |  $(L "Sospetti:" "Suspicious:") ${RED}${BOLD}$SUSP_COUNT"
+    [[ $TOTAL -eq 0 ]] && { warn "$(L "Cestino vuoto o nessun \$I file trovato." "Recycle bin empty or no \$I file found.")"; return 0; }
     ask_yn "Generare report HTML?" || return 0
 
     local REPORT_HTML; REPORT_HTML=$(prepare_report_dir "recycle_bin")
@@ -2990,7 +3121,7 @@ PYEOF
     } > "$REPORT_HTML"
 
     register_report "$REPORT_HTML"
-    ok "Report salvato: ${BOLD}$REPORT_HTML"
+    ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
     open_report_prompt "$REPORT_HTML"
 }
 
@@ -2998,7 +3129,7 @@ PYEOF
 #  MODULO 15 — WMI Subscriptions (persistenza invisibile)
 # ================================================================
 module_wmi() {
-    section_header "WMI Subscriptions — Persistenza Invisibile" "$RED"
+    section_header "$(L "WMI Subscriptions — Persistenza Invisibile" "WMI Subscriptions — Fileless Persistence")" "$RED"
     check_win_root || return 1
 
 
@@ -3006,7 +3137,7 @@ module_wmi() {
     local WMI_DIR
     WMI_DIR=$(ci_find_dir "$WIN_ROOT" "Windows/System32/wbem/Repository")
     if [[ -z "$WMI_DIR" || ! -d "$WMI_DIR" ]]; then
-        warn "Repository WMI non trovato"
+        warn "$(L "Repository WMI non trovato" "WMI repository not found")"
         return 0
     fi
 
@@ -3020,7 +3151,7 @@ module_wmi() {
         OBJECTS_FILE=$(find "$WMI_DIR" -iname "OBJECTS.DATA" 2>/dev/null | head -1)
 
     if [[ -z "$OBJECTS_FILE" ]]; then
-        warn "OBJECTS.DATA non trovato — analisi tramite strings sul repository"
+        warn "$(L "OBJECTS.DATA non trovato — analisi tramite strings sul repository" "OBJECTS.DATA not found — analysis via strings on repository")"
     fi
 
     declare -a WMI_ENTRIES=()
@@ -3070,7 +3201,7 @@ PYEOF
 
     # Fallback: strings su tutto il repository
     if [[ -z "$WMI_DATA" || $(echo "$WMI_DATA" | wc -l) -lt 2 ]]; then
-        info "Fallback: strings sul repository..."
+        info "$(L "Fallback: strings sul repository..." "Fallback: strings on repository...")"
         WMI_DATA=$(find "$WMI_DIR" -type f 2>/dev/null | \
             xargs strings 2>/dev/null | \
             grep -iE "CommandLineTemplate|ScriptText|ActiveScript|EventFilter|EventConsumer|FilterToConsumer" | \
@@ -3097,8 +3228,8 @@ PYEOF
     done <<< "$WMI_DATA"
 
     separator
-    info "Pattern WMI trovati: ${BOLD}$TOTAL${RESET}  |  Sospetti: ${RED}${BOLD}$SUSP_COUNT"
-    [[ $TOTAL -eq 0 ]] && { warn "Nessuna subscription WMI sospetta trovata."; return 0; }
+    info "Pattern WMI trovati: ${BOLD}$TOTAL${RESET}  |  $(L "Sospetti:" "Suspicious:") ${RED}${BOLD}$SUSP_COUNT"
+    [[ $TOTAL -eq 0 ]] && { warn "$(L "Nessuna subscription WMI sospetta trovata." "No suspicious WMI subscription found.")"; return 0; }
     ask_yn "Generare report HTML?" || return 0
 
     local REPORT_HTML; REPORT_HTML=$(prepare_report_dir "wmi")
@@ -3145,7 +3276,7 @@ PYEOF
     } > "$REPORT_HTML"
 
     register_report "$REPORT_HTML"
-    ok "Report salvato: ${BOLD}$REPORT_HTML"
+    ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
     open_report_prompt "$REPORT_HTML"
 }
 
@@ -3164,7 +3295,7 @@ module_srum() {
         SRUM_PATH=$(find "$WIN_ROOT" -maxdepth 8 -iname "SRUDB.dat" 2>/dev/null | head -1)
 
     if [[ -z "$SRUM_PATH" ]]; then
-        warn "SRUDB.dat non trovato"
+        warn "$(L "SRUDB.dat non trovato" "SRUDB.dat not found")"
         return 0
     fi
 
@@ -3179,7 +3310,7 @@ module_srum() {
         warn "Per parsing completo: pip install pyesedb  (richiede libesedb)"
         echo ""
         # Fallback strings: cerca nomi applicazione e byte trasferiti
-        info "Estrazione tramite strings..."
+        info "$(L "Estrazione tramite strings..." "Extracting via strings...")"
         local STRINGS_OUT
         STRINGS_OUT=$(strings "$SRUM_PATH" 2>/dev/null | \
             grep -iE '\.(exe|dll|bat|ps1|vbs|py)|\\Device\\|\\\\[A-Za-z]' | \
@@ -3218,7 +3349,7 @@ module_srum() {
             html_footer "$SCAN" "$WIN_ROOT"
         } > "$REPORT_HTML"
         register_report "$REPORT_HTML"
-        ok "Report salvato: ${BOLD}$REPORT_HTML"
+        ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
         open_report_prompt "$REPORT_HTML"
         return 0
     fi
@@ -3344,7 +3475,7 @@ PYEOF
     } > "$REPORT_HTML"
 
     register_report "$REPORT_HTML"
-    ok "Report salvato: ${BOLD}$REPORT_HTML"
+    ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
     open_report_prompt "$REPORT_HTML"
 }
 
@@ -3358,7 +3489,7 @@ module_browser() {
 
     # Verifica sqlite3 disponibile
     if ! "$PY3" -c "import sqlite3" 2>/dev/null; then
-        err "sqlite3 non disponibile nel Python rilevato"
+        err "$(L "sqlite3 non disponibile" "sqlite3 not available") nel Python rilevato"
         return 1
     fi
 
@@ -3500,8 +3631,8 @@ PYEOF
     done < <(get_user_homes)
 
     separator
-    info "Visite totali: ${BOLD}$TOTAL${RESET}  |  Sospette: ${RED}${BOLD}$SUSP_COUNT"
-    [[ $TOTAL -eq 0 ]] && { warn "Nessuna history browser trovata."; return 0; }
+    info "Visite totali: ${BOLD}$TOTAL${RESET}  |  $(L "Sospette:" "Suspicious:") ${RED}${BOLD}$SUSP_COUNT"
+    [[ $TOTAL -eq 0 ]] && { warn "$(L "Nessuna history browser trovata." "No browser history found.")"; return 0; }
     ask_yn "Generare report HTML?" || return 0
 
     local REPORT_HTML; REPORT_HTML=$(prepare_report_dir "browser")
@@ -3599,7 +3730,7 @@ FILTERJS
     } > "$REPORT_HTML"
 
     register_report "$REPORT_HTML"
-    ok "Report salvato: ${BOLD}$REPORT_HTML"
+    ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
     open_report_prompt "$REPORT_HTML"
 }
 
@@ -3674,8 +3805,8 @@ module_userassist() {
     check_win_root || return 1
 
     if ! check_regipy; then
-        warn "regipy non trovato per ${PY3} (${PY3_VERSION})"
-        warn "Installalo con: ${PY3} -m pip install regipy"
+        warn "$(L "regipy non trovato per" "regipy not found for") ${PY3} (${PY3_VERSION})"
+        warn "$(L "Installalo con:" "Install it with:") ${PY3} -m pip install regipy"
         return 1
     fi
 
@@ -3689,7 +3820,7 @@ module_userassist() {
     while IFS= read -r USER_DIR; do
         local USERNAME; USERNAME=$(basename "$USER_DIR")
         local NTUSER; NTUSER=$(ci_find_file "$USER_DIR" "NTUSER.DAT")
-        [[ -z "$NTUSER" ]] && { dim_msg "$USERNAME — NTUSER.DAT non trovato"; continue; }
+        [[ -z "$NTUSER" ]] && { dim_msg "$USERNAME — NTUSER.DAT $(L "non trovato" "not found")"; continue; }
 
         info "Parsing NTUSER.DAT: $USERNAME"
 
@@ -3861,7 +3992,7 @@ PYEOF
     separator
     info "UserAssist: ${BOLD}$TOTAL_UA${RESET}  RunMRU: ${BOLD}$TOTAL_RUN${RESET}  TypedPaths: ${BOLD}$TOTAL_TP${RESET}  WordWheel: ${BOLD}$TOTAL_WW"
     local GRAND=$((TOTAL_UA + TOTAL_RUN + TOTAL_TP + TOTAL_WW))
-    [[ $GRAND -eq 0 ]] && { warn "Nessuna voce trovata."; return 0; }
+    [[ $GRAND -eq 0 ]] && { warn "$(L "Nessuna voce trovata." "No entries found.")"; return 0; }
     ask_yn "Generare report HTML?" || return 0
 
     local REPORT_HTML; REPORT_HTML=$(prepare_report_dir "userassist")
@@ -3943,7 +4074,7 @@ PYEOF
     } > "$REPORT_HTML"
 
     register_report "$REPORT_HTML"
-    ok "Report salvato: ${BOLD}$REPORT_HTML"
+    ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
     open_report_prompt "$REPORT_HTML"
 }
 
@@ -3951,12 +4082,12 @@ PYEOF
 #  MODULO 19 — ShellBags (navigazione cartelle, anche cancellate)
 # ================================================================
 module_shellbags() {
-    section_header "ShellBags — Navigazione Cartelle" "$CYAN"
+    section_header "$(L "ShellBags — Navigazione Cartelle" "ShellBags — Folder Navigation")" "$CYAN"
     check_win_root || return 1
 
     if ! check_regipy; then
-        warn "regipy non trovato per ${PY3} (${PY3_VERSION})"
-        warn "Installalo con: ${PY3} -m pip install regipy"
+        warn "$(L "regipy non trovato per" "regipy not found for") ${PY3} (${PY3_VERSION})"
+        warn "$(L "Installalo con:" "Install it with:") ${PY3} -m pip install regipy"
         return 1
     fi
 
@@ -4122,7 +4253,7 @@ PYEOF
         if $FOUND_ANY; then
             ok "$USERNAME — $TOTAL shellbags totali"
         else
-            dim_msg "$USERNAME — nessuna ShellBag trovata"
+            dim_msg "$USERNAME — $(L "nessuna ShellBag trovata" "no ShellBag found")"
         fi
 
     done < <(get_user_homes)
@@ -4139,8 +4270,8 @@ PYEOF
     [[ $TOTAL -gt 40 ]] && echo -e "  ${DIM}... e altri $((TOTAL-40)) (vedi report HTML)${RESET}"
 
     separator
-    info "ShellBags totali: ${BOLD}$TOTAL${RESET}  |  Sospette: ${RED}${BOLD}$SUSP_COUNT"
-    [[ $TOTAL -eq 0 ]] && { warn "Nessuna ShellBag trovata."; return 0; }
+    info "ShellBags totali: ${BOLD}$TOTAL${RESET}  |  $(L "Sospette:" "Suspicious:") ${RED}${BOLD}$SUSP_COUNT"
+    [[ $TOTAL -eq 0 ]] && { warn "$(L "Nessuna ShellBag trovata." "No ShellBags found.")"; return 0; }
     ask_yn "Generare report HTML?" || return 0
 
     local REPORT_HTML; REPORT_HTML=$(prepare_report_dir "shellbags")
@@ -4176,7 +4307,7 @@ PYEOF
     } > "$REPORT_HTML"
 
     register_report "$REPORT_HTML"
-    ok "Report salvato: ${BOLD}$REPORT_HTML"
+    ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
     open_report_prompt "$REPORT_HTML"
 }
 
@@ -4184,26 +4315,26 @@ PYEOF
 #  MODULO 20 — SAM: Hash password account locali
 # ================================================================
 module_sam() {
-    section_header "SAM — Hash Account Locali" "$RED"
+    section_header "$(L "SAM — Hash Account Locali" "SAM — Local Account Hashes")" "$RED"
     check_win_root || return 1
 
     local SAM_HIVE;  SAM_HIVE=$(get_hive "SAM")
     local SYS_HIVE;  SYS_HIVE=$(get_hive "SYSTEM")
 
     if [[ -z "$SAM_HIVE" || ! -f "$SAM_HIVE" ]]; then
-        err "Hive SAM non trovato"
+        err "Hive SAM $(L "non trovato" "not found")"
         return 1
     fi
     if [[ -z "$SYS_HIVE" || ! -f "$SYS_HIVE" ]]; then
-        err "Hive SYSTEM non trovato (necessario per la SysKey)"
+        err "$(L "Hive SYSTEM non trovato" "SYSTEM hive not found") (necessario per la SysKey)"
         return 1
     fi
 
     # Verifica impacket
     if ! "$PY3" -c "from impacket.examples.secretsdump import LocalOperations" 2>/dev/null; then
-        warn "impacket non trovato."
-        warn "Installalo con: ${PY3} -m pip install impacket"
-        info "Estrazione parziale tramite regipy (senza hash decifrati)..."
+        warn "impacket $(L "non trovato" "not found")."
+        warn "$(L "Installalo con:" "Install it with:") ${PY3} -m pip install impacket"
+        info "$(L "Estrazione parziale tramite regipy (senza hash decifrati)..." "Partial extraction via regipy (without decrypted hashes)...")"
 
         if ! check_regipy; then
             return 1
@@ -4230,11 +4361,11 @@ PYEOF
             [[ "$NAME" == "ERROR" ]] && { err "$NOTE"; continue; }
             printf "  ${CYAN}%-25s${RESET}  ${DIM}%s${RESET}\n" "$NAME" "$NOTE"
         done <<< "$ACC_DATA"
-        warn "Per gli hash installa impacket e rilancia il modulo."
+        warn "$(L "Per gli hash installa impacket e rilancia il modulo." "For hashes install impacket and relaunch the module.")"
         return 0
     fi
 
-    info "Estrazione hash con impacket secretsdump..."
+    info "$(L "Estrazione hash con impacket secretsdump..." "Extracting hashes with impacket secretsdump...")"
     echo ""
 
     local TMP_DIR; TMP_DIR=$(mktemp -d /tmp/dfir_sam_XXXXXX)
@@ -4312,8 +4443,8 @@ PYEOF
     done <<< "$DUMP_OUT"
 
     separator
-    info "Account trovati: ${BOLD}$TOTAL"
-    [[ $TOTAL -eq 0 ]] && { warn "Nessun account estratto."; return 0; }
+    info "$(L "Account trovati:" "Accounts found:") ${BOLD}$TOTAL"
+    [[ $TOTAL -eq 0 ]] && { warn "$(L "Nessun account estratto." "No accounts extracted.")"; return 0; }
     ask_yn "Generare report HTML?" || return 0
 
     local REPORT_HTML; REPORT_HTML=$(prepare_report_dir "sam")
@@ -4361,7 +4492,7 @@ PYEOF
     } > "$REPORT_HTML"
 
     register_report "$REPORT_HTML"
-    ok "Report salvato: ${BOLD}$REPORT_HTML"
+    ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
     open_report_prompt "$REPORT_HTML"
 }
 
@@ -4388,11 +4519,11 @@ module_mft() {
 
         local TMP_MFT=""
         if [[ -n "$DEV" ]] && command -v ntfscat &>/dev/null; then
-            info "Estrazione \$MFT tramite ntfscat dal device ${DEV}..."
+            info "$(L "Estrazione \$MFT tramite ntfscat dal device" "Extracting \$MFT via ntfscat from device") ${DEV}..."
             TMP_MFT=$(mktemp /tmp/dfir_MFT_XXXXXX)
             if ntfscat -f "$DEV" '$MFT' > "$TMP_MFT" 2>/dev/null && [[ -s "$TMP_MFT" ]]; then
                 MFT_FILE="$TMP_MFT"
-                ok "\$MFT estratto con ntfscat ($(du -h "$MFT_FILE" | cut -f1))"
+                ok "$(L "\$MFT estratto con ntfscat" "\$MFT extracted with ntfscat") ($(du -h "$MFT_FILE" | cut -f1))"
                 trap '[[ -n "${TMP_MFT:-}" ]] && rm -f "$TMP_MFT"' RETURN
             else
                 rm -f "$TMP_MFT"
@@ -4401,10 +4532,10 @@ module_mft() {
         fi
 
         if [[ -z "$MFT_FILE" ]]; then
-            warn "\$MFT non accessibile — il volume è montato con ntfs3 (driver kernel)"
+            warn "$(L "\$MFT non accessibile — il volume è montato con ntfs3 (driver kernel)" "\$MFT not accessible — volume mounted with ntfs3 (kernel driver)")"
             echo ""
-            info "Il driver ntfs3 non espone i file di sistema (\$MFT, \$LogFile, ecc.)."
-            info "Per accedere all'\$MFT hai due opzioni:"
+            info "$(L "Il driver ntfs3 non espone i file di sistema (\$MFT, \$LogFile, ecc.)." "The ntfs3 driver does not expose system files (\$MFT, \$LogFile, etc.).")"
+            info "$(L "Per accedere all'\$MFT hai due opzioni:" "To access \$MFT you have two options:")"
             echo ""
             if [[ -n "$DEV" ]]; then
                 echo -e "  ${CYAN}Opzione A${RESET} — rimonta con ntfs-3g (supporta file di sistema):"
@@ -4428,15 +4559,15 @@ module_mft() {
         fi
     fi
 
-    info "MFT trovato: $MFT_FILE  ($(du -h "$MFT_FILE" 2>/dev/null | cut -f1 || echo '?'))"
+    info "$(L "MFT trovato:" "MFT found:") $MFT_FILE  ($(du -h "$MFT_FILE" 2>/dev/null | cut -f1 || echo '?'))"
 
     # Verifica python-mft
     local HAS_PYMFT=false
     "$PY3" -c "import mft" 2>/dev/null && HAS_PYMFT=true
 
     if ! $HAS_PYMFT; then
-        warn "python-mft non trovato. Installalo con: ${PY3} -m pip install mft"
-        info "Analisi rapida tramite strings (parziale)..."
+        warn "python-mft non trovato. $(L "Installalo con:" "Install it with:") ${PY3} -m pip install mft"
+        info "$(L "Analisi rapida tramite strings (parziale)..." "Quick analysis via strings (partial)...")"
         echo ""
         # Estrai nomi file e timestamp con strings come fallback
         local STRINGS_OUT
@@ -4446,7 +4577,7 @@ module_mft() {
         echo "$STRINGS_OUT" | while IFS= read -r L; do
             printf "  ${DIM}%s${RESET}\n" "$L"
         done | head -50
-        warn "Per l'analisi completa installa python-mft."
+        warn "$(L "Per l'analisi completa installa python-mft." "For complete analysis install python-mft.")"
         return 0
     fi
 
@@ -4454,10 +4585,10 @@ module_mft() {
     local MFT_SIZE; MFT_SIZE=$(stat -c "%s" "$MFT_FILE" 2>/dev/null || echo 0)
     local MFT_RECORDS=$((MFT_SIZE / 1024))
     
-    info "Parsing MFT con python-mft (~${MFT_RECORDS} record presenti)..."
+    info "$(L "Parsing MFT con python-mft (~${MFT_RECORDS} record presenti)..." "Parsing MFT with python-mft (~${MFT_RECORDS} records present)...")"
     if [[ $MFT_SIZE -gt 500000000 ]]; then
-        warn "⏳ L'MFT supera i 500MB! Il parsing completo può richiedere vari minuti."
-        info "   (Specialmente su volumi montati con BitLocker/FUSE). Attendi senza interrompere..."
+        warn "$(L "⏳ L'MFT supera i 500MB! Il parsing completo può richiedere vari minuti." "⏳ MFT exceeds 500MB! Full parsing may take several minutes.")"
+        info "   $(L "(Specialmente su volumi montati con BitLocker/FUSE). Attendi senza interrompere..." "(Especially on volumes mounted with BitLocker/FUSE). Wait without interrupting...")"
     fi
 
     local TMP_MFT_CSV; TMP_MFT_CSV=$(mktemp /tmp/dfir_mft_XXXXXX.csv)
@@ -4539,7 +4670,7 @@ PYEOF
     local SUSP_COUNT
     SUSP_COUNT=$(awk -F'\t' '$8=="1"' "$TMP_MFT_CSV" 2>/dev/null | wc -l || echo 0)
 
-    info "File processati: ${BOLD}$TOTAL_LINES${RESET}  |  Sospetti: ${RED}${BOLD}$SUSP_COUNT${RESET}  |  Timestomping: ${RED}${BOLD}$STOMP_COUNT"
+    info "File processati: ${BOLD}$TOTAL_LINES${RESET}  |  $(L "Sospetti:" "Suspicious:") ${RED}${BOLD}$SUSP_COUNT${RESET}  |  Timestomping: ${RED}${BOLD}$STOMP_COUNT"
 
     # Stampa terminale: solo sospetti e timestomped
     echo ""
@@ -4551,7 +4682,7 @@ PYEOF
             "$MARK" "${NAME: -40}" "$CREATED" "$EXT"
     done
 
-    [[ $TOTAL_LINES -eq 0 ]] && { warn "Nessun record MFT processato."; return 0; }
+    [[ $TOTAL_LINES -eq 0 ]] && { warn "$(L "Nessun record MFT processato." "No MFT records processed.")"; return 0; }
     ask_yn "Generare report HTML?" || return 0
 
     local REPORT_HTML; REPORT_HTML=$(prepare_report_dir "mft")
@@ -4631,7 +4762,7 @@ PYEOF
     cp "$TMP_MFT_CSV" "${REPORT_HTML%.html}.csv" 2>/dev/null || echo ""
 
     register_report "$REPORT_HTML"
-    ok "Report salvato: ${BOLD}$REPORT_HTML"
+    ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
     ok "Dati completi salvati: ${BOLD}${REPORT_HTML%.html}.csv"
     open_report_prompt "$REPORT_HTML"
 }
@@ -4640,12 +4771,12 @@ PYEOF
 #  MODULO 22 — OpenSaveMRU / LastVisitedMRU (dialoghi file)
 # ================================================================
 module_opensave() {
-    section_header "OpenSaveMRU / LastVisitedMRU — Dialoghi File" "$GREEN"
+    section_header "$(L "OpenSaveMRU / LastVisitedMRU — Dialoghi File" "OpenSaveMRU / LastVisitedMRU — File Dialogs")" "$GREEN"
     check_win_root || return 1
 
     if ! check_regipy; then
-        warn "regipy non trovato per ${PY3} (${PY3_VERSION})"
-        warn "Installalo con: ${PY3} -m pip install regipy"
+        warn "$(L "regipy non trovato per" "regipy not found for") ${PY3} (${PY3_VERSION})"
+        warn "$(L "Installalo con:" "Install it with:") ${PY3} -m pip install regipy"
         return 1
     fi
 
@@ -4771,7 +4902,7 @@ PYEOF
     separator
     info "OpenSave: ${BOLD}$TOTAL_OS${RESET}  |  LastVisited: ${BOLD}$TOTAL_LV"
     local GRAND=$((TOTAL_OS + TOTAL_LV))
-    [[ $GRAND -eq 0 ]] && { warn "Nessun dato trovato."; return 0; }
+    [[ $GRAND -eq 0 ]] && { warn "$(L "Nessun dato trovato." "No data found.")"; return 0; }
     ask_yn "Generare report HTML?" || return 0
 
     local REPORT_HTML; REPORT_HTML=$(prepare_report_dir "opensave")
@@ -4824,7 +4955,7 @@ PYEOF
     } > "$REPORT_HTML"
 
     register_report "$REPORT_HTML"
-    ok "Report salvato: ${BOLD}$REPORT_HTML"
+    ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
     open_report_prompt "$REPORT_HTML"
 }
 
@@ -4832,7 +4963,7 @@ PYEOF
 #  MODULO 23 — USN Journal ($UsnJrnl:$J)
 # ================================================================
 module_usn() {
-    section_header "USN Journal — Change Log NTFS" "$CYAN"
+    section_header "$(L "USN Journal — Change Log NTFS" "USN Journal — NTFS Change Log")" "$CYAN"
     check_win_root || return 1
 
 
@@ -4849,19 +4980,19 @@ module_usn() {
             [[ "$DM" == "$WIN_ROOT" ]] && DEV=$(printf '%b' "$RD") && break
         done < /proc/mounts
         if [[ -n "$DEV" ]] && command -v ntfscat &>/dev/null; then
-            info "Estrazione \$UsnJrnl via ntfscat da $DEV..."
+            info "$(L "Estrazione \$UsnJrnl via ntfscat da" "Extracting \$UsnJrnl via ntfscat from") $DEV..."
             local TMP_USN; TMP_USN=$(mktemp /tmp/dfir_usn_XXXXXX)
             if ntfscat -f "$DEV" '$Extend/$UsnJrnl:$J' > "$TMP_USN" 2>/dev/null && [[ -s "$TMP_USN" ]]; then
                 UJFILE="$TMP_USN"
-                ok "\$UsnJrnl estratto ($(du -h "$UJFILE" | cut -f1))"
+                ok "$(L "\$UsnJrnl estratto" "\$UsnJrnl extracted") ($(du -h "$UJFILE" | cut -f1))"
                 trap '[[ -n "${TMP_USN:-}" ]] && rm -f "$TMP_USN"' RETURN
             else
                 rm -f "$TMP_USN"
-                warn "\$UsnJrnl non accessibile. Monta con: mount -t ntfs-3g -o ro,show_sys_files"
+                warn "$(L "\$UsnJrnl non accessibile. Monta con: mount -t ntfs-3g -o ro,show_sys_files" "\$UsnJrnl not accessible. Mount with: mount -t ntfs-3g -o ro,show_sys_files")"
                 return 0
             fi
         else
-            warn "\$UsnJrnl non accessibile — volume montato con ntfs3 (driver kernel)"
+            warn "$(L "\$UsnJrnl non accessibile — volume montato con ntfs3 (driver kernel)" "\$UsnJrnl not accessible — volume mounted with ntfs3 (kernel driver)")"
             [[ -n "$DEV" ]] && info "Prova: ntfscat -f \"$DEV\" '\$Extend/\$UsnJrnl:\$J' > /tmp/J"
             return 0
         fi
@@ -4947,14 +5078,14 @@ PYEOF
     local TOTAL_LINES; TOTAL_LINES=$(wc -l < "$TMP_USN_CSV" 2>/dev/null || echo 0)
     local SUSP_COUNT; SUSP_COUNT=$(awk -F'\t' '$5=="1"' "$TMP_USN_CSV" 2>/dev/null | wc -l || echo 0)
 
-    info "Record USN: ${BOLD}$TOTAL_LINES${RESET}  |  Sospetti (ext+azione): ${RED}${BOLD}$SUSP_COUNT"
+    info "$(L "Record USN:" "USN Records:") ${BOLD}$TOTAL_LINES${RESET}  |  Sospetti (ext+azione): ${RED}${BOLD}$SUSP_COUNT"
     echo ""
     awk -F'\t' '$5=="1"' "$TMP_USN_CSV" 2>/dev/null | head -25 | \
     while IFS=$'\t' read -r TS NAME EXT REASON SUSP; do
         printf "  ${RED}%-20s${RESET}  ${CYAN}%-30s${RESET}  %s\n" "$TS" "$NAME" "$REASON"
     done
 
-    [[ $TOTAL_LINES -eq 0 ]] && { warn "Nessun record USN processato."; return 0; }
+    [[ $TOTAL_LINES -eq 0 ]] && { warn "$(L "Nessun record USN processato." "No USN records processed.")"; return 0; }
     ask_yn "Generare report HTML?" || return 0
 
     local REPORT_HTML; REPORT_HTML=$(prepare_report_dir "usn")
@@ -4997,7 +5128,7 @@ PYEOF
         html_footer "$SCAN" "$WIN_ROOT"
     } > "$REPORT_HTML"
     register_report "$REPORT_HTML"
-    ok "Report salvato: ${BOLD}$REPORT_HTML"
+    ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
     open_report_prompt "$REPORT_HTML"
 }
 
@@ -5019,43 +5150,43 @@ module_ntds() {
         [[ -n "$_NTDS_DIR" ]] && NTDS_FILE=$(find "$_NTDS_DIR" -maxdepth 1 -iname "ntds.dit" -type f 2>/dev/null | head -1)
     fi
     if [[ -z "$NTDS_FILE" ]]; then
-        warn "ntds.dit non trovato — questo non è un Domain Controller (o la struttura NTDS/ è assente)"
+        warn "$(L "ntds.dit non trovato — questo non è un Domain Controller (o la struttura NTDS/ è assente)" "ntds.dit not found — this is not a Domain Controller (or NTDS/ structure is absent)")"
         return 0
     fi
     local SYS_HIVE; SYS_HIVE=$(get_hive "SYSTEM")
     if [[ -z "$SYS_HIVE" || ! -f "$SYS_HIVE" ]]; then
-        err "Hive SYSTEM non trovato (necessario per il BootKey)"; return 1
+        err "$(L "Hive SYSTEM non trovato" "SYSTEM hive not found") (necessario per il BootKey)"; return 1
     fi
     info "NTDS.dit: $NTDS_FILE"
     info "SYSTEM:   $SYS_HIVE"
     echo ""
 
     if ! "$PY3" -c "from impacket.examples.secretsdump import NTDSHashes" 2>/dev/null; then
-        warn "impacket non trovato — installalo con: ${PY3} -m pip install impacket"
-        info "Fallback: estrazione account senza hash tramite strings..."
+        warn "$(L "impacket non trovato — installalo con:" "impacket not found — install it with:") ${PY3} -m pip install impacket"
+        info "$(L "Fallback: estrazione account senza hash tramite strings..." "Fallback: account extraction without hashes via strings...")"
         local ACC_STRINGS
         ACC_STRINGS=$(strings "$NTDS_FILE" 2>/dev/null | grep -E '^[A-Za-z0-9_.-]{3,20}\$?$' | sort -u | head -100 || true)
         echo "$ACC_STRINGS" | while IFS= read -r L; do
             printf "  ${DIM}%s${RESET}\n" "$L"
         done
-        warn "Installa impacket per l'estrazione degli hash NTLM."
+        warn "$(L "Installa impacket per l'estrazione degli hash NTLM." "Install impacket for NTLM hash extraction.")"
         return 0
     fi
 
-    info "Estrazione hash con impacket NTDSHashes..."
+    info "$(L "Estrazione hash con impacket NTDSHashes..." "Extracting hashes with impacket NTDSHashes...")"
     local TMP_DIR; TMP_DIR=$(mktemp -d /tmp/dfir_ntds_XXXXXX)
     trap '[[ -n "${TMP_DIR:-}" ]] && rm -rf "$TMP_DIR"' RETURN
 
     # Copia con timeout: su share SMB da DC live la copia può bloccarsi indefinitamente
-    info "Copia ntds.dit in /tmp (timeout 180s — file di rete, attendere)..."
+    info "$(L "Copia ntds.dit in /tmp (timeout 180s — file di rete, attendere)..." "Copying ntds.dit to /tmp (timeout 180s — network file, please wait)...")"
     if ! portable_timeout 180 cp "$NTDS_FILE" "$TMP_DIR/ntds.dit" 2>/dev/null; then
-        err "Timeout o errore nella copia di ntds.dit (share lenta o file bloccato da Windows)"
-        info "Suggerimento: esegui il modulo su un'immagine montata offline oppure tramite VSS snapshot"
+        err "$(L "Timeout o errore nella copia di ntds.dit (share lenta o file bloccato da Windows)" "Timeout or error copying ntds.dit (slow share or file locked by Windows)")"
+        info "$(L "Suggerimento: esegui il modulo su un'immagine montata offline oppure tramite VSS snapshot" "Hint: run the module on an offline mounted image or via VSS snapshot")"
         return 1
     fi
-    info "Copia SYSTEM hive..."
+    info "$(L "Copia SYSTEM hive..." "Copying SYSTEM hive...")"
     if ! portable_timeout 60 cp "$SYS_HIVE" "$TMP_DIR/SYSTEM" 2>/dev/null; then
-        err "Timeout o errore nella copia del SYSTEM hive"
+        err "$(L "Timeout o errore nella copia del SYSTEM hive" "Timeout or error copying SYSTEM hive")"
         return 1
     fi
     chmod 600 "$TMP_DIR/ntds.dit" "$TMP_DIR/SYSTEM" 2>/dev/null || true
@@ -5063,7 +5194,7 @@ module_ntds() {
     # Patch dirty state ESE: NTDSHashes usa ESENT_DB internamente, che rifiuta
     # database in stato DirtyShutdown (3) — condizione normale su DC live.
     # Offset 52 (0x34): campo dbstate nello standard ESE/JET Blue.
-    info "Verifica/patch dirty state ESE (necessario per DC live)..."
+    info "$(L "Verifica/patch dirty state ESE (necessario per DC live)..." "Checking/patching ESE dirty state (required for live DC)...")"
     "$PY3" - "$TMP_DIR/ntds.dit" << 'PYEOF_PATCH' 2>/dev/null || true
 import sys, struct
 path = sys.argv[1]
@@ -5081,7 +5212,7 @@ except Exception as ex:
     sys.stderr.write(f"WARN: patch dirty state fallita: {ex}\n")
 PYEOF_PATCH
 
-    info "Dump hash NTLM (può richiedere diversi minuti per domini grandi)..."
+    info "$(L "Dump hash NTLM (può richiedere diversi minuti per domini grandi)..." "Dumping NTLM hashes (may take several minutes for large domains)...")"
     local DUMP_OUT
     DUMP_OUT=$(portable_timeout 600 "$PY3" - "$TMP_DIR/ntds.dit" "$TMP_DIR/SYSTEM" << 'PYEOF' 2>/dev/null || true
 import sys, io
@@ -5107,11 +5238,11 @@ PYEOF
     if [[ -z "$DUMP_OUT" ]]; then
         if grep -qiE 'Errno 35|EAGAIN|temporarily unavailable' "$TMP_DIR/ntds_err.log" 2>/dev/null \
         || [[ "$NTDS_FILE" == /Volumes/* || "$NTDS_FILE" == /mnt/* || "$NTDS_FILE" == /media/* ]]; then
-            err "ntds.dit è bloccato dal servizio Active Directory (DC live, Errno 35 / EAGAIN)."
-            info "Soluzioni: 1) ntdsutil IFM sul DC  2) impacket-secretsdump remoto  3) immagine disco offline"
+            err "$(L "ntds.dit è bloccato dal servizio Active Directory (DC live, Errno 35 / EAGAIN)." "ntds.dit is locked by Active Directory service (live DC, Errno 35 / EAGAIN).")"
+            info "$(L "Soluzioni: 1) ntdsutil IFM sul DC  2) impacket-secretsdump remoto  3) immagine disco offline" "Solutions: 1) ntdsutil IFM on DC  2) remote impacket-secretsdump  3) offline disk image")"
         else
-            err "Dump vuoto — ntds.dit potrebbe essere in stato dirty o corrotto."
-            info "Prova il modulo 38 (PAD Offline) che usa analisi ESE con recovery avanzato."
+            err "$(L "Dump vuoto — ntds.dit potrebbe essere in stato dirty o corrotto." "Empty dump — ntds.dit may be dirty or corrupted.")"
+            info "$(L "Prova il modulo 38 (PAD Offline) che usa analisi ESE con recovery avanzato." "Try module 38 (PAD Offline) which uses ESE analysis with advanced recovery.")"
         fi
         return 1
     fi
@@ -5139,8 +5270,8 @@ PYEOF
     done <<< "$DUMP_OUT"
 
     separator
-    info "Account AD estratti: ${BOLD}$TOTAL"
-    [[ $TOTAL -eq 0 ]] && { warn "Nessun account estratto."; return 0; }
+    info "$(L "Account AD estratti:" "AD accounts extracted:") ${BOLD}$TOTAL"
+    [[ $TOTAL -eq 0 ]] && { warn "$(L "Nessun account estratto." "No accounts extracted.")"; return 0; }
     ask_yn "Generare report HTML?" || return 0
 
     local REPORT_HTML; REPORT_HTML=$(prepare_report_dir "ntds")
@@ -5184,7 +5315,7 @@ PYEOF
         html_footer "$SCAN" "$WIN_ROOT"
     } > "$REPORT_HTML"
     register_report "$REPORT_HTML"
-    ok "Report salvato: ${BOLD}$REPORT_HTML"
+    ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
     open_report_prompt "$REPORT_HTML"
 }
 
@@ -5193,7 +5324,7 @@ PYEOF
 #  MODULO 25 — Hibernation / Pagefile (artefatti memoria)
 # ================================================================
 module_hiberfil() {
-    section_header "Hibernation / Pagefile — Artefatti Memoria" "$BLUE"
+    section_header "$(L "Hibernation / Pagefile — Artefatti Memoria" "Hibernation / Pagefile — Memory Artifacts")" "$BLUE"
     check_win_root || return 1
 
 
@@ -5202,8 +5333,8 @@ module_hiberfil() {
     PFILE=$(find "$WIN_ROOT" -maxdepth 1 -iname "pagefile.sys" -type f 2>/dev/null | head -1)
 
     [[ -z "$HFILE" && -z "$PFILE" ]] && {
-        warn "hiberfil.sys e pagefile.sys non trovati nella root del volume"
-        info "Il volume potrebbe essere montato senza visibilità sui file di sistema"
+        warn "$(L "hiberfil.sys e pagefile.sys non trovati nella root del volume" "hiberfil.sys and pagefile.sys not found in volume root")"
+        info "$(L "Il volume potrebbe essere montato senza visibilità sui file di sistema" "The volume may be mounted without visibility on system files")"
         return 0
     }
 
@@ -5214,20 +5345,20 @@ module_hiberfil() {
         [[ -z "$MFILE" || ! -f "$MFILE" ]] && continue
         local MNAME; MNAME=$(basename "$MFILE")
         local MSIZE; MSIZE=$(du -h "$MFILE" 2>/dev/null | cut -f1 || echo "?")
-        ok "$MNAME trovato: $MFILE  ($MSIZE)"
+        ok "$MNAME $(L "trovato:" "found:") $MFILE  ($MSIZE)"
 
         # Verifica magic bytes per hiberfil.sys
         local MAGIC=""
         if [[ "$MNAME" =~ hiberfil ]]; then
             MAGIC=$(dd if="$MFILE" bs=4 count=1 2>/dev/null | od -An -tx1 | tr -d ' \n' | cut -c1-8 || echo "")
             case "${MAGIC^^}" in
-                "5041474D") info "  Formato: HIBR (hibernated)" ;;
-                "52535452") info "  Formato: RSTR (restored)" ;;
-                *) info "  Magic: 0x${MAGIC} (sconosciuto)" ;;
+                "5041474D") info "  $(L "Formato: HIBR (hibernated)" "Format: HIBR (hibernated)")" ;;
+                "52535452") info "  $(L "Formato: RSTR (restored)" "Format: RSTR (restored)")" ;;
+                *) info "  $(L "Magic: 0x${MAGIC} (sconosciuto)" "Magic: 0x${MAGIC} (unknown)")" ;;
             esac
         fi
 
-        info "  Estrazione stringhe significative..."
+        info "  $(L "Estrazione stringhe significative..." "Extracting significant strings...")"
         local STR_OUT
         STR_OUT=$(python3 - "$MFILE" << 'PYEOF' 2>/dev/null || true
 import sys, re
@@ -5272,8 +5403,8 @@ PYEOF
     done
 
     separator
-    info "Stringhe estratte totali: ${BOLD}$TOTAL_STRINGS"
-    info "${BOLD}Per analisi completa della memoria usa Volatility3:${RESET}"
+    info "$(L "Stringhe estratte totali:" "Total extracted strings:") ${BOLD}$TOTAL_STRINGS"
+    info "${BOLD}$(L "Per analisi completa della memoria usa Volatility3:" "For complete memory analysis use Volatility3:")${RESET}"
     echo -e "    ${DIM}vol -f \"${HFILE:-<hiberfil.sys>}\" windows.pstree${RESET}"
     echo -e "    ${DIM}vol -f \"${HFILE:-<hiberfil.sys>}\" windows.netscan${RESET}"
     echo -e "    ${DIM}vol -f \"${HFILE:-<hiberfil.sys>}\" windows.cmdline${RESET}"
@@ -5320,7 +5451,7 @@ PYEOF
         html_footer "$SCAN" "$WIN_ROOT"
     } > "$REPORT_HTML"
     register_report "$REPORT_HTML"
-    ok "Report salvato: ${BOLD}$REPORT_HTML"
+    ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
     open_report_prompt "$REPORT_HTML"
 }
 
@@ -5374,10 +5505,10 @@ module_wer_files() {
     done < <(get_user_homes)
 
     TOTAL_FILES=${#WER_FILES[@]}
-    info "File WER trovati: ${BOLD}$TOTAL_FILES"
+    info "$(L "File WER trovati:" "WER files found:") ${BOLD}$TOTAL_FILES"
 
     if [[ $TOTAL_FILES -eq 0 ]]; then
-        ok "Nessun file WER trovato."
+        ok "$(L "Nessun file WER trovato." "No WER files found.")"
         return 0
     fi
 
@@ -5392,7 +5523,7 @@ module_wer_files() {
     done
 
     separator
-    info "Processati ${BOLD}$TOTAL_FILES${RESET} report di errore."
+    info "$(L "Processati" "Processed") ${BOLD}$TOTAL_FILES${RESET} report di errore."
 
     ask_yn "Generare report HTML?" || return 0
 
@@ -5459,7 +5590,7 @@ PYEOF
     } > "$REPORT_HTML"
     
     register_report "$REPORT_HTML"
-    ok "Report salvato: ${BOLD}$REPORT_HTML"
+    ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
     open_report_prompt "$REPORT_HTML"
 }
 
@@ -5526,10 +5657,10 @@ PYEOF
     done < <(get_user_homes)
 
     separator
-    info "Blob DPAPI trovati: ${BOLD}$TOTAL"
-    [[ $TOTAL -eq 0 ]] && { warn "Nessun blob DPAPI trovato."; return 0; }
-    warn "I blob sono cifrati con DPAPI — richiedono la master key utente per la decifratura"
-    info "Tool utili: dpapick3, mimikatz (sekurlsa::dpapi), impacket dpapi"
+    info "$(L "Blob DPAPI trovati:" "DPAPI blobs found:") ${BOLD}$TOTAL"
+    [[ $TOTAL -eq 0 ]] && { warn "$(L "Nessun blob DPAPI trovato." "No DPAPI blobs found.")"; return 0; }
+    warn "$(L "I blob sono cifrati con DPAPI — richiedono la master key utente per la decifratura" "Blobs are DPAPI-encrypted — require the user master key for decryption")"
+    info "$(L "Tool utili: dpapick3, mimikatz (sekurlsa::dpapi), impacket dpapi" "Useful tools: dpapick3, mimikatz (sekurlsa::dpapi), impacket dpapi")"
     ask_yn "Generare report HTML?" || return 0
 
     local REPORT_HTML; REPORT_HTML=$(prepare_report_dir "credential_manager")
@@ -5572,7 +5703,7 @@ PYEOF
         html_footer "$SCAN" "$WIN_ROOT"
     } > "$REPORT_HTML"
     register_report "$REPORT_HTML"
-    ok "Report salvato: ${BOLD}$REPORT_HTML"
+    ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
     open_report_prompt "$REPORT_HTML"
 }
 
@@ -5580,7 +5711,7 @@ PYEOF
 #  MODULO 28 — WLAN & VPN Profiles
 # ================================================================
 module_wlan() {
-    section_header "WLAN & VPN — Profili di Rete" "$CYAN"
+    section_header "$(L "WLAN & VPN — Profili di Rete" "WLAN & VPN — Network Profiles")" "$CYAN"
     check_win_root || return 1
 
 
@@ -5621,12 +5752,12 @@ PYEOF
             TOTAL_WLAN=$((TOTAL_WLAN + 1))
         done < <(find "$WLANSVC_DIR" -name "*.xml" -type f 2>/dev/null)
     else
-        warn "WLAN Profiles non trovati (ProgramData/Microsoft/Wlansvc/Profiles)"
+        warn "$(L "WLAN Profiles non trovati (ProgramData/Microsoft/Wlansvc/Profiles)" "WLAN Profiles not found (ProgramData/Microsoft/Wlansvc/Profiles)")"
     fi
 
     # VPN / Network profiles dal registro SOFTWARE
     echo ""
-    info "Profili di rete (NetworkList) dal registro..."
+    info "$(L "Profili di rete (NetworkList) dal registro..." "Network profiles (NetworkList) from registry...")"
     if check_regipy; then
         local SW_HIVE; SW_HIVE=$(get_hive "SOFTWARE")
         if [[ -n "$SW_HIVE" ]]; then
@@ -5664,8 +5795,8 @@ PYEOF
     fi
 
     separator
-    info "Profili di rete totali: ${BOLD}$TOTAL_WLAN"
-    [[ $TOTAL_WLAN -eq 0 ]] && { warn "Nessun profilo trovato."; return 0; }
+    info "$(L "Profili di rete totali:" "Total network profiles:") ${BOLD}$TOTAL_WLAN"
+    [[ $TOTAL_WLAN -eq 0 ]] && { warn "$(L "Nessun profilo trovato." "No profiles found.")"; return 0; }
     ask_yn "Generare report HTML?" || return 0
 
     local REPORT_HTML; REPORT_HTML=$(prepare_report_dir "wlan")
@@ -5697,7 +5828,7 @@ PYEOF
         html_footer "$SCAN" "$WIN_ROOT"
     } > "$REPORT_HTML"
     register_report "$REPORT_HTML"
-    ok "Report salvato: ${BOLD}$REPORT_HTML"
+    ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
     open_report_prompt "$REPORT_HTML"
 }
 
@@ -5705,11 +5836,11 @@ PYEOF
 #  MODULO 29 — AppX / UWP Packages
 # ================================================================
 module_appx() {
-    section_header "AppX / UWP — Pacchetti Store Installati" "$GREEN"
+    section_header "$(L "AppX / UWP — Pacchetti Store Installati" "AppX / UWP — Installed Store Packages")" "$GREEN"
     check_win_root || return 1
 
     if ! check_regipy; then
-        warn "regipy non trovato. Installalo con: ${PY3} -m pip install regipy"; return 1
+        warn "regipy non trovato. $(L "Installalo con:" "Install it with:") ${PY3} -m pip install regipy"; return 1
     fi
 
 
@@ -5719,7 +5850,7 @@ module_appx() {
     # SOFTWARE hive (sistema)
     local SW_HIVE; SW_HIVE=$(get_hive "SOFTWARE")
     if [[ -n "$SW_HIVE" ]]; then
-        info "Parsing AppX packages da SOFTWARE hive..."
+        info "$(L "Parsing AppX packages da SOFTWARE hive..." "Parsing AppX packages from SOFTWARE hive...")"
         local PKG_DATA
         PKG_DATA=$("$PY3" - "$SW_HIVE" << 'PYEOF' 2>/dev/null || true
 import sys
@@ -5796,8 +5927,8 @@ PYEOF
     done < <(get_user_homes)
 
     separator
-    info "Pacchetti AppX: ${BOLD}$TOTAL${RESET}  |  Sospetti: ${RED}${BOLD}$SUSP_COUNT"
-    [[ $TOTAL -eq 0 ]] && { warn "Nessun pacchetto AppX trovato."; return 0; }
+    info "Pacchetti AppX: ${BOLD}$TOTAL${RESET}  |  $(L "Sospetti:" "Suspicious:") ${RED}${BOLD}$SUSP_COUNT"
+    [[ $TOTAL -eq 0 ]] && { warn "$(L "Nessun pacchetto AppX trovato." "No AppX packages found.")"; return 0; }
     ask_yn "Generare report HTML?" || return 0
 
     local REPORT_HTML; REPORT_HTML=$(prepare_report_dir "appx")
@@ -5830,7 +5961,7 @@ PYEOF
         html_footer "$SCAN" "$WIN_ROOT"
     } > "$REPORT_HTML"
     register_report "$REPORT_HTML"
-    ok "Report salvato: ${BOLD}$REPORT_HTML"
+    ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
     open_report_prompt "$REPORT_HTML"
 }
 
@@ -5842,7 +5973,7 @@ module_browser_extra() {
     check_win_root || return 1
 
     if ! "$PY3" -c "import sqlite3" 2>/dev/null; then
-        err "sqlite3 non disponibile"; return 1
+        err "$(L "sqlite3 non disponibile" "sqlite3 not available")"; return 1
     fi
 
 
@@ -5922,7 +6053,7 @@ PYEOF
                     if [[ -n "$DL_OUT" ]]; then
                         echo "$DL_OUT" >> "$TMP_DL_ROWS"
                         TOTAL_DL=$((TOTAL_DL + $(echo "$DL_OUT" | wc -l)))
-                        ok "$USERNAME / $BLABEL — download trovati"
+                        ok "$USERNAME / $BLABEL — $(L "download trovati" "downloads found")"
                     fi
                 done
             else
@@ -5969,7 +6100,7 @@ PYEOF
                 if [[ -n "$DL_OUT" ]]; then
                     echo "$DL_OUT" >> "$TMP_DL_ROWS"
                     TOTAL_DL=$((TOTAL_DL + $(echo "$DL_OUT" | wc -l)))
-                    ok "$USERNAME / $BLABEL — download trovati"
+                    ok "$USERNAME / $BLABEL — $(L "download trovati" "downloads found")"
                 fi
             fi
         done
@@ -6012,14 +6143,14 @@ PYEOF
             if [[ -n "$LG_OUT" ]]; then
                 echo "$LG_OUT" >> "$TMP_LG_ROWS"
                 TOTAL_LG=$((TOTAL_LG + $(echo "$LG_OUT" | wc -l)))
-                ok "$USERNAME / $BLABEL — credenziali salvate trovate"
+                ok "$USERNAME / $BLABEL — $(L "credenziali salvate trovate" "saved credentials found")"
             fi
         done
     done < <(get_user_homes)
 
     separator
-    info "Download: ${BOLD}$TOTAL_DL${RESET}  |  Credenziali salvate: ${BOLD}$TOTAL_LG"
-    [[ $((TOTAL_DL + TOTAL_LG)) -eq 0 ]] && { warn "Nessun dato trovato."; return 0; }
+    info "$(L "Download:" "Downloads:") ${BOLD}$TOTAL_DL${RESET}  |  Credenziali salvate: ${BOLD}$TOTAL_LG"
+    [[ $((TOTAL_DL + TOTAL_LG)) -eq 0 ]] && { warn "$(L "Nessun dato trovato." "No data found.")"; return 0; }
     ask_yn "Generare report HTML?" || return 0
 
     local REPORT_HTML; REPORT_HTML=$(prepare_report_dir "browser_extra")
@@ -6048,7 +6179,7 @@ PYEOF
         html_footer "$SCAN" "$WIN_ROOT"
     } > "$REPORT_HTML"
     register_report "$REPORT_HTML"
-    ok "Report salvato: ${BOLD}$REPORT_HTML"
+    ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
     open_report_prompt "$REPORT_HTML"
 }
 
@@ -6057,7 +6188,7 @@ PYEOF
 #  MODULO 31 — Clipboard History (Win10+)
 # ================================================================
 module_clipboard() {
-    section_header "Clipboard History — Cronologia Appunti" "$YELLOW"
+    section_header "$(L "Clipboard History — Cronologia Appunti" "Clipboard History")" "$YELLOW"
     check_win_root || return 1
 
 
@@ -6069,7 +6200,7 @@ module_clipboard() {
         local CB_DIR
         CB_DIR=$(ci_find_dir "$USER_DIR" "AppData/Local/Microsoft/Windows/Clipboard")
         [[ -z "$CB_DIR" || ! -d "$CB_DIR" ]] && continue
-        info "Clipboard dir trovata: $CB_DIR"
+        info "$(L "Clipboard dir trovata:" "Clipboard dir found:") $CB_DIR"
 
         while IFS= read -r CFILE; do
             [[ -f "$CFILE" ]] || continue
@@ -6109,8 +6240,8 @@ PYEOF
     done < <(get_user_homes)
 
     separator
-    info "Voci clipboard: ${BOLD}$TOTAL${RESET}  |  Sospette: ${RED}${BOLD}$SUSP_COUNT"
-    [[ $TOTAL -eq 0 ]] && { warn "Nessuna voce clipboard trovata (feature Win10 1809+, va abilitata)."; return 0; }
+    info "Voci clipboard: ${BOLD}$TOTAL${RESET}  |  $(L "Sospette:" "Suspicious:") ${RED}${BOLD}$SUSP_COUNT"
+    [[ $TOTAL -eq 0 ]] && { warn "$(L "Nessuna voce clipboard trovata (feature Win10 1809+, va abilitata)." "No clipboard entries found (Win10 1809+ feature, must be enabled).")"; return 0; }
     ask_yn "Generare report HTML?" || return 0
 
     local REPORT_HTML; REPORT_HTML=$(prepare_report_dir "clipboard")
@@ -6146,7 +6277,7 @@ PYEOF
         html_footer "$SCAN" "$WIN_ROOT"
     } > "$REPORT_HTML"
     register_report "$REPORT_HTML"
-    ok "Report salvato: ${BOLD}$REPORT_HTML"
+    ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
     open_report_prompt "$REPORT_HTML"
 }
 
@@ -6154,11 +6285,11 @@ PYEOF
 #  MODULO 32 — Office MRU & Recent Docs
 # ================================================================
 module_office_mru() {
-    section_header "Office MRU — File Recenti Office" "$GREEN"
+    section_header "$(L "Office MRU — File Recenti Office" "Office MRU — Recent Office Files")" "$GREEN"
     check_win_root || return 1
 
     if ! check_regipy; then
-        warn "regipy non trovato. Installalo con: ${PY3} -m pip install regipy"; return 1
+        warn "regipy non trovato. $(L "Installalo con:" "Install it with:") ${PY3} -m pip install regipy"; return 1
     fi
 
 
@@ -6228,8 +6359,8 @@ PYEOF
     done < <(get_user_homes)
 
     separator
-    info "File Office recenti: ${BOLD}$TOTAL${RESET}  |  Sospetti: ${RED}${BOLD}$SUSP_COUNT"
-    [[ $TOTAL -eq 0 ]] && { warn "Nessun file Office recente trovato."; return 0; }
+    info "File Office recenti: ${BOLD}$TOTAL${RESET}  |  $(L "Sospetti:" "Suspicious:") ${RED}${BOLD}$SUSP_COUNT"
+    [[ $TOTAL -eq 0 ]] && { warn "$(L "Nessun file Office recente trovato." "No recent Office files found.")"; return 0; }
     ask_yn "Generare report HTML?" || return 0
 
     local REPORT_HTML; REPORT_HTML=$(prepare_report_dir "office_mru")
@@ -6262,7 +6393,7 @@ PYEOF
         html_footer "$SCAN" "$WIN_ROOT"
     } > "$REPORT_HTML"
     register_report "$REPORT_HTML"
-    ok "Report salvato: ${BOLD}$REPORT_HTML"
+    ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
     open_report_prompt "$REPORT_HTML"
 }
 
@@ -6270,7 +6401,7 @@ PYEOF
 #  MODULO 33 — Defender Quarantine
 # ================================================================
 module_defender_quarantine() {
-    section_header "Defender Quarantine — File in Quarantena" "$RED"
+    section_header "$(L "Defender Quarantine — File in Quarantena" "Defender Quarantine — Quarantined Files")" "$RED"
     check_win_root || return 1
 
 
@@ -6280,8 +6411,8 @@ module_defender_quarantine() {
     QRESOURCE_DIR=$(ci_find_dir "$WIN_ROOT" "ProgramData/Microsoft/Windows Defender/Quarantine/ResourceData")
 
     if [[ -z "$QENTRIES_DIR" || ! -d "$QENTRIES_DIR" ]]; then
-        warn "Directory quarantena Defender non trovata"
-        info "Percorso atteso: ProgramData/Microsoft/Windows Defender/Quarantine/"
+        warn "$(L "Directory quarantena Defender non trovata" "Defender quarantine directory not found")"
+        info "$(L "Percorso atteso: ProgramData/Microsoft/Windows Defender/Quarantine/" "Expected path: ProgramData/Microsoft/Windows Defender/Quarantine/")"
         return 0
     fi
 
@@ -6335,11 +6466,11 @@ PYEOF
     done < <(find "$QENTRIES_DIR" -maxdepth 2 -type f 2>/dev/null | sort)
 
     separator
-    info "Voci in quarantena trovate: ${BOLD}$TOTAL"
-    [[ $TOTAL -eq 0 ]] && { warn "Nessuna voce trovata nella quarantena."; return 0; }
+    info "$(L "Voci in quarantena trovate:" "Quarantine entries found:") ${BOLD}$TOTAL"
+    [[ $TOTAL -eq 0 ]] && { warn "$(L "Nessuna voce trovata nella quarantena." "No entries found in quarantine.")"; return 0; }
 
     if [[ -n "$QRESOURCE_DIR" ]]; then
-        info "${BOLD}Payload cifrati disponibili in:${RESET} $QRESOURCE_DIR"
+        info "${BOLD}$(L "Payload cifrati disponibili in:" "Encrypted payloads available in:")${RESET} $QRESOURCE_DIR"
         info "Per ripristino (su VM isolata): MpCmdRun.exe -Restore -Name <ThreatName>"
     fi
 
@@ -6382,7 +6513,7 @@ PYEOF
         html_footer "$SCAN" "$WIN_ROOT"
     } > "$REPORT_HTML"
     register_report "$REPORT_HTML"
-    ok "Report salvato: ${BOLD}$REPORT_HTML"
+    ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
     open_report_prompt "$REPORT_HTML"
 }
 
@@ -6396,22 +6527,22 @@ module_ps_scriptblock() {
     local EVTX_DIR
     EVTX_DIR=$(ci_find_dir "$WIN_ROOT" "Windows/System32/winevt/Logs")
     if [[ -z "$EVTX_DIR" ]]; then
-        warn "Directory EVTX non trovata"
+        warn "$(L "Directory EVTX non trovata" "EVTX directory not found")"
         return 1
     fi
 
     local PS_EVTX
     PS_EVTX=$(find "$EVTX_DIR" -maxdepth 1 -iname "Microsoft-Windows-PowerShell%4Operational.evtx" -type f 2>/dev/null | head -1)
     if [[ -z "$PS_EVTX" || ! -f "$PS_EVTX" ]]; then
-        warn "Log PowerShell Operational non trovato"
-        info "Atteso: Windows/System32/winevt/Logs/Microsoft-Windows-PowerShell%4Operational.evtx"
+        warn "$(L "Log PowerShell Operational non trovato" "PowerShell Operational log not found")"
+        info "$(L "Atteso: Windows/System32/winevt/Logs/Microsoft-Windows-PowerShell%4Operational.evtx" "Expected: Windows/System32/winevt/Logs/Microsoft-Windows-PowerShell%4Operational.evtx")"
         return 0
     fi
 
     info "Parsing: $PS_EVTX"
 
     if ! "$PY3" -c "import Evtx" 2>/dev/null; then
-        warn "python-evtx non trovato. Installalo con: ${PY3} -m pip install python-evtx"
+        warn "$(L "python-evtx non trovato." "python-evtx not found.") Installalo con: ${PY3} -m pip install python-evtx"
         return 1
     fi
 
@@ -6485,7 +6616,7 @@ PYEOF
     local TOTAL=0 SUSP=0
     declare -a BLOCKS=()
     while IFS=$'\x1e' read -r TYPE TS FPATH SCRIPT; do
-        [[ "$TYPE" == "ERROR" ]] && { err "Errore parser: $SCRIPT"; break; }
+        [[ "$TYPE" == "ERROR" ]] && { err "$(L "Errore parser:" "Parser error:") $SCRIPT"; break; }
         # Salta righe orfane (non devono esistere dopo il fix, ma per sicurezza)
         [[ -z "$TS" && -z "$FPATH" ]] && continue
         TOTAL=$((TOTAL+1))
@@ -6502,8 +6633,8 @@ PYEOF
     done <<< "$BLOCK_DATA"
 
     separator
-    info "Script block unici: ${BOLD}$TOTAL${RESET}  |  Sospetti: ${RED}${BOLD}$SUSP"
-    [[ $TOTAL -eq 0 ]] && { warn "Nessun EID 4104 trovato (Script Block Logging potrebbe non essere abilitato)."; return 0; }
+    info "Script block unici: ${BOLD}$TOTAL${RESET}  |  $(L "Sospetti:" "Suspicious:") ${RED}${BOLD}$SUSP"
+    [[ $TOTAL -eq 0 ]] && { warn "$(L "Nessun EID 4104 trovato (Script Block Logging potrebbe non essere abilitato)." "No EID 4104 found (Script Block Logging may not be enabled).")"; return 0; }
     ask_yn "Generare report HTML?" || return 0
 
     local REPORT_HTML; REPORT_HTML=$(prepare_report_dir "ps_scriptblock")
@@ -6544,7 +6675,7 @@ PYEOF
         html_footer "$SCAN" "$WIN_ROOT"
     } > "$REPORT_HTML"
     register_report "$REPORT_HTML"
-    ok "Report salvato: ${BOLD}$REPORT_HTML"
+    ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
     open_report_prompt "$REPORT_HTML"
 }
 
@@ -6592,8 +6723,8 @@ module_jumplists() {
     done < <(get_user_homes)
 
     separator
-    info "JumpList entries: ${BOLD}$TOTAL${RESET}  |  Sospette: ${RED}${BOLD}$SUSP"
-    [[ $TOTAL -eq 0 ]] && { warn "Nessuna JumpList trovata."; return 0; }
+    info "JumpList entries: ${BOLD}$TOTAL${RESET}  |  $(L "Sospette:" "Suspicious:") ${RED}${BOLD}$SUSP"
+    [[ $TOTAL -eq 0 ]] && { warn "$(L "Nessuna JumpList trovata." "No JumpLists found.")"; return 0; }
     ask_yn "Generare report HTML?" || return 0
 
     local REPORT_HTML; REPORT_HTML=$(prepare_report_dir "jumplists")
@@ -6630,7 +6761,7 @@ module_jumplists() {
         html_footer "$SCAN" "$WIN_ROOT"
     } > "$REPORT_HTML"
     register_report "$REPORT_HTML"
-    ok "Report salvato: ${BOLD}$REPORT_HTML"
+    ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
     open_report_prompt "$REPORT_HTML"
 }
 
@@ -6638,19 +6769,19 @@ module_jumplists() {
 #  MODULO 36 — Network Artifacts (DNS Cache, Interfacce, NetworkList)
 # ================================================================
 module_network_artifacts() {
-    section_header "Network Artifacts — DNS · Interfacce · NetworkList" "$CYAN"
+    section_header "$(L "Network Artifacts — DNS · Interfacce · NetworkList" "Network Artifacts — DNS · Interfaces · NetworkList")" "$CYAN"
     check_win_root || return 1
 
     if ! check_regipy; then
-        warn "regipy non trovato. Installalo con: ${PY3} -m pip install regipy"; return 1
+        warn "regipy non trovato. $(L "Installalo con:" "Install it with:") ${PY3} -m pip install regipy"; return 1
     fi
 
     local SYS_HIVE; SYS_HIVE=$(get_hive "SOFTWARE")
     if [[ -z "$SYS_HIVE" || ! -f "$SYS_HIVE" ]]; then
-        err "Hive SOFTWARE non trovato"; return 1
+        err "$(L "Hive SOFTWARE non trovato" "SOFTWARE hive not found")"; return 1
     fi
 
-    info "Parsing NetworkList da hive SOFTWARE: $SYS_HIVE"
+    info "$(L "Parsing NetworkList da hive SOFTWARE:" "Parsing NetworkList from SOFTWARE hive:") $SYS_HIVE"
 
     local NET_DATA
     NET_DATA=$("$PY3" - "$SYS_HIVE" << 'PYEOF' 2>/dev/null || true
@@ -6688,7 +6819,7 @@ PYEOF
     local SYS_HIVE2; SYS_HIVE2=$(get_hive "SYSTEM")
     local IFACE_DATA=""
     if [[ -n "$SYS_HIVE2" && -f "$SYS_HIVE2" ]]; then
-        info "Parsing interfacce TCP/IP da SYSTEM hive: $SYS_HIVE2"
+        info "$(L "Parsing interfacce TCP/IP da SYSTEM hive:" "Parsing TCP/IP interfaces from SYSTEM hive:") $SYS_HIVE2"
         IFACE_DATA=$("$PY3" - "$SYS_HIVE2" << 'PYEOF' 2>/dev/null || true
 import sys
 try:
@@ -6739,8 +6870,8 @@ PYEOF
     done <<< "$IFACE_DATA"
 
     separator
-    info "Profili rete: ${BOLD}$TOTAL_P${RESET}  |  Firme: ${BOLD}$TOTAL_S${RESET}  |  Interfacce TCP/IP: ${BOLD}$TOTAL_I"
-    [[ $((TOTAL_P + TOTAL_S + TOTAL_I)) -eq 0 ]] && { warn "Nessun dato di rete trovato."; return 0; }
+    info "$(L "Profili rete:" "Network profiles:") ${BOLD}$TOTAL_P${RESET}  |  Firme: ${BOLD}$TOTAL_S${RESET}  |  Interfacce TCP/IP: ${BOLD}$TOTAL_I"
+    [[ $((TOTAL_P + TOTAL_S + TOTAL_I)) -eq 0 ]] && { warn "$(L "Nessun dato di rete trovato." "No network data found.")"; return 0; }
     ask_yn "Generare report HTML?" || return 0
 
     local REPORT_HTML; REPORT_HTML=$(prepare_report_dir "network_artifacts")
@@ -6801,7 +6932,7 @@ PYEOF
         html_footer "$SCAN" "$WIN_ROOT"
     } > "$REPORT_HTML"
     register_report "$REPORT_HTML"
-    ok "Report salvato: ${BOLD}$REPORT_HTML"
+    ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
     open_report_prompt "$REPORT_HTML"
 }
 
@@ -6809,11 +6940,11 @@ PYEOF
 #  MODULO 37 — Master Timeline (aggregazione cross-moduli)
 # ================================================================
 module_master_timeline() {
-    section_header "Master Timeline — Aggregazione Cross-Moduli" "$YELLOW"
+    section_header "$(L "Master Timeline — Aggregazione Cross-Moduli" "Master Timeline — Cross-Module Aggregation")" "$YELLOW"
 
     if [[ ${#GENERATED_REPORTS[@]} -eq 0 ]]; then
-        warn "Nessun report generato in questa sessione."
-        info "Esegui prima i moduli che ti interessano, poi richiama la Master Timeline."
+        warn "$(L "Nessun report generato in questa sessione." "No reports generated in this session.")"
+        info "$(L "Esegui prima i moduli che ti interessano, poi richiama la Master Timeline." "Run the desired modules first, then call the Master Timeline.")"
         return 0
     fi
 
@@ -6874,8 +7005,8 @@ PYEOF
     TL_SORTED=$(printf '%s\n' "$TL_RAW" | sort -t$'\t' -k1 -r | head -2000)
 
     separator
-    info "Eventi con timestamp estratti: ${BOLD}$TOTAL_EVENTS${RESET} (mostrati max 1000 nel report)"
-    [[ $TOTAL_EVENTS -eq 0 ]] && { warn "Nessun timestamp trovato nei report. Verifica che i moduli abbiano generato dati."; return 0; }
+    info "$(L "Eventi con timestamp estratti:" "Events with extracted timestamps:") ${BOLD}$TOTAL_EVENTS${RESET} (mostrati max 1000 nel report)"
+    [[ $TOTAL_EVENTS -eq 0 ]] && { warn "$(L "Nessun timestamp trovato nei report. Verifica che i moduli abbiano generato dati." "No timestamps found in reports. Verify that modules have generated data.")"; return 0; }
     ask_yn "Generare report HTML Master Timeline?" || return 0
 
     local REPORT_HTML; REPORT_HTML=$(prepare_report_dir "master_timeline")
@@ -6962,7 +7093,7 @@ SCRIPTEOF
         html_footer "$SCAN" "$WIN_ROOT"
     } > "$REPORT_HTML"
     register_report "$REPORT_HTML"
-    ok "Report salvato: ${BOLD}$REPORT_HTML"
+    ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
     open_report_prompt "$REPORT_HTML"
 }
 
@@ -7009,9 +7140,9 @@ module_pad_offline() {
             2>/dev/null | head -1)
     fi
     if [[ -z "$NTDS_PATH" || ! -f "$NTDS_PATH" ]]; then
-        warn "ntds.dit non trovato sotto $WIN_ROOT"
-        info "Percorso atteso: Windows/NTDS/ntds.dit"
-        info "Questo modulo richiede un Domain Controller (non una workstation)"
+        warn "$(L "ntds.dit non trovato sotto" "ntds.dit not found under") $WIN_ROOT"
+        info "$(L "Percorso atteso: Windows/NTDS/ntds.dit" "Expected path: Windows/NTDS/ntds.dit")"
+        info "$(L "Questo modulo richiede un Domain Controller (non una workstation)" "This module requires a Domain Controller (not a workstation)")"
         return 0
     fi
     info "NTDS.dit: $NTDS_PATH"
@@ -7025,21 +7156,21 @@ module_pad_offline() {
     if [[ -n "$SYSTEM_HIVE" ]]; then
         info "SYSTEM hive: $SYSTEM_HIVE"
     else
-        warn "SYSTEM hive non trovato — attributi cifrati (hash) non disponibili; tutti gli altri OK"
+        warn "$(L "SYSTEM hive non trovato — attributi cifrati (hash) non disponibili; tutti gli altri OK" "SYSTEM hive not found — encrypted attributes (hashes) unavailable; all others OK")"
         SYSTEM_HIVE=""
     fi
 
     # ── Avviso dirty database ─────────────────────────────────────
-    warn "Se ntds.dit proviene da un DC attivo, alcune transazioni potrebbero essere nei log (.jrs)."
+    warn "$(L "Se ntds.dit proviene da un DC attivo, alcune transazioni potrebbero essere nei log (.jrs)." "If ntds.dit comes from a live DC, some transactions may be in logs (.jrs).")"
     info "Per massima integrità usa una VSS snapshot o esegui 'esentutl /r edb /l <logdir>' prima."
 
     # ── Verifica dipendenza impacket ──────────────────────────────
     if ! "$PY3" -c "from impacket.ese import ESENT_DB" 2>/dev/null; then
-        warn "impacket non trovato. Installalo con: ${PY3} -m pip install impacket"
+        warn "impacket non trovato. $(L "Installalo con:" "Install it with:") ${PY3} -m pip install impacket"
         return 1
     fi
 
-    info "Avvio analisi NTDS.dit (può richiedere qualche minuto su database grandi)..."
+    info "$(L "Avvio analisi NTDS.dit (può richiedere qualche minuto su database grandi)..." "Starting NTDS.dit analysis (may take a few minutes on large databases)...")"
     separator
 
     local REPORT_HTML; REPORT_HTML=$(prepare_report_dir "pad_offline")
@@ -7052,19 +7183,19 @@ module_pad_offline() {
     local TMP_PAD_DIR; TMP_PAD_DIR=$(mktemp -d /tmp/dfir_pad_XXXXXX)
     local TMP_NTDS; TMP_NTDS="${TMP_PAD_DIR}/ntds.dit"
     local NTDS_TO_USE="$NTDS_PATH"
-    info "Tentativo copia ntds.dit in /tmp (timeout 180s)..."
+    info "$(L "Tentativo copia ntds.dit in /tmp (timeout 180s)..." "Attempting to copy ntds.dit to /tmp (timeout 180s)...")"
     if portable_timeout 180 cp "$NTDS_PATH" "$TMP_NTDS" 2>/dev/null; then
         chmod 600 "$TMP_NTDS" 2>/dev/null || true
         NTDS_TO_USE="$TMP_NTDS"
-        info "Copia completata — uso copia locale."
+        info "$(L "Copia completata — uso copia locale." "Copy completed — using local copy.")"
     else
-        warn "Copia non riuscita (file bloccato da Windows o rete lenta) — uso path originale."
-        info "Il dirty state verrà corretto in memoria (patch in-memory, senza write access)."
+        warn "$(L "Copia non riuscita (file bloccato da Windows o rete lenta) — uso path originale." "Copy failed (file locked by Windows or slow network) — using original path.")"
+        info "$(L "Il dirty state verrà corretto in memoria (patch in-memory, senza write access)." "Dirty state will be corrected in memory (in-memory patch, no write access).")"
     fi
 
     TMP_NTDS_SIZE=$(wc -c < "$TMP_NTDS" 2>/dev/null | tr -d ' ' || echo "0")
     ORIG_NTDS_SIZE=$(wc -c < "$NTDS_TO_USE" 2>/dev/null | tr -d ' ' || echo "0")
-    info "Dimensione NTDS.dit prima del parsing: ${TMP_NTDS_SIZE} bytes (originale: ${ORIG_NTDS_SIZE})"
+    info "$(L "Dimensione NTDS.dit prima del parsing:" "NTDS.dit size before parsing:") ${TMP_NTDS_SIZE} bytes (originale: ${ORIG_NTDS_SIZE})"
     
     # ── Script Python: analisi completa + generazione HTML ───────
     local PYERR_FILE; PYERR_FILE="${TMP_PAD_DIR}/pyerr.log"
@@ -8200,8 +8331,8 @@ PYEOF
         # Avviso catalogo corrotto
         if grep -q '^CATALOG_CORRUPT:1' "$PYERR_FILE" 2>/dev/null; then
             echo ""
-            warn "NTDS.dit con catalogo ESE parzialmente corrotto — dati utente non disponibili."
-            info "Le colonne sAMAccountName/samAccountType sono su pagine di catalogo non leggibili."
+            warn "$(L "NTDS.dit con catalogo ESE parzialmente corrotto — dati utente non disponibili." "NTDS.dit with partially corrupted ESE catalog — user data unavailable.")"
+            info "$(L "Le colonne sAMAccountName/samAccountType sono su pagine di catalogo non leggibili." "Columns sAMAccountName/samAccountType are on unreadable catalog pages.")"
             echo ""
             echo -e "  ${BOLD}${YELLOW}Recupero necessario — scegli una delle opzioni:${RESET}"
             echo -e "  ${CYAN}1) Soft-recovery Linux${RESET} (richiede i log .jrs nella stessa dir di ntds.dit)"
@@ -8213,42 +8344,42 @@ PYEOF
             echo -e "  ${CYAN}3) IFM snapshot (DC attivo):${RESET}"
             echo -e "     ${DIM}ntdsutil \"activate instance ntds\" \"ifm\" \"create full C:\\ifm\" quit quit${RESET}"
             echo ""
-            info "Il report HTML contiene la guida completa al recupero."
+            info "$(L "Il report HTML contiene la guida completa al recupero." "The HTML report contains the complete recovery guide.")"
         fi
 
-        info "Report generato: ${BOLD}$REPORT_HTML${RESET}"
+        info "$(L "Report generato:" "Report generated:") ${BOLD}$REPORT_HTML${RESET}"
         open_report_prompt "$REPORT_HTML"
     else
         local _PYERR _PYINFO
         _PYERR=$(grep -v '^STATS:' "$PYERR_FILE" 2>/dev/null | grep -iv '^INFO:' | head -10 || true)
         _PYINFO=$(grep -i '^INFO:' "$PYERR_FILE" 2>/dev/null | head -10 || true)
-        [[ -n "$_PYINFO" ]] && info "Debug ESE: $_PYINFO"
-        [[ -n "$_PYERR" ]] && warn "Errore Python: $_PYERR"
+        [[ -n "$_PYINFO" ]] && info "$(L "Debug ESE:" "ESE debug:") $_PYINFO"
+        [[ -n "$_PYERR" ]] && warn "$(L "Errore Python:" "Python error:") $_PYERR"
 
         # Diagnosi specifica per errori noti
         if echo "${_PYERR}" | grep -qiE 'Errno 35|EAGAIN|temporarily unavailable|Resource temporarily'; then
-            err "ntds.dit è bloccato dal servizio Active Directory (Errno 35 / EAGAIN)."
+            err "$(L "ntds.dit è bloccato dal servizio Active Directory (Errno 35 / EAGAIN)." "ntds.dit is locked by Active Directory service (Errno 35 / EAGAIN).")"
             echo ""
-            echo -e "  ${YELLOW}Il client SMB rispetta il lock esclusivo tenuto da lsass/ntds.exe.${RESET}"
-            echo -e "  ${YELLOW}Il file non è apribile nemmeno in lettura finché il DC è attivo.${RESET}"
+            echo -e "  ${YELLOW}$(L "Il client SMB rispetta il lock esclusivo tenuto da lsass/ntds.exe." "The SMB client respects the exclusive lock held by lsass/ntds.exe.")${RESET}"
+            echo -e "  ${YELLOW}$(L "Il file non è apribile nemmeno in lettura finché il DC è attivo." "The file cannot be opened even for reading while the DC is active.")${RESET}"
             echo ""
-            echo -e "  ${BOLD}Soluzioni per DC live:${RESET}"
-            echo -e "  ${CYAN}1) VSS snapshot (consigliato):${RESET}"
-            echo -e "     Sul DC (PowerShell admin):"
+            echo -e "  ${BOLD}$(L "Soluzioni per DC live:" "Solutions for live DC:")${RESET}"
+            echo -e "  ${CYAN}$(L "1) VSS snapshot (consigliato):" "1) VSS snapshot (recommended):")${RESET}"
+            echo -e "     $(L "Sul DC (PowerShell admin):" "On the DC (PowerShell admin):")"
             echo -e "     ${DIM}ntdsutil \"activate instance ntds\" \"ifm\" \"create full C:\\\\ifm_snapshot\" quit quit${RESET}"
-            echo -e "     Poi monta/copia la cartella C:\\\\ifm_snapshot e rilancia su quel path."
+            echo -e "     $(L "Poi monta/copia la cartella C:\\\\ifm_snapshot e rilancia su quel path." "Then mount/copy the C:\\\\ifm_snapshot folder and relaunch on that path.")"
             echo ""
-            echo -e "  ${CYAN}2) impacket secretsdump remoto (solo hash NTLM, senza analisi ACL/GPO):${RESET}"
+            echo -e "  ${CYAN}$(L "2) impacket secretsdump remoto (solo hash NTLM, senza analisi ACL/GPO):" "2) remote impacket secretsdump (NTLM hashes only, no ACL/GPO analysis):")${RESET}"
             echo -e "     ${DIM}impacket-secretsdump -just-dc-ntlm DOMINIO/utente:password@IP_DC${RESET}"
             echo ""
-            echo -e "  ${CYAN}3) Se hai già un'immagine disco (VHDX/E01) del DC:${RESET}"
-            echo -e "     Monta offline con ${BOLD}./mount_image.sh${RESET} e rilancia il modulo su quel mount point."
+            echo -e "  ${CYAN}$(L "3) Se hai già un'immagine disco (VHDX/E01) del DC:" "3) If you already have a disk image (VHDX/E01) of the DC:")${RESET}"
+            echo -e "     $(L "Monta offline con" "Mount offline with") ${BOLD}./mount_image.sh${RESET} $(L "e rilancia il modulo su quel mount point." "and relaunch the module on that mount point.")"
         elif echo "${_PYERR}" | grep -qiE 'dirty|state|DirtyShutdown|Unknown state'; then
-            err "Generazione report fallita — database ESE in stato dirty non recuperabile."
-            info "Suggerimento: copia il file e prova 'esentutl /r edb /l .' in un ambiente Windows"
+            err "$(L "Generazione report fallita — database ESE in stato dirty non recuperabile." "Report generation failed — ESE database in unrecoverable dirty state.")"
+            info "$(L "Suggerimento: copia il file e prova 'esentutl /r edb /l .' in un ambiente Windows" "Hint: copy the file and try 'esentutl /r edb /l .' in a Windows environment")"
         else
-            err "Generazione report fallita. Verifica che ntds.dit sia leggibile e non corrotto."
-            info "Suggerimento: copia il file e prova 'esentutl /r edb' in un ambiente Windows"
+            err "$(L "Generazione report fallita. Verifica che ntds.dit sia leggibile e non corrotto." "Report generation failed. Verify ntds.dit is readable and not corrupted.")"
+            info "$(L "Suggerimento: copia il file e prova 'esentutl /r edb' in un ambiente Windows" "Hint: copy the file and try 'esentutl /r edb' in a Windows environment")"
         fi
     fi
     rm -rf "$TMP_PAD_DIR" 2>/dev/null || true
@@ -8257,14 +8388,14 @@ PYEOF
 run_all_modules() {
     clear
     print_banner
-    info "Esecuzione di tutti i moduli in modalità batch..."
+    info "$(t batch_running)"
     echo ""
     if [[ -z "$REPORT_BASE_DIR" ]]; then
         REPORT_BASE_DIR="${INVOCATION_DIR}/fiuto_reports_$(date +%Y%m%d_%H%M%S)"
         LOG_FILE="${REPORT_BASE_DIR}/fiuto_session_$(date +%Y%m%d_%H%M%S).log"
     fi
-    info "Report base dir: ${BOLD}$REPORT_BASE_DIR${RESET}"
-    log_msg "=== FIUTO avviato in modalità batch — WIN_ROOT=$WIN_ROOT ==="
+    info "$(t batch_report_dir) ${BOLD}$REPORT_BASE_DIR${RESET}"
+    log_msg "$(t batch_started)$WIN_ROOT ==="
     sleep 1
 
     BATCH_MODE=true
@@ -8314,14 +8445,14 @@ run_all_modules() {
     if [[ -n "$_ntds_check" ]]; then
         run_batch_module 38 module_pad_offline "PAD Offline AD" 38
     else
-        echo -e "  ${DIM}[i] [38/38] PAD Offline AD — saltato (non è un Domain Controller)${RESET}"
-        SUMMARY_TABLE+=("38|PAD Offline AD|SKIP|non è un DC")
+        echo -e "  ${DIM}[i] [38/38] PAD Offline AD — $(L "saltato (non è un Domain Controller)" "skipped (not a Domain Controller)")${RESET}"
+        SUMMARY_TABLE+=("38|PAD Offline AD|SKIP|$(L "non è un DC" "not a DC")")
     fi
 
     BATCH_MODE=false
 
     echo ""
-    section_header "Riepilogo Scansione Globale" "$GREEN"
+    section_header "$(L "Riepilogo Scansione Globale" "Global Scan Summary")" "$GREEN"
     echo -e "  ${BOLD}MOD  NOME MODULO                        EVIDENZE     FILE GENERATI${RESET}"
     echo "  ─────────────────────────────────────────────────────────────────────────────────────────"
     for row in "${SUMMARY_TABLE[@]}"; do
@@ -8334,7 +8465,7 @@ run_all_modules() {
         fi
     done
     echo ""
-    ok "Report salvati integralmente in: ${BOLD}$REPORT_BASE_DIR"
+    ok "$(L "Report salvati integralmente in:" "All reports saved in:") ${BOLD}$REPORT_BASE_DIR"
 }
 
 # ================================================================
@@ -8343,7 +8474,7 @@ run_all_modules() {
 
 debug_mounts() {
     echo ""
-    section_header "DEBUG — Mount attivi su questo sistema" "$YELLOW"
+    section_header "$(L "DEBUG — Mount attivi su questo sistema" "DEBUG — Active Mounts on This System")" "$YELLOW"
     echo -e "  ${DIM}── /proc/mounts (non di sistema) ───────────────────${RESET}"
     echo ""
     local SKIP_FS='tmpfs|sysfs|proc|devtmpfs|cgroup2?|fusectl|tracefs|securityfs|pstore|bpf|hugetlbfs|mqueue|debugfs|configfs|overlay|squashfs|nsfs|efivarfs|autofs|ramfs|rpc_pipefs'
@@ -8360,9 +8491,11 @@ debug_mounts() {
         fi
     done < /proc/mounts
     echo ""
-    echo -e "  ${DIM}(${CYAN}→${DIM} = candidati; grigio = esclusi)${RESET}"
+    local ARROW_LABEL="$([ "$LANG" = "it" ] && echo "candidati" || echo "candidates")"
+    local GRAY_LABEL="$([ "$LANG" = "it" ] && echo "esclusi" || echo "excluded")"
+    echo -e "  ${DIM}(${CYAN}→${DIM} = ${ARROW_LABEL}; grigio = ${GRAY_LABEL})${RESET}"
     echo ""
-    echo -ne "  ${YELLOW}Premi qualsiasi tasto per tornare al menu...${RESET}"
+    echo -ne "  ${YELLOW}$(t press_key)${RESET}"
     pause_key
 }
 
@@ -8397,7 +8530,7 @@ autodetect_win_root() {
     local -a FOUND=()
     mapfile -t FOUND < <(_find_windows_mounts)
     if [[ ${#FOUND[@]} -eq 0 ]]; then
-        [[ "$SILENT" != "silent" ]] && warn "Nessun volume Windows rilevato tra i filesystem montati."
+        [[ "$SILENT" != "silent" ]] && warn "$(L "Nessun volume Windows rilevato tra i filesystem montati." "No Windows volume detected among mounted filesystems.")"
         return 1
     fi
 
@@ -8465,11 +8598,11 @@ autodetect_win_root() {
             if [[ $SEL -ge 0 && $SEL -lt ${#ALL_PATHS[@]} ]]; then
                 _apply_win_root "${ALL_PATHS[$SEL]}"; return 0
             else
-                err "Selezione non valida"; return 1
+                err "$(L "Selezione non valida" "Invalid selection")"; return 1
             fi ;;
         *)
             local MP; MP=$(realpath -m "$CHOICE" 2>/dev/null || echo "$CHOICE")
-            [[ ! -d "$MP" ]] && err "Directory non trovata: $MP" && return 1
+            [[ ! -d "$MP" ]] && err "$(L "Directory non trovata:" "Directory not found:") $MP" && return 1
             _apply_win_root "$MP"; return 0 ;;
     esac
 }
@@ -8478,7 +8611,7 @@ autodetect_win_root() {
 _apply_win_root() {
     local ROOT="$1"
     WIN_ROOT="$ROOT"
-    ok "Root impostata: ${BOLD}$WIN_ROOT"
+    ok "$(L "Root impostata:" "Root set:") ${BOLD}$WIN_ROOT"
 
     # Recupera info macchina (hostname, OS, IP, dominio)
     gather_host_info
@@ -8499,12 +8632,12 @@ set_win_root() {
     fi
     # Fallback: input manuale
     echo ""
-    echo -ne "  ${YELLOW}[?]${RESET} Inserisci il path della root Windows (es. /mnt/windows): "
+    echo -ne "  ${YELLOW}[?]${RESET} $(L "Inserisci il path della root Windows (es. /mnt/windows):" "Enter Windows root path (e.g. /mnt/windows):") "
     read -r INPUT_ROOT
     [[ -z "$INPUT_ROOT" ]] && return 1
     INPUT_ROOT=$(realpath -m "$INPUT_ROOT" 2>/dev/null || echo "$INPUT_ROOT")
     if [[ ! -d "$INPUT_ROOT" ]]; then
-        err "Directory non trovata: $INPUT_ROOT"
+        err "$(L "Directory non trovata:" "Directory not found:") $INPUT_ROOT"
         return 1
     fi
     _apply_win_root "$INPUT_ROOT"
@@ -8521,10 +8654,9 @@ setup_report_dir() {
     local SUGGESTED_DEFAULT="${INVOCATION_DIR}/${HOST_NAME:-CASE}_fiuto_${TS}"
     echo ""
     echo -e "  ${CYAN}${BOLD}╔══════════════════════════════════════════════════════╗${RESET}"
-    echo -e "  ${CYAN}${BOLD}║     Configurazione cartella di output dei report     ║${RESET}"
+    echo -e "  ${CYAN}${BOLD}║  $(L "Configurazione cartella di output dei report" "Report output directory setup")  ║${RESET}"
     echo -e "  ${CYAN}${BOLD}╚══════════════════════════════════════════════════════╝${RESET}"
     echo ""
-    # Verifica se la directory suggerita è scrivibile
     local _PARENT_OK=false
     if [[ -d "$SUGGESTED_DEFAULT" ]]; then
         [[ -w "$SUGGESTED_DEFAULT" ]] && _PARENT_OK=true
@@ -8532,15 +8664,15 @@ setup_report_dir() {
         _PARENT_OK=true
     fi
     if $_PARENT_OK; then
-        echo -e "  ${GREEN}[✓]${RESET} Directory suggerita: ${BOLD}${SUGGESTED_DEFAULT}${RESET}  ${GREEN}[scrivibile]${RESET}"
+        echo -e "  ${GREEN}[✓]${RESET} $(L "Directory suggerita:" "Suggested directory:") ${BOLD}${SUGGESTED_DEFAULT}${RESET}  ${GREEN}[$(L "scrivibile" "writable")]${RESET}"
     else
-        echo -e "  ${RED}[!]${RESET} Directory suggerita: ${BOLD}${SUGGESTED_DEFAULT}${RESET}  ${RED}[non scrivibile o parent protetto]${RESET}"
+        echo -e "  ${RED}[!]${RESET} $(L "Directory suggerita:" "Suggested directory:") ${BOLD}${SUGGESTED_DEFAULT}${RESET}  ${RED}[$(L "non scrivibile o parent protetto" "not writable or protected parent")]${RESET}"
     fi
     echo ""
-    echo -e "  ${DIM}I report di ogni modulo verranno salvati in sottocartelle con data/ora.${RESET}"
-    echo -e "  ${DIM}Puoi inserire un percorso diverso oppure premere INVIO per usare quello suggerito.${RESET}"
+    echo -e "  ${DIM}$(L "I report di ogni modulo verranno salvati in sottocartelle con data/ora." "Each module report will be saved in subfolders with date/time.")${RESET}"
+    echo -e "  ${DIM}$(L "Puoi inserire un percorso diverso oppure premere INVIO per usare quello suggerito." "You can enter a different path or press ENTER to use the suggested one.")${RESET}"
     echo ""
-    echo -ne "  ${YELLOW}[?]${RESET} Cartella report [${BOLD}${SUGGESTED_DEFAULT}${RESET}]: "
+    echo -ne "  ${YELLOW}[?]${RESET} $(L "Cartella report" "Report directory") [${BOLD}${SUGGESTED_DEFAULT}${RESET}]: "
     local _INPUT
     read -r _INPUT
     local _CHOSEN
@@ -8549,38 +8681,38 @@ setup_report_dir() {
     else
         _CHOSEN=$(realpath -m "$_INPUT" 2>/dev/null || echo "$_INPUT")
     fi
-    # Verifica i permessi sulla scelta
     local _RW_OK=false _RW_MSG=""
     if [[ -d "$_CHOSEN" ]]; then
         if [[ -w "$_CHOSEN" ]]; then
             _RW_OK=true
-            _RW_MSG="${GREEN}[scrivibile]${RESET}"
+            _RW_MSG="${GREEN}[$(L "scrivibile" "writable")]${RESET}"
         else
-            _RW_MSG="${RED}[SOLA LETTURA — i report NON potranno essere salvati!]${RESET}"
+            _RW_MSG="${RED}[$(L "SOLA LETTURA — i report NON potranno essere salvati!" "READ ONLY — reports CANNOT be saved!")]${RESET}"
         fi
     else
         local _P; _P=$(dirname "$_CHOSEN")
         if [[ -w "$_P" ]]; then
             _RW_OK=true
-            _RW_MSG="${GREEN}[verrà creata — parent scrivibile]${RESET}"
+            _RW_MSG="${GREEN}[$(L "verrà creata — parent scrivibile" "will be created — parent writable")]${RESET}"
         else
-            _RW_MSG="${RED}[parent '${_P}' NON scrivibile — i report NON potranno essere salvati!]${RESET}"
+            _RW_MSG="${RED}[$(L "parent '${_P}' NON scrivibile — i report NON potranno essere salvati!" "parent '${_P}' NOT writable — reports CANNOT be saved!")]${RESET}"
         fi
     fi
     echo ""
-    echo -e "  ${CYAN}[→]${RESET} Cartella scelta: ${BOLD}${_CHOSEN}${RESET}  ${_RW_MSG}"
+    echo -e "  ${CYAN}[→]${RESET} $(L "Cartella scelta:" "Selected directory:") ${BOLD}${_CHOSEN}${RESET}  ${_RW_MSG}"
     echo ""
     if ! $_RW_OK; then
-        warn "Attenzione: la directory selezionata non è scrivibile."
-        echo -ne "  ${YELLOW}[?]${RESET} Vuoi comunque usarla? [s/N]: "
+        warn "$(L "Attenzione: la directory selezionata non è scrivibile." "Warning: the selected directory is not writable.")"
+        echo -ne "  ${YELLOW}[?]${RESET} $(L "Vuoi comunque usarla? [s/N]:" "Use it anyway? [y/N]:") "
         local _CONF; read -r _CONF
-        [[ "${_CONF,,}" != "s" ]] && { warn "Setup annullato. Ripeti con [P] dal menu."; return 1; }
+        local _YES_KEY="$(L "s" "y")"
+        [[ "${_CONF,,}" != "$_YES_KEY" ]] && { warn "$(L "Setup annullato. Ripeti con [P] dal menu." "Setup cancelled. Repeat with [P] from menu.")"; return 1; }
     fi
     REPORT_BASE_DIR="$_CHOSEN"
     LOG_FILE="${REPORT_BASE_DIR}/fiuto_session_$(date +%Y%m%d_%H%M%S).log"
     log_msg "=== Log sessione inizializzato ==="
-    ok "Log sessione: ${BOLD}$LOG_FILE"
-    ok "Report dir impostata: ${BOLD}$REPORT_BASE_DIR"
+    ok "$(L "Log sessione:" "Session log:") ${BOLD}$LOG_FILE"
+    ok "$(L "Report dir impostata:" "Report directory set:") ${BOLD}$REPORT_BASE_DIR"
     sleep 1
 }
 
@@ -8588,86 +8720,104 @@ setup_report_dir() {
 #  MENU PRINCIPALE
 # ================================================================
 print_menu() {
+    local _MENU_TITLE _SELECT_MODULE _NOT_SET _WRITABLE _READONLY _NOT_CREATED _PARENT_RO
+    local _REPORT_DIR_LABEL _WIN_ROOT_LABEL _DEBUG_LABEL _RUN_ALL _QUIT _CHOICE_LABEL
+    local _REPORTS_LABEL
+    _MENU_TITLE="$(L "SELEZIONA UN MODULO" "SELECT A MODULE")"
+    _SELECT_MODULE="$(L "Seleziona" "Select")"
+    _NOT_SET="$(L "non impostata" "not set")"
+    _WRITABLE="$(L "scrivibile" "writable")"
+    _READONLY="$(L "SOLA LETTURA" "READ ONLY")"
+    _NOT_CREATED="$(L "OK (non ancora creata)" "OK (not yet created)")"
+    _PARENT_RO="$(L "PARENT NON SCRIVIBILE" "PARENT NOT WRITABLE")"
+    _REPORT_DIR_LABEL="$(L "Imposta dir report" "Set report dir")"
+    _WIN_ROOT_LABEL="$(L "Imposta root Windows" "Set Windows root")"
+    _DEBUG_LABEL="$(L "Debug mount attivi" "Debug active mounts")"
+    _DIAG="$(L "Diagnostica volumi montati" "Diagnose mounted volumes")"
+    _RUN_ALL="$(L "Esegui TUTTI i moduli" "Run ALL modules")"
+    _QUIT="$(L "Esci" "Quit")"
+    _CHOICE_LABEL="$(L "Scelta" "Choice")"
+    _REPORTS_LABEL="$(L "Report generati" "Generated reports")"
+
     echo -e "  ${CYAN}${BOLD}╔══════════════════════════════════════════════════╗${RESET}"
-    echo -e "  ${CYAN}${BOLD}║           F I U T O  —  SELEZIONA UN MODULO      ║${RESET}"
+    echo -e "  ${CYAN}${BOLD}║           F I U T O  —  ${_MENU_TITLE}  ║${RESET}"
     echo -e "  ${CYAN}${BOLD}╚══════════════════════════════════════════════════╝${RESET}"
     echo ""
-    # ── Cartella report (sempre visibile in cima) ──────────────────
     if [[ -n "$REPORT_BASE_DIR" ]]; then
         local _RW_LABEL _RW_COLOR
         if [[ -d "$REPORT_BASE_DIR" ]]; then
             if [[ -w "$REPORT_BASE_DIR" ]]; then
-                _RW_LABEL="scrivibile"; _RW_COLOR="$GREEN"
+                _RW_LABEL="$_WRITABLE"; _RW_COLOR="$GREEN"
             else
-                _RW_LABEL="SOLA LETTURA"; _RW_COLOR="$RED"
+                _RW_LABEL="$_READONLY"; _RW_COLOR="$RED"
             fi
         else
             local _RD_PARENT; _RD_PARENT=$(dirname "$REPORT_BASE_DIR")
             if [[ -w "$_RD_PARENT" ]]; then
-                _RW_LABEL="OK (non ancora creata)"; _RW_COLOR="$GREEN"
+                _RW_LABEL="$_NOT_CREATED"; _RW_COLOR="$GREEN"
             else
-                _RW_LABEL="PARENT NON SCRIVIBILE"; _RW_COLOR="$RED"
+                _RW_LABEL="$_PARENT_RO"; _RW_COLOR="$RED"
             fi
         fi
         echo -e "  ${WHITE}[P]${RESET}  ${BOLD}Report dir:${RESET} ${DIM}${REPORT_BASE_DIR}${RESET}  ${_RW_COLOR}[${_RW_LABEL}]${RESET}"
     else
-        echo -e "  ${WHITE}[P]${RESET}  ${BOLD}Report dir:${RESET} ${RED}non impostata — premi [P] per configurare${RESET}"
+        local _CONF_MSG="$(L "non impostata — premi [P] per configurare" "not set — press [P] to configure")"
+        echo -e "  ${WHITE}[P]${RESET}  ${BOLD}Report dir:${RESET} ${RED}${_CONF_MSG}${RESET}"
     fi
-    echo -e "  ${WHITE}[R]${RESET}  ${BOLD}Imposta root Windows${RESET}      ${DIM}${WIN_ROOT:-(non impostata)}${RESET}"
-    echo -e "  ${YELLOW}[D]${RESET}  ${BOLD}Debug mount attivi${RESET}        ${DIM}Diagnostica volumi montati${RESET}"
+    echo -e "  ${WHITE}[R]${RESET}  ${BOLD}${_WIN_ROOT_LABEL}${RESET}              ${DIM}${WIN_ROOT:-($_NOT_SET)}${RESET}"
+    echo -e "  ${YELLOW}[D]${RESET}  ${BOLD}${_DEBUG_LABEL}${RESET}           ${DIM}${_DIAG}${RESET}"
     echo ""
     echo -e "  ${MAGENTA}[1]${RESET}  PowerShell History            ${DIM}PSReadLine *_history.txt${RESET}"
-    echo -e "  ${MAGENTA}[2]${RESET}  Notepad TabState              ${DIM}Tab rimasti aperti (.bin)${RESET}"
+    echo -e "  ${MAGENTA}[2]${RESET}  Notepad TabState              ${DIM}$(L "Tab rimasti aperti (.bin)" "Open tabs (.bin)")${RESET}"
     echo -e "  ${RED}[3]${RESET}  IFEO Hijacking                ${DIM}Image File Execution Options${RESET}"
     echo -e "  ${BLUE}[4]${RESET}  BAM                           ${DIM}Background Activity Moderator${RESET}"
-    echo -e "  ${ORANGE}[5]${RESET}  Run Keys & Persistenza        ${DIM}Autorun nel registro${RESET}"
-    echo -e "  ${GREEN}[6]${RESET}  Prefetch                      ${DIM}Eseguibili tracciati (*.pf)${RESET}"
-    echo -e "  ${YELLOW}[7]${RESET}  Scheduled Tasks               ${DIM}Task pianificati (XML)${RESET}"
-    echo -e "  ${BLUE}[8]${RESET}  USB Devices                   ${DIM}Dispositivi rimovibili (USBSTOR)${RESET}"
-    echo -e "  ${GREEN}[9]${RESET}  LNK & JumpList                ${DIM}File recenti e target path${RESET}"
-    echo -e "  ${CYAN}[10]${RESET} Cache RDP                     ${DIM}Terminal Server Client Cache${RESET}"
-  echo -e "  ${RED}[11]${RESET} Services                      ${DIM}Servizi Windows (SYSTEM hive)${RESET}"
+    echo -e "  ${ORANGE}[5]${RESET}  Run Keys & $(L "Persistenza" "Persistence")        ${DIM}$(L "Autorun nel registro" "Autorun in registry")${RESET}"
+    echo -e "  ${GREEN}[6]${RESET}  Prefetch                      ${DIM}$(L "Eseguibili tracciati" "Tracked executables") (*.pf)${RESET}"
+    echo -e "  ${YELLOW}[7]${RESET}  Scheduled Tasks               ${DIM}$(L "Task pianificati (XML)" "Scheduled tasks (XML)")${RESET}"
+    echo -e "  ${BLUE}[8]${RESET}  USB Devices                   ${DIM}$(L "Dispositivi rimovibili (USBSTOR)" "Removable devices (USBSTOR)")${RESET}"
+    echo -e "  ${GREEN}[9]${RESET}  LNK & JumpList                ${DIM}$(L "File recenti e target path" "Recent files and target path")${RESET}"
+    echo -e "  ${CYAN}[10]${RESET} RDP Cache                     ${DIM}Terminal Server Client Cache${RESET}"
+  echo -e "  ${RED}[11]${RESET} Services                      ${DIM}$(L "Servizi Windows (SYSTEM hive)" "Windows Services (SYSTEM hive)")${RESET}"
   echo -e "  ${RED}[12]${RESET} Event Log                     ${DIM}Security/System/PS/RDP (.evtx)${RESET}"
-  echo -e "  ${YELLOW}[13]${RESET} Amcache + Shimcache           ${DIM}Timeline esecuzione binari${RESET}"
-  echo -e "  ${GREEN}[14]${RESET} Recycle Bin                   ${DIM}File eliminati (\$Recycle.Bin)${RESET}"
-  echo -e "  ${RED}[15]${RESET} WMI Subscriptions             ${DIM}Persistenza invisibile (T1546.003)${RESET}"
-  echo -e "  ${BLUE}[16]${RESET} SRUM                          ${DIM}Uso risorse per applicazione${RESET}"
+  echo -e "  ${YELLOW}[13]${RESET} Amcache + Shimcache           ${DIM}$(L "Timeline esecuzione binari" "Binary execution timeline")${RESET}"
+  echo -e "  ${GREEN}[14]${RESET} Recycle Bin                   ${DIM}$(L "File eliminati" "Deleted files") (\$Recycle.Bin)${RESET}"
+  echo -e "  ${RED}[15]${RESET} WMI Subscriptions             ${DIM}$(L "Persistenza invisibile" "Fileless persistence") (T1546.003)${RESET}"
+  echo -e "  ${BLUE}[16]${RESET} SRUM                          ${DIM}$(L "Uso risorse per applicazione" "Resource usage per application")${RESET}"
   echo -e "  ${CYAN}[17]${RESET} Browser History               ${DIM}Chrome / Edge / Firefox${RESET}"
-  echo -e "  ${MAGENTA}[18]${RESET} UserAssist / RunMRU           ${DIM}Attività interattiva utente${RESET}"
-  echo -e "  ${CYAN}[19]${RESET} ShellBags                     ${DIM}Navigazione cartelle (anche cancellate)${RESET}"
-  echo -e "  ${RED}[20]${RESET} SAM — Hash Locali             ${DIM}Hash NTLM account (impacket)${RESET}"
+  echo -e "  ${MAGENTA}[18]${RESET} UserAssist / RunMRU           ${DIM}$(L "Attività interattiva utente" "Interactive user activity")${RESET}"
+  echo -e "  ${CYAN}[19]${RESET} ShellBags                     ${DIM}$(L "Navigazione cartelle (anche cancellate)" "Folder navigation (including deleted)")${RESET}"
+  echo -e "  ${RED}[20]${RESET} SAM — $(L "Hash Locali" "Local Hashes")            ${DIM}$(L "Hash NTLM account (impacket)" "NTLM account hashes (impacket)")${RESET}"
   echo -e "  ${YELLOW}[21]${RESET} MFT Timeline                  ${DIM}Master File Table + timestomping${RESET}"
-  echo -e "  ${GREEN}[22]${RESET} OpenSave / LastVisited MRU    ${DIM}File aperti/salvati via dialogo${RESET}"
-  echo -e "  ${CYAN}[23]${RESET} USN Journal                   ${DIM}\$UsnJrnl:\$J — change log NTFS${RESET}"
+  echo -e "  ${GREEN}[22]${RESET} OpenSave / LastVisited MRU    ${DIM}$(L "File aperti/salvati via dialogo" "Files opened/saved via dialog")${RESET}"
+  echo -e "  ${CYAN}[23]${RESET} USN Journal                   ${DIM}\$UsnJrnl:\$J — $(L "change log NTFS" "NTFS change log")${RESET}"
   echo -e "  ${RED}[24]${RESET} NTDS.dit                      ${DIM}Active Directory hash (DC offline)${RESET}"
   echo -e "  ${BLUE}[25]${RESET} Hibernation / Pagefile        ${DIM}hiberfil.sys · pagefile.sys strings${RESET}"
   echo -e "  ${RED}[26]${RESET} WER Files (Error Reports)     ${DIM}ReportArchive · ReportQueue (.wer)${RESET}"
-  echo -e "  ${MAGENTA}[27]${RESET} Credential Manager           ${DIM}DPAPI blob offline${RESET}"
+  echo -e "  ${MAGENTA}[27]${RESET} Credential Manager            ${DIM}DPAPI blob offline${RESET}"
   echo -e "  ${CYAN}[28]${RESET} WLAN & VPN Profiles           ${DIM}WiFi · NetworkList · VPN${RESET}"
-  echo -e "  ${GREEN}[29]${RESET} AppX / UWP Packages           ${DIM}App Store + sideload sospetti${RESET}"
-  echo -e "  ${CYAN}[30]${RESET} Browser Downloads & Logins   ${DIM}Download + Login Data (DPAPI)${RESET}"
-  echo -e "  ${YELLOW}[31]${RESET} Clipboard History             ${DIM}Cronologia appunti Win10+${RESET}"
-  echo -e "  ${GREEN}[32]${RESET} Office MRU                   ${DIM}File recenti Word/Excel/PowerPoint${RESET}"
-  echo -e "  ${RED}[33]${RESET} Defender Quarantine          ${DIM}File in quarantena + threatname${RESET}"
+  echo -e "  ${GREEN}[29]${RESET} AppX / UWP Packages           ${DIM}$(L "App Store + sideload sospetti" "App Store + suspicious sideloads")${RESET}"
+  echo -e "  ${CYAN}[30]${RESET} Browser Downloads & Logins    ${DIM}Download + Login Data (DPAPI)${RESET}"
+  echo -e "  ${YELLOW}[31]${RESET} Clipboard History             ${DIM}$(L "Cronologia appunti Win10+" "Clipboard history Win10+")${RESET}"
+  echo -e "  ${GREEN}[32]${RESET} Office MRU                    ${DIM}$(L "File recenti Word/Excel/PowerPoint" "Recent Word/Excel/PowerPoint files")${RESET}"
+  echo -e "  ${RED}[33]${RESET} Defender Quarantine           ${DIM}$(L "File in quarantena + threatname" "Quarantined files + threatname")${RESET}"
   echo -e "  ${MAGENTA}[34]${RESET} PS ScriptBlock Logging        ${DIM}Event ID 4104 — PS Operational.evtx${RESET}"
   echo -e "  ${GREEN}[35]${RESET} JumpLists                     ${DIM}AutomaticDestinations · CustomDestinations${RESET}"
-  echo -e "  ${CYAN}[36]${RESET} Network Artifacts             ${DIM}Profili rete · Interfacce TCP/IP (registry)${RESET}"
-  echo -e "  ${YELLOW}[37]${RESET} Master Timeline               ${DIM}Aggregazione cross-moduli con filtri${RESET}"
-  echo -e "  ${RED}[38]${RESET} PAD Offline AD Analysis      ${DIM}NTDS.dit offline — utenti privilegiati, ACL, GPO${RESET}"
+  echo -e "  ${CYAN}[36]${RESET} Network Artifacts             ${DIM}$(L "Profili rete · Interfacce TCP/IP (registry)" "Network profiles · TCP/IP interfaces (registry)")${RESET}"
+  echo -e "  ${YELLOW}[37]${RESET} Master Timeline               ${DIM}$(L "Aggregazione cross-moduli con filtri" "Cross-module aggregation with filters")${RESET}"
+  echo -e "  ${RED}[38]${RESET} PAD Offline AD Analysis       ${DIM}$(L "NTDS.dit offline — utenti privilegiati, ACL, GPO" "NTDS.dit offline — privileged users, ACL, GPO")${RESET}"
     echo ""
-    echo -e "  ${WHITE}${BOLD}[0]${RESET}  ${BOLD}Esegui TUTTI i moduli${RESET}"
+    echo -e "  ${WHITE}${BOLD}[0]${RESET}  ${BOLD}${_RUN_ALL}${RESET}"
     echo ""
-    # Report generati nella sessione corrente
     if [[ ${#GENERATED_REPORTS[@]} -gt 0 ]]; then
-        echo -e "  ${DIM}── Report generati (${#GENERATED_REPORTS[@]}) ──────────────────────────${RESET}"
+        echo -e "  ${DIM}── ${_REPORTS_LABEL} (${#GENERATED_REPORTS[@]}) ──────────────────────────${RESET}"
         for _R in "${GENERATED_REPORTS[@]}"; do
             echo -e "  ${CYAN}↳${RESET} ${DIM}${_R}${RESET}"
         done
         echo ""
     fi
-    echo -e "  ${RED}[Q]  Esci${RESET}"
+    echo -e "  ${RED}[Q]  ${_QUIT}${RESET}"
     echo ""
-    echo -ne "  ${YELLOW}Scelta:${RESET} "
+    echo -ne "  ${YELLOW}${_CHOICE_LABEL}:${RESET} "
 }
 
 # ================================================================
@@ -8730,7 +8880,7 @@ run_module_by_number() {
         36) module_network_artifacts ;;
         37) module_master_timeline ;;
         38) module_pad_offline ;;
-        *)  err "Modulo sconosciuto: $1" ;;
+        *)  err "$(L "Modulo sconosciuto:" "Unknown module:") $1" ;;
     esac
 }
 
@@ -8739,6 +8889,11 @@ run_module_by_number() {
 # ================================================================
 main() {
     SCAN_DATE=$(date "+%d/%m/%Y %H:%M:%S")
+
+    # Always ask for language at the very start (unless --help is passed)
+    if [[ "${1:-}" != "-h" && "${1:-}" != "--help" ]]; then
+        select_language
+    fi
 
     # Parsing argomenti
     local ARG_ROOT=""
@@ -8751,17 +8906,31 @@ main() {
         case "$1" in
             -h|--help)
                 echo ""
-                echo -e "${CYAN}${BOLD}fiuto.sh${RESET} — Toolkit DFIR per analisi di disco Windows offline"
-                echo ""
-                echo -e "  ${BOLD}Uso:${RESET}"
-                echo -e "    ./fiuto.sh                            # menu interattivo"
-                echo -e "    ./fiuto.sh /mnt/windows               # imposta root e apre il menu"
-                echo -e "    ./fiuto.sh /mnt/windows --all         # esegui tutti i moduli"
-                echo -e "    ./fiuto.sh /mnt/windows --module 3    # esegui modulo specifico"
-                echo -e "    ./fiuto.sh /mnt/windows --modules 1,3,5-8  # esegui selezione"
-                echo -e "    ./fiuto.sh /mnt/windows --all --ioc /path/to/ioc.txt  # con IoC"
-                echo ""
-                echo -e "  ${BOLD}Moduli disponibili (1-38):${RESET}"
+                if [[ "$LANG" == "it" ]]; then
+                    echo -e "${CYAN}${BOLD}fiuto.sh${RESET} — Toolkit DFIR per analisi di disco Windows offline"
+                    echo ""
+                    echo -e "  ${BOLD}Uso:${RESET}"
+                    echo -e "    ./fiuto.sh                            # menu interattivo"
+                    echo -e "    ./fiuto.sh /mnt/windows               # imposta root e apre il menu"
+                    echo -e "    ./fiuto.sh /mnt/windows --all         # esegui tutti i moduli"
+                    echo -e "    ./fiuto.sh /mnt/windows --module 3    # esegui modulo specifico"
+                    echo -e "    ./fiuto.sh /mnt/windows --modules 1,3,5-8  # esegui selezione"
+                    echo -e "    ./fiuto.sh /mnt/windows --all --ioc /path/to/ioc.txt  # con IoC"
+                    echo ""
+                    echo -e "  ${BOLD}Moduli disponibili (1-38):${RESET}"
+                else
+                    echo -e "${CYAN}${BOLD}fiuto.sh${RESET} — DFIR Toolkit for offline Windows disk analysis"
+                    echo ""
+                    echo -e "  ${BOLD}Usage:${RESET}"
+                    echo -e "    ./fiuto.sh                            # interactive menu"
+                    echo -e "    ./fiuto.sh /mnt/windows               # set root and open menu"
+                    echo -e "    ./fiuto.sh /mnt/windows --all         # run all modules"
+                    echo -e "    ./fiuto.sh /mnt/windows --module 3    # run specific module"
+                    echo -e "    ./fiuto.sh /mnt/windows --modules 1,3,5-8  # run selection"
+                    echo -e "    ./fiuto.sh /mnt/windows --all --ioc /path/to/ioc.txt  # with IoCs"
+                    echo ""
+                    echo -e "  ${BOLD}Available modules (1-38):${RESET}"
+                fi
                 echo -e "    1  PowerShell History        2  Notepad TabState"
                 echo -e "    3  IFEO Hijacking            4  BAM"
                 echo -e "    5  Run Keys                  6  Prefetch"
@@ -8788,7 +8957,7 @@ main() {
             --module)    ARG_MODULE="$2"; shift ;;
             --modules)   ARG_MODULES="$2"; shift ;;
             --ioc)       ARG_IOC="$2"; shift ;;
-            -*)          warn "Opzione sconosciuta: $1" ;;
+            -*)          local UNKNOWN_OPT="$([ "$LANG" = "it" ] && echo "Opzione sconosciuta:" || echo "Unknown option:")"; warn "$UNKNOWN_OPT $1" ;;
             *)           [[ -z "$ARG_ROOT" ]] && ARG_ROOT="$1" ;;
         esac
         shift
@@ -8796,21 +8965,21 @@ main() {
 
     if [[ -n "$ARG_ROOT" ]]; then
         if [[ ! -d "$ARG_ROOT" ]]; then
-            err "Directory non trovata: $ARG_ROOT"; exit 1
+            err "$(t dir_not_found) $ARG_ROOT"; exit 1
         fi
         _apply_win_root "$ARG_ROOT"
     fi
 
-    # Modalità non interattiva
+    # Non-interactive mode
     if $ARG_ALL; then
         print_banner
-        [[ -z "$WIN_ROOT" ]] && { err "Specifica la root: $0 /mnt/windows --all"; exit 1; }
+        [[ -z "$WIN_ROOT" ]] && { err "$(t specify_root_all)"; exit 1; }
         [[ -n "$ARG_IOC" ]] && load_ioc_file "$ARG_IOC"
         run_all_modules
         exit 0
     fi
     if [[ -n "$ARG_MODULE" ]]; then
-        [[ -z "$WIN_ROOT" ]] && { err "Specifica la root: $0 /mnt/windows --module N"; exit 1; }
+        [[ -z "$WIN_ROOT" ]] && { err "$(t specify_root_module)"; exit 1; }
         [[ -n "$ARG_IOC" ]] && load_ioc_file "$ARG_IOC"
         case "$ARG_MODULE" in
             1)  module_ps_history ;;
@@ -8851,7 +9020,7 @@ main() {
             36) module_network_artifacts ;;
             37) module_master_timeline ;;
             38) module_pad_offline ;;
-            *)  err "Modulo sconosciuto: $ARG_MODULE" ;;
+            *)  err "$(L "Modulo sconosciuto:" "Unknown module:") $ARG_MODULE" ;;
         esac
         exit 0
     fi
@@ -8872,24 +9041,24 @@ main() {
     # Modalità interattiva — chiedi prima ROOT, poi REPORT dir
     if [[ -z "$WIN_ROOT" ]]; then
         print_banner
-        echo -e "  ${CYAN}[*]${RESET} Ricerca automatica di volumi Windows montati..."
+        echo -e "  ${CYAN}[*]${RESET} $(L "Ricerca automatica di volumi Windows montati..." "Automatically searching for mounted Windows volumes...")"
         if ! autodetect_win_root silent; then
             echo ""
-            warn "Nessun volume Windows rilevato automaticamente."
+            warn "$(L "Nessun volume Windows rilevato automaticamente." "No Windows volume detected automatically.")"
             echo ""
-            echo -ne "  ${YELLOW}[?]${RESET} Inserisci il path della root Windows (o INVIO per saltare): "
+            echo -ne "  ${YELLOW}[?]${RESET} $(L "Inserisci il path della root Windows (o INVIO per saltare):" "Enter Windows root path (or ENTER to skip):") "
             local _MR; read -r _MR || true
             if [[ -n "$_MR" ]]; then
                 _MR=$(realpath -m "$_MR" 2>/dev/null || echo "$_MR")
                 if [[ -d "$_MR" ]]; then
                     _apply_win_root "$_MR"
                 else
-                    err "Directory non trovata: $_MR"
-                    info "Usa [R] dal menu per impostare la root."
+                    err "$(L "Directory non trovata:" "Directory not found:") $_MR"
+                    info "$(L "Usa [R] dal menu per impostare la root." "Use [R] from menu to set the root.")"
                     sleep 2
                 fi
             else
-                info "Root non impostata. Usa [R] dal menu."
+                info "$(L "Root non impostata. Usa [R] dal menu." "Root not set. Use [R] from menu.")"
                 sleep 1
             fi
         else
@@ -8978,7 +9147,7 @@ main() {
                     echo ""
                 fi
                 echo -e "  ${DIM}Uscita.${RESET}"; echo ""; exit 0 ;;
-            *)  warn "Scelta non valida: '$CHOICE'"; sleep 1 ;;
+            *)  warn "$(L "Scelta non valida:" "Invalid choice:") '$CHOICE'"; sleep 1 ;;
         esac
     done
 }
