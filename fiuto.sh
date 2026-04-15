@@ -664,7 +664,7 @@ html_header() {
     local ACCENT="${2:-#58a6ff}"
     cat << HTMLEOF
 <!DOCTYPE html>
-<html lang="it">
+<html lang="$(L "it" "en")">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -761,8 +761,8 @@ html_page_header() {
     <div class="sub">${SUBTITLE}</div>
   </div>
   <div class="hmeta">
-    <div>Scansione: <span class="val">${SCAN}</span></div>
-    <div>Sorgente: <span class="val">${SRC}</span></div>$([ -n "$HASH" ] && echo "
+    <div>$(L "Scansione:" "Scan:") <span class="val">${SCAN}</span></div>
+    <div>$(L "Sorgente:" "Source:") <span class="val">${SRC}</span></div>$([ -n "$HASH" ] && echo "
     <div style='font-size:.6rem'>SHA256: <span class=\"val\" style='word-break:break-all'>${HASH}</span></div>")
   </div>
 </header>
@@ -774,8 +774,8 @@ html_footer() {
     local SRC="$2"
     cat << HTMLEOF
 <footer>
-  <div>fiuto.sh — generato il ${SCAN}</div>
-  <div>Sorgente: <span>${SRC}</span></div>
+  <div>fiuto.sh — $(L "generato il" "generated on") ${SCAN}</div>
+  <div>$(L "Sorgente:" "Source:") <span>${SRC}</span></div>
 </footer>
 </body></html>
 HTMLEOF
@@ -1129,7 +1129,7 @@ PYEOF
         <main>
         <div class='stitle'>Voci IFEO con Debugger o GlobalFlags impostati</div>
         <div class='card'><table>
-          <thead><tr><th>Eseguibile</th><th>Debugger</th><th>GlobalFlag</th><th>VerifierDLLs</th></tr></thead>
+          <thead><tr><th>$(L "Eseguibile" "Executable")</th><th>Debugger</th><th>GlobalFlag</th><th>VerifierDLLs</th></tr></thead>
           <tbody>${ROWS}</tbody>
         </table></div>
         <div style='margin-top:1.5rem;padding:1rem 1.5rem;background:var(--bg3);border:1px solid var(--border);border-radius:6px;font-size:.82rem'>
@@ -1271,7 +1271,7 @@ PYEOF
                     <div><div class='uname'>SID: ${PREV_SID}</div></div>
                     <div class='badge'>${SID_EXEC_COUNT} eseguibili</div>
                   </div>
-                  <table><thead><tr><th>Timestamp (UTC)</th><th>Eseguibile</th></tr></thead>
+                  <table><thead><tr><th>Timestamp (UTC)</th><th>$(L "Eseguibile" "Executable")</th></tr></thead>
                   <tbody>${SID_ROWS}</tbody></table></div>"
             fi
             PREV_SID="$SID"; SID_ROWS=""; SID_EXEC_COUNT=0
@@ -1291,7 +1291,7 @@ PYEOF
             <div><div class='uname'>SID: ${PREV_SID}</div></div>
             <div class='badge'>${SID_EXEC_COUNT} eseguibili</div>
           </div>
-          <table><thead><tr><th>Timestamp (UTC)</th><th>Eseguibile</th></tr></thead>
+          <table><thead><tr><th>Timestamp (UTC)</th><th>$(L "Eseguibile" "Executable")</th></tr></thead>
           <tbody>${SID_ROWS}</tbody></table></div>"
     fi
 
@@ -1440,7 +1440,7 @@ PYEOF
             <div><div class='uname'>${USER}</div><div class='upath'>${DIR}</div></div>
             <div class='badge'>${#FENTRIES[@]} file</div>
           </div>
-          <table><thead><tr><th>File</th><th>Dimensione</th><th>Ultima modifica</th></tr></thead>
+          <table><thead><tr><th>File</th><th>$(L "Dimensione" "Size")</th><th>$(L "Ultima modifica" "Last modified")</th></tr></thead>
           <tbody>${ROWS}</tbody></table>
         </div>"
     done
@@ -1595,7 +1595,7 @@ PYEOF
         </div>
         <main><div class='stitle'>Voci di autorun nel registro</div>
         <div class='card'><table>
-          <thead><tr><th>Chiave</th><th>Nome valore</th><th>Dati (comando)</th></tr></thead>
+          <thead><tr><th>$(L "Chiave" "Key")</th><th>$(L "Nome valore" "Value name")</th><th>$(L "Dati (comando)" "Data (command)")</th></tr></thead>
           <tbody>${ROWS}</tbody>
         </table></div></main>"
         html_footer "$SCAN" "$WIN_ROOT"
@@ -1674,7 +1674,7 @@ module_prefetch() {
         </div>
         <main><div class='stitle'>Eseguibili tracciati dal Prefetcher</div>
         <div class='card'><table>
-          <thead><tr><th>Eseguibile</th><th>File .pf</th><th>Ultima esecuzione (mtime)</th><th>Dim.</th></tr></thead>
+          <thead><tr><th>$(L "Eseguibile" "Executable")</th><th>File .pf</th><th>$(L "Ultima esecuzione (mtime)" "Last run (mtime)")</th><th>Dim.</th></tr></thead>
           <tbody>${ROWS}</tbody>
         </table></div></main>"
         html_footer "$SCAN" "$WIN_ROOT"
@@ -1897,7 +1897,7 @@ PYEOF
             <div><div class='uname'>${USER}</div><div class='upath'>${PATH_FULL}</div></div>
             <div class='badge'>${COUNT} tab</div>
           </div>
-          <table><thead><tr><th>Creato</th><th>GUID / File</th><th>Modificato</th><th>Dim.</th></tr></thead>
+          <table><thead><tr><th>$(L "Creato" "Created")</th><th>GUID / File</th><th>$(L "Modificato" "Modified")</th><th>Dim.</th></tr></thead>
           <tbody>${ROWS}</tbody></table>
         </div>"
     done
@@ -2085,7 +2085,7 @@ PYEOF
         <div class='card'><table>
           <thead><tr>
             <th style='width:22%;min-width:160px'>Task</th>
-            <th>Dettagli</th>
+            <th>$(L "Dettagli" "Details")</th>
           </tr></thead>
           <tbody>${ROWS}</tbody>
         </table></div></main>"
@@ -2181,7 +2181,7 @@ PYEOF
         </div>
         <main><div class='stitle'>Dispositivi USB storici</div>
         <div class='card'><table>
-          <thead><tr><th>Tipo</th><th>Seriale</th><th>Nome</th></tr></thead>
+          <thead><tr><th>$(L "Tipo" "Type")</th><th>$(L "Seriale" "Serial")</th><th>$(L "Nome" "Name")</th></tr></thead>
           <tbody>${ROWS}</tbody>
         </table></div></main>"
         html_footer "$SCAN" "$WIN_ROOT"
@@ -2290,7 +2290,7 @@ PYEOF
         </div>
         <main><div class='stitle'>File recenti (LNK)</div>
         <div class='card'><table>
-          <thead><tr><th style='width:12%'>Utente</th><th style='width:16%;white-space:nowrap'>Data accesso</th><th style='width:24%'>File .lnk</th><th>Target path</th></tr></thead>
+          <thead><tr><th style='width:12%'>$(L "Utente" "User")</th><th style='width:16%;white-space:nowrap'>$(L "Data accesso" "Access date")</th><th style='width:24%'>File .lnk</th><th>Target path</th></tr></thead>
           <tbody>${ROWS}</tbody>
         </table></div></main>"
         html_footer "$SCAN" "$WIN_ROOT"
@@ -2468,8 +2468,8 @@ PYEOF
           <thead><tr>
             <th style='width:18%'>Nome / Display</th>
             <th style='width:9%'>Start</th>
-            <th style='width:13%'>Tipo</th>
-            <th>Dettagli</th>
+            <th style='width:13%'>$(L "Tipo" "Type")</th>
+            <th>$(L "Dettagli" "Details")</th>
           </tr></thead>
           <tbody>${ROWS}</tbody>
         </table></div>
@@ -2718,13 +2718,13 @@ PYEOF
           .drow{display:flex;align-items:flex-start;margin-bottom:.18rem}
           .fld{word-break:break-all;overflow-wrap:anywhere;white-space:pre-wrap;flex:1}
         </style>
-        <div class='stitle'>Eventi per timestamp — EID · Timestamp · Sorgente · Dettagli</div>
+        <div class='stitle'>$(L "Eventi per timestamp — EID · Timestamp · Sorgente · Dettagli" "Events by timestamp — EID · Timestamp · Source · Details")</div>
         <div class='card'><table>
           <thead><tr>
             <th style='width:11%'>EID</th>
             <th style='width:13%'>Timestamp</th>
             <th style='width:18%'>Log</th>
-            <th>Dettagli</th>
+            <th>$(L "Dettagli" "Details")</th>
           </tr></thead>
           <tbody>${TABLE_ROWS}</tbody>
         </table></div></main>"
@@ -2960,13 +2960,13 @@ PYEOF
         </div><main>
         <div class='stitle'>Amcache — Eseguibili con hash SHA1</div>
         <div class='card'><table>
-          <thead><tr><th>Path</th><th>LinkDate</th><th>SHA1 (troncato)</th><th>Publisher</th></tr></thead>
-          <tbody>${AMC_ROWS:-<tr><td colspan='4' class='dim' style='padding:1rem'>Nessun dato</td></tr>}</tbody>
+          <thead><tr><th>Path</th><th>LinkDate</th><th>$(L "SHA1 (troncato)" "SHA1 (truncated)")</th><th>Publisher</th></tr></thead>
+          <tbody>${AMC_ROWS:-<tr><td colspan='4' class='dim' style='padding:1rem'>$(L "Nessun dato" "No data")</td></tr>}</tbody>
         </table></div>
         <div class='stitle' style='margin-top:2rem'>Shimcache — Eseguibili visti dal sistema</div>
         <div class='card'><table>
           <thead><tr><th>Path</th><th>Timestamp</th></tr></thead>
-          <tbody>${SHIM_ROWS:-<tr><td colspan='2' class='dim' style='padding:1rem'>Nessun dato</td></tr>}</tbody>
+          <tbody>${SHIM_ROWS:-<tr><td colspan='2' class='dim' style='padding:1rem'>$(L "Nessun dato" "No data")</td></tr>}</tbody>
         </table></div></main>"
         html_footer "$SCAN" "$WIN_ROOT"
     } > "$REPORT_HTML"
@@ -3114,9 +3114,9 @@ PYEOF
           <div class='stat'><div class='label'>File eliminati</div><div class='value'>${TOTAL}</div></div>
           <div class='stat'><div class='label'>Sospetti</div><div class='value' style='color:var(--accent2)'>${SUSP_COUNT}</div></div>
         </div><main>
-        <div class='stitle'>File nel Cestino — SID · Path originale · Data eliminazione · Dimensione</div>
+        <div class='stitle'>$(L "File nel Cestino — SID · Path originale · Data eliminazione · Dimensione" "Recycle Bin Files — SID · Original path · Deletion date · Size")</div>
         <div class='card'><table>
-          <thead><tr><th style='width:16%'>SID</th><th>Path originale</th><th style='width:14%'>Eliminato</th><th style='width:8%'>Dim.</th></tr></thead>
+          <thead><tr><th style='width:16%'>SID</th><th>$(L "Path originale" "Original path")</th><th style='width:14%'>$(L "Eliminato" "Deleted")</th><th style='width:8%'>Dim.</th></tr></thead>
           <tbody>${ROWS}</tbody>
         </table></div></main>"
         html_footer "$SCAN" "$WIN_ROOT"
@@ -3262,9 +3262,9 @@ PYEOF
         <style>
           .fld{word-break:break-all;overflow-wrap:anywhere;white-space:pre-wrap}
         </style>
-        <div class='stitle'>WMI Event Subscriptions — Tipo · Contenuto</div>
+        <div class='stitle'>$(L "WMI Event Subscriptions — Tipo · Contenuto" "WMI Event Subscriptions — Type · Content")</div>
         <div class='card'><table>
-          <thead><tr><th style='width:20%'>Tipo</th><th>Valore / Query / Script</th></tr></thead>
+          <thead><tr><th style='width:20%'>$(L "Tipo" "Type")</th><th>$(L "Valore / Query / Script" "Value / Query / Script")</th></tr></thead>
           <tbody>${ROWS}</tbody>
         </table></div>
         <div style='margin-top:1.5rem;padding:1rem 1.5rem;background:var(--bg3);border:1px solid var(--border);border-radius:6px;font-size:.8rem'>
@@ -3343,7 +3343,7 @@ module_srum() {
               <div class='stat'><div class='label'>Modalità</div><div class='value' style='font-size:1rem;padding-top:.4rem;color:var(--accent4)'>strings</div></div>
             </div><main>
             <div class='stitle'>Stringhe estratte da SRUDB.dat (pyesedb non disponibile)</div>
-            <div class='card'><table><thead><tr><th>Stringa</th></tr></thead><tbody>${ROWS}</tbody></table></div>
+            <div class='card'><table><thead><tr><th>$(L "Stringa" "String")</th></tr></thead><tbody>${ROWS}</tbody></table></div>
             <div style='margin-top:1.5rem;padding:1rem 1.5rem;background:var(--bg3);border:1px solid var(--border);border-radius:6px'>
               <div style='font-family:var(--mono);color:var(--accent);margin-bottom:.5rem'>Per analisi completa con traffico di rete e CPU per applicazione:</div>
               <div style='font-family:var(--mono);font-size:.72rem;color:var(--text-dim)'>pip install pyesedb<br>oppure usa: srum-dump (Mark Baggett) / ese2csv</div>
@@ -3675,11 +3675,11 @@ PYEOF
 FILTERHTML
         echo "<main>
         <style>.fld{word-break:break-all;overflow-wrap:anywhere;white-space:pre-wrap}</style>
-        <div class='stitle'>Cronologia navigazione — Timestamp · Utente/Browser · URL · Titolo · Visite</div>
+        <div class='stitle'>$(L "Cronologia navigazione — Timestamp · Utente/Browser · URL · Titolo · Visite" "Browsing history — Timestamp · User/Browser · URL · Title · Visits")</div>
         <div class='card'><table id='brtable'>
           <thead><tr>
             <th style='width:12%'>Timestamp</th>
-            <th style='width:12%'>Utente/Browser</th>
+            <th style='width:12%'>$(L "Utente/Browser" "User/Browser")</th>
             <th>URL</th>
             <th style='width:18%'>Titolo</th>
             <th style='width:5%'>N.</th>
@@ -4054,23 +4054,23 @@ PYEOF
         </div><main>
         <div class='stitle'>UserAssist — Programmi avviati dalla GUI (ROT13 decodificato)</div>
         <div class='card'><table>
-          <thead><tr><th style='width:12%'>Utente</th><th>Eseguibile</th><th style='width:6%'>Avvii</th><th style='width:16%'>Ultimo uso</th></tr></thead>
-          <tbody>${UA_ROWS:-<tr><td colspan='4' class='dim' style='padding:1rem'>Nessun dato</td></tr>}</tbody>
+          <thead><tr><th style='width:12%'>$(L "Utente" "User")</th><th>$(L "Eseguibile" "Executable")</th><th style='width:6%'>$(L "Avvii" "Runs")</th><th style='width:16%'>$(L "Ultimo uso" "Last used")</th></tr></thead>
+          <tbody>${UA_ROWS:-<tr><td colspan='4' class='dim' style='padding:1rem'>$(L "Nessun dato" "No data")</td></tr>}</tbody>
         </table></div>
         <div class='stitle' style='margin-top:2rem'>RunMRU — Comandi digitati in Esegui (Win+R)</div>
         <div class='card'><table>
-          <thead><tr><th style='width:12%'>Utente</th><th>Comando</th></tr></thead>
-          <tbody>${RUN_ROWS:-<tr><td colspan='2' class='dim' style='padding:1rem'>Nessun dato</td></tr>}</tbody>
+          <thead><tr><th style='width:12%'>$(L "Utente" "User")</th><th>$(L "Comando" "Command")</th></tr></thead>
+          <tbody>${RUN_ROWS:-<tr><td colspan='2' class='dim' style='padding:1rem'>$(L "Nessun dato" "No data")</td></tr>}</tbody>
         </table></div>
         <div class='stitle' style='margin-top:2rem'>TypedPaths — Percorsi digitati in Explorer</div>
         <div class='card'><table>
-          <thead><tr><th style='width:12%'>Utente</th><th style='width:8%'>Slot</th><th>Percorso</th></tr></thead>
-          <tbody>${TP_ROWS:-<tr><td colspan='3' class='dim' style='padding:1rem'>Nessun dato</td></tr>}</tbody>
+          <thead><tr><th style='width:12%'>$(L "Utente" "User")</th><th style='width:8%'>Slot</th><th>$(L "Percorso" "Path")</th></tr></thead>
+          <tbody>${TP_ROWS:-<tr><td colspan='3' class='dim' style='padding:1rem'>$(L "Nessun dato" "No data")</td></tr>}</tbody>
         </table></div>
         <div class='stitle' style='margin-top:2rem'>WordWheelQuery — Ricerche in Start Menu</div>
         <div class='card'><table>
-          <thead><tr><th style='width:12%'>Utente</th><th>Termine cercato</th></tr></thead>
-          <tbody>${WW_ROWS:-<tr><td colspan='2' class='dim' style='padding:1rem'>Nessun dato</td></tr>}</tbody>
+          <thead><tr><th style='width:12%'>$(L "Utente" "User")</th><th>$(L "Termine cercato" "Search term")</th></tr></thead>
+          <tbody>${WW_ROWS:-<tr><td colspan='2' class='dim' style='padding:1rem'>$(L "Nessun dato" "No data")</td></tr>}</tbody>
         </table></div></main>"
         html_footer "$SCAN" "$WIN_ROOT"
     } > "$REPORT_HTML"
@@ -4302,7 +4302,7 @@ PYEOF
         </div><main>
         <div class='stitle'>Cartelle visitate — anche se poi cancellate o smontate</div>
         <div class='card'><table>
-          <thead><tr><th style='width:12%'>Utente</th><th>Percorso ricostruito</th><th style='width:12%'>Hive</th></tr></thead>
+          <thead><tr><th style='width:12%'>$(L "Utente" "User")</th><th>$(L "Percorso ricostruito" "Reconstructed path")</th><th style='width:12%'>Hive</th></tr></thead>
           <tbody>${ROWS}</tbody>
         </table></div></main>"
         html_footer "$SCAN" "$WIN_ROOT"
@@ -4749,7 +4749,7 @@ PYEOF
         <div class='stitle'>File sospetti e con possibile timestomping (STANDARD_INFO ≠ FILENAME &gt;1h)</div>
         <div class='card'><table style='table-layout: fixed; width: 100%;'>
           <thead><tr>
-            <th style='width:57%'>Nome file</th>
+            <th style='width:57%'>$(L "Nome file" "Filename")</th>
             <th style='width:7%'>Ext</th>
             <th style='width:12%'>SI Created</th>
             <th style='width:12%'>SI Modified</th>
@@ -4945,13 +4945,13 @@ PYEOF
         </div><main>
         <div class='stitle'>OpenSaveMRU — File aperti o salvati tramite dialogo di Windows</div>
         <div class='card'><table>
-          <thead><tr><th style='width:12%'>Utente</th><th style='width:8%'>Estensione</th><th>Path</th></tr></thead>
-          <tbody>${OS_ROWS:-<tr><td colspan='3' class='dim' style='padding:1rem'>Nessun dato</td></tr>}</tbody>
+          <thead><tr><th style='width:12%'>$(L "Utente" "User")</th><th style='width:8%'>$(L "Estensione" "Extension")</th><th>Path</th></tr></thead>
+          <tbody>${OS_ROWS:-<tr><td colspan='3' class='dim' style='padding:1rem'>$(L "Nessun dato" "No data")</td></tr>}</tbody>
         </table></div>
         <div class='stitle' style='margin-top:2rem'>LastVisitedMRU — Ultima cartella visitata per applicazione</div>
         <div class='card'><table>
-          <thead><tr><th style='width:12%'>Utente</th><th style='width:20%'>Applicazione</th><th>Ultima cartella</th></tr></thead>
-          <tbody>${LV_ROWS:-<tr><td colspan='3' class='dim' style='padding:1rem'>Nessun dato</td></tr>}</tbody>
+          <thead><tr><th style='width:12%'>$(L "Utente" "User")</th><th style='width:20%'>Applicazione</th><th>$(L "Ultima cartella" "Last folder")</th></tr></thead>
+          <tbody>${LV_ROWS:-<tr><td colspan='3' class='dim' style='padding:1rem'>$(L "Nessun dato" "No data")</td></tr>}</tbody>
         </table></div></main>"
         html_footer "$SCAN" "$WIN_ROOT"
     } > "$REPORT_HTML"
@@ -5122,9 +5122,9 @@ PYEOF
           <div class='stat'><div class='label'>Record totali</div><div class='value'>${TOTAL_LINES}</div></div>
           <div class='stat'><div class='label'>Sospetti</div><div class='value' style='color:var(--accent2)'>${SUSP_COUNT}</div></div>
         </div><main>
-        <div class='stitle'>Change Journal NTFS — Timestamp · File · Ext · Azione</div>
+        <div class='stitle'>$(L "Change Journal NTFS — Timestamp · File · Ext · Azione" "NTFS Change Journal — Timestamp · File · Ext · Action")</div>
         <div class='card'><table>
-          <thead><tr><th style='width:14%'>Timestamp</th><th>Nome file</th><th style='width:6%'>Ext</th><th>Motivo</th></tr></thead>
+          <thead><tr><th style='width:14%'>Timestamp</th><th>$(L "Nome file" "Filename")</th><th style='width:6%'>Ext</th><th>$(L "Motivo" "Reason")</th></tr></thead>
           <tbody>${TABLE_ROWS:-<tr><td colspan='4' class='dim' style='padding:1rem'>Nessun record</td></tr>}</tbody>
         </table></div></main>"
         html_footer "$SCAN" "$WIN_ROOT"
@@ -5432,7 +5432,7 @@ PYEOF
             <div><div class='uname'>${MNAME}</div><div class='upath'>${MFILE}</div></div>
             <div class='badge'>${MSIZE}</div>
           </div>
-          <table><thead><tr><th style='width:14%'>Tipo</th><th>Valore estratto</th></tr></thead>
+          <table><thead><tr><th style='width:14%'>$(L "Tipo" "Type")</th><th>$(L "Valore estratto" "Extracted value")</th></tr></thead>
           <tbody>${STR_ROWS:-<tr><td colspan='2' class='dim' style='padding:.8rem'>Nessuna stringa significativa estratta</td></tr>}</tbody></table>
           <div style='padding:.8rem 1.5rem;font-family:var(--mono);font-size:.7rem;color:var(--text-dim)'>
             Magic: <span style='color:var(--accent)'>0x${MAGIC}</span> &nbsp;·&nbsp;
@@ -5569,7 +5569,7 @@ PYEOF
             <div class='uicon' style='background:linear-gradient(135deg,var(--accent2),#c0392b)'>!</div>
             <div>
               <div class='uname'>${FDIR_NAME}</div>
-              <div class='upath'>Sorgente: ${OWNER} &nbsp;·&nbsp; Data: ${FMTIME}</div>
+              <div class='upath'>$(L "Sorgente:" "Source:") ${OWNER} &nbsp;·&nbsp; $(L "Data:" "Date:") ${FMTIME}</div>
             </div>
             <div class='badge warn'>Report.wer</div>
           </div>
@@ -5690,9 +5690,9 @@ PYEOF
         echo "<div class='statsbar'>
           <div class='stat'><div class='label'>Blob trovati</div><div class='value'>${TOTAL}</div></div>
         </div><main>
-        <div class='stitle'>Blob DPAPI — Utente · File · Path · MasterKey GUID · Dim · Timestamp</div>
+        <div class='stitle'>$(L "Blob DPAPI — Utente · File · Path · MasterKey GUID · Dim · Timestamp" "DPAPI Blobs — User · File · Path · MasterKey GUID · Size · Timestamp")</div>
         <div class='card'><table>
-          <thead><tr><th>Utente</th><th>File</th><th>Store</th><th>MK GUID</th><th>Dim.</th><th>Modificato</th></tr></thead>
+          <thead><tr><th>$(L "Utente" "User")</th><th>File</th><th>Store</th><th>MK GUID</th><th>Dim.</th><th>$(L "Modificato" "Modified")</th></tr></thead>
           <tbody>${ROWS}</tbody>
         </table></div>
         <div style='margin-top:1.5rem;padding:1rem 1.5rem;background:var(--bg3);border:1px solid var(--border);border-radius:6px;font-size:.8rem'>
@@ -5824,7 +5824,7 @@ PYEOF
         </div><main>
         <div class='stitle'>Reti WiFi e profili VPN/network memorizzati</div>
         <div class='card'><table>
-          <thead><tr><th style='width:8%'>Tipo</th><th>Nome / SSID</th><th style='width:12%'>Auth/Cat</th><th style='width:15%'>Gateway/Enc</th></tr></thead>
+          <thead><tr><th style='width:8%'>$(L "Tipo" "Type")</th><th>Nome / SSID</th><th style='width:12%'>Auth/Cat</th><th style='width:15%'>Gateway/Enc</th></tr></thead>
           <tbody>${ROWS}</tbody>
         </table></div></main>"
         html_footer "$SCAN" "$WIN_ROOT"
@@ -6168,14 +6168,14 @@ PYEOF
           <div class='stat info'><div class='label'>Login salvati</div><div class='value'>${TOTAL_LG}</div></div>
         </div><main>
         <style>.fld{word-break:break-all;overflow-wrap:anywhere;white-space:pre-wrap}</style>
-        <div class='stitle'>Download — Timestamp · Utente/Browser · URL · Destinazione</div>
+        <div class='stitle'>$(L "Download — Timestamp · Utente/Browser · URL · Destinazione" "Downloads — Timestamp · User/Browser · URL · Destination")</div>
         <div class='card'><table>
-          <thead><tr><th style='width:12%'>Timestamp</th><th style='width:14%'>Utente/Browser</th><th>URL</th><th style='width:20%'>Destinazione</th></tr></thead>
+          <thead><tr><th style='width:12%'>Timestamp</th><th style='width:14%'>$(L "Utente/Browser" "User/Browser")</th><th>URL</th><th style='width:20%'>$(L "Destinazione" "Destination")</th></tr></thead>
           <tbody>${DL_ROWS:-<tr><td colspan='4' class='dim' style='padding:1rem'>Nessun download trovato</td></tr>}</tbody>
         </table></div>
-        <div class='stitle' style='margin-top:2rem'>Login Data — Credenziali salvate (password cifrate DPAPI)</div>
+        <div class='stitle' style='margin-top:2rem'>$(L "Login Data — Credenziali salvate (password cifrate DPAPI)" "Login Data — Saved credentials (DPAPI-encrypted passwords)")</div>
         <div class='card'><table>
-          <thead><tr><th style='width:12%'>Timestamp</th><th style='width:14%'>Utente/Browser</th><th>URL</th><th style='width:15%'>Username</th><th style='width:10%'>Password</th></tr></thead>
+          <thead><tr><th style='width:12%'>Timestamp</th><th style='width:14%'>$(L "Utente/Browser" "User/Browser")</th><th>URL</th><th style='width:15%'>Username</th><th style='width:10%'>Password</th></tr></thead>
           <tbody>${LG_ROWS:-<tr><td colspan='5' class='dim' style='padding:1rem'>Nessuna credenziale trovata</td></tr>}</tbody>
         </table></div></main>"
         html_footer "$SCAN" "$WIN_ROOT"
@@ -6271,9 +6271,9 @@ PYEOF
           <div class='stat'><div class='label'>Voci</div><div class='value'>${TOTAL}</div></div>
           <div class='stat'><div class='label'>Sospette</div><div class='value' style='color:var(--accent2)'>${SUSP_COUNT}</div></div>
         </div><main>
-        <div class='stitle'>Clipboard History — Utente · Timestamp · Contenuto (troncato a 300 char)</div>
+        <div class='stitle'>$(L "Clipboard History — Utente · Timestamp · Contenuto (troncato a 300 char)" "Clipboard History — User · Timestamp · Content (truncated to 300 chars)")</div>
         <div class='card'><table>
-          <thead><tr><th style='width:12%'>Utente</th><th style='width:14%'>Timestamp</th><th>Contenuto</th></tr></thead>
+          <thead><tr><th style='width:12%'>$(L "Utente" "User")</th><th style='width:14%'>Timestamp</th><th>$(L "Contenuto" "Content")</th></tr></thead>
           <tbody>${ROWS}</tbody>
         </table></div></main>"
         html_footer "$SCAN" "$WIN_ROOT"
@@ -6389,7 +6389,7 @@ PYEOF
         </div><main>
         <div class='stitle'>File aperti con Word · Excel · PowerPoint · Access · OneNote</div>
         <div class='card'><table>
-          <thead><tr><th style='width:12%'>Utente</th><th style='width:12%'>App</th><th style='width:7%'>Versione</th><th>Path file</th></tr></thead>
+          <thead><tr><th style='width:12%'>$(L "Utente" "User")</th><th style='width:12%'>App</th><th style='width:7%'>$(L "Versione" "Version")</th><th>Path file</th></tr></thead>
           <tbody>${ROWS}</tbody>
         </table></div></main>"
         html_footer "$SCAN" "$WIN_ROOT"
@@ -6500,9 +6500,9 @@ PYEOF
         echo "<div class='statsbar'>
           <div class='stat'><div class='label'>In quarantena</div><div class='value'>${TOTAL}</div></div>
         </div><main>
-        <div class='stitle'>File in quarantena — recuperabili offline da ResourceData/ (cifrati XOR)</div>
+        <div class='stitle'>$(L "File in quarantena — recuperabili offline da ResourceData/ (cifrati XOR)" "Quarantined files — recoverable offline from ResourceData/ (XOR-encrypted)")</div>
         <div class='card'><table>
-          <thead><tr><th style='width:14%'>Rilevato</th><th style='width:22%'>Minaccia</th><th>Path originale</th><th style='width:18%'>SHA256</th><th style='width:6%'>Dim.</th></tr></thead>
+          <thead><tr><th style='width:14%'>$(L "Rilevato" "Detected")</th><th style='width:22%'>$(L "Minaccia" "Threat")</th><th>$(L "Path originale" "Original path")</th><th style='width:18%'>SHA256</th><th style='width:6%'>Dim.</th></tr></thead>
           <tbody>${ROWS}</tbody>
         </table></div>
         <div style='margin-top:1.5rem;padding:1rem 1.5rem;background:var(--bg3);border:1px solid var(--border);border-radius:6px;font-size:.8rem'>
@@ -6755,9 +6755,9 @@ module_jumplists() {
           <div class='stat'><div class='label'>Entries</div><div class='value'>${TOTAL}</div></div>
           <div class='stat'><div class='label'>Sospette</div><div class='value' style='color:var(--accent2)'>${SUSP}</div></div>
         </div><main>
-        <div class='stitle'>JumpLists — Utente · Tipo · Timestamp · File · Percorsi estratti (strings)</div>
+        <div class='stitle'>$(L "JumpLists — Utente · Tipo · Timestamp · File · Percorsi estratti (strings)" "JumpLists — User · Type · Timestamp · File · Extracted paths (strings)")</div>
         <div class='card'><table>
-          <thead><tr><th style='width:10%'>Utente</th><th style='width:7%'>Tipo</th><th style='width:14%'>Modificato</th><th style='width:14%'>File JL</th><th>Percorsi estratti</th></tr></thead>
+          <thead><tr><th style='width:10%'>$(L "Utente" "User")</th><th style='width:7%'>$(L "Tipo" "Type")</th><th style='width:14%'>Modificato</th><th style='width:14%'>File JL</th><th>Percorsi estratti</th></tr></thead>
           <tbody>${ROWS}</tbody>
         </table></div></main>"
         html_footer "$SCAN" "$WIN_ROOT"
@@ -6915,19 +6915,19 @@ PYEOF
         if [[ -n "$ROWS_P" ]]; then
             echo "<div class='stitle'>Profili di rete noti (NetworkList\\Profiles)</div>
             <div class='card'><table>
-              <thead><tr><th>Nome</th><th>Descrizione</th><th>Categoria</th><th>Prima connessione</th><th>Ultima connessione</th></tr></thead>
+              <thead><tr><th>$(L "Nome" "Name")</th><th>$(L "Descrizione" "Description")</th><th>$(L "Categoria" "Category")</th><th>$(L "Prima connessione" "First connection")</th><th>$(L "Ultima connessione" "Last connection")</th></tr></thead>
               <tbody>${ROWS_P}</tbody></table></div>"
         fi
         if [[ -n "$ROWS_S" ]]; then
             echo "<div class='stitle' style='margin-top:2rem'>Firme di rete (Signatures\\Unmanaged)</div>
             <div class='card'><table>
-              <thead><tr><th>Descrizione</th><th>DNS Suffix</th><th>MAC Gateway</th><th>SSID</th></tr></thead>
+              <thead><tr><th>$(L "Descrizione" "Description")</th><th>DNS Suffix</th><th>MAC Gateway</th><th>SSID</th></tr></thead>
               <tbody>${ROWS_S}</tbody></table></div>"
         fi
         if [[ -n "$ROWS_I" ]]; then
             echo "<div class='stitle' style='margin-top:2rem'>Interfacce TCP/IP (SYSTEM\\Tcpip\\Parameters)</div>
             <div class='card'><table>
-              <thead><tr><th>ControlSet</th><th>GUID interfaccia</th><th>IP</th><th>Gateway</th><th>DNS</th><th>DHCP</th></tr></thead>
+              <thead><tr><th>ControlSet</th><th>$(L "GUID interfaccia" "Interface GUID")</th><th>IP</th><th>Gateway</th><th>DNS</th><th>DHCP</th></tr></thead>
               <tbody>${ROWS_I}</tbody></table></div>"
         fi
         echo "</main>"
@@ -6986,8 +6986,8 @@ for rpath in sys.argv[1:]:
                     break
             if not ts:
                 continue
-            # Descrizione: celle che non contengono solo il timestamp
-            desc_parts = [c[:80] for c in cells if c and not TS_PAT.fullmatch(c.strip())]
+            # Descrizione: celle che non contengono solo il timestamp né un numero puro
+            desc_parts = [c[:80] for c in cells if c and not TS_PAT.fullmatch(c.strip()) and not re.fullmatch(r'\d+', c.strip())]
             desc = ' | '.join(desc_parts)[:200]
             desc = ' '.join(desc.split())   # normalizza spazi
             key = (ts, mod, desc[:40])
@@ -7002,14 +7002,16 @@ PYEOF
 
     local TOTAL_EVENTS; TOTAL_EVENTS=$(printf '%s' "$TL_RAW" | grep -c $'\t' 2>/dev/null || echo 0)
 
-    # Ordina per timestamp decrescente e tronca a 2000 (mostreremo i primi 1000 nel report)
-    local TL_SORTED
-    TL_SORTED=$(printf '%s\n' "$TL_RAW" | sort -t$'\t' -k1 -r | head -2000)
+    # Ordina per timestamp decrescente, scrive su file temp per evitare
+    # problemi con here-string su variabili di grandi dimensioni
+    local _TL_TMP; _TL_TMP=$(mktemp)
+    printf '%s\n' "$TL_RAW" | sort -t$'\t' -k1 -r | head -1000 > "$_TL_TMP"
+    local SHOW_COUNT; SHOW_COUNT=$(wc -l < "$_TL_TMP")
 
     separator
-    info "$(L "Eventi con timestamp estratti:" "Events with extracted timestamps:") ${BOLD}$TOTAL_EVENTS${RESET} (mostrati max 1000 nel report)"
-    [[ $TOTAL_EVENTS -eq 0 ]] && { warn "$(L "Nessun timestamp trovato nei report. Verifica che i moduli abbiano generato dati." "No timestamps found in reports. Verify that modules have generated data.")"; return 0; }
-    ask_yn "Generare report HTML Master Timeline?" || return 0
+    info "$(L "Eventi con timestamp estratti:" "Events with extracted timestamps:") ${BOLD}$TOTAL_EVENTS${RESET} ($(L "mostrati" "showing") $SHOW_COUNT)"
+    [[ $TOTAL_EVENTS -eq 0 ]] && { rm -f "$_TL_TMP"; warn "$(L "Nessun timestamp trovato nei report. Verifica che i moduli abbiano generato dati." "No timestamps found in reports. Verify that modules have generated data.")"; return 0; }
+    ask_yn "$(L "Generare report HTML Master Timeline?" "Generate Master Timeline HTML report?")" || { rm -f "$_TL_TMP"; return 0; }
 
     local REPORT_HTML; REPORT_HTML=$(prepare_report_dir "master_timeline")
     local SCAN; SCAN=$(date "+%d/%m/%Y %H:%M:%S")
@@ -7017,83 +7019,56 @@ PYEOF
 
     {
         html_header "Master Timeline"
-        html_page_header "TL" "Master Timeline — <span>Aggregazione Cross-Moduli</span>" \
-            "Aggregazione di ${NR} report" "$SCAN" "$WIN_ROOT"
+        html_page_header "TL" "Master Timeline — <span>$(L "Aggregazione Cross-Moduli" "Cross-Module Aggregation")</span>" \
+            "$(L "Aggregazione di" "Aggregation of") ${NR} $(L "report" "reports")" "$SCAN" "$WIN_ROOT"
         cat << STATSEOF
 <div class='statsbar'>
-  <div class='stat'><div class='label'>Report aggregati</div><div class='value'>${NR}</div></div>
-  <div class='stat info'><div class='label'>Eventi con timestamp</div><div class='value'>${TOTAL_EVENTS}</div></div>
+  <div class='stat'><div class='label'>$(L "Report aggregati" "Aggregated reports")</div><div class='value'>${NR}</div></div>
+  <div class='stat info'><div class='label'>$(L "Eventi con timestamp" "Events with timestamp")</div><div class='value'>${TOTAL_EVENTS}</div></div>
+  <div class='stat ok'><div class='label'>$(L "Mostrati nel report" "Shown in report")</div><div class='value'>${SHOW_COUNT}</div></div>
 </div>
 <main>
-<div class='stitle'>Timeline cronologica (decrescente) — max 1000 eventi · ordinati per data</div>
+<div class='stitle'>$(L "Timeline cronologica (decrescente) — ordinata per data" "Chronological timeline (descending) — sorted by date")</div>
 <div class='card'>
-<style>
-  .tl-filter { padding:.8rem 1rem; background:var(--bg3); border-bottom:1px solid var(--border);
-    display:flex; gap:1rem; align-items:center; flex-wrap:wrap; }
-  .tl-filter input { background:var(--bg2); border:1px solid var(--border); color:var(--text);
-    padding:.3rem .7rem; font-family:var(--mono); font-size:.75rem; border-radius:3px; width:250px; }
-  .tl-filter input:focus { outline:none; border-color:var(--accent); }
-  .tl-filter label { font-family:var(--mono); font-size:.65rem; color:var(--text-dim); }
-</style>
-<div class='tl-filter'>
-  <label>Filtra:</label>
-  <input type='text' id='tl-filter-ts'   placeholder='Timestamp (es. 2024-03)' oninput='filterTimeline()'>
-  <input type='text' id='tl-filter-mod'  placeholder='Modulo (es. evtx)'       oninput='filterTimeline()'>
-  <input type='text' id='tl-filter-desc' placeholder='Testo'                   oninput='filterTimeline()'>
-</div>
-<table id='tl-table'>
+<table>
   <thead><tr>
     <th style='width:16%'>Timestamp</th>
-    <th style='width:14%'>Modulo</th>
-    <th>Descrizione</th>
+    <th style='width:14%'>$(L "Modulo" "Module")</th>
+    <th>$(L "Descrizione" "Description")</th>
   </tr></thead>
-  <tbody id='tl-body'>
+  <tbody>
 STATSEOF
 
-        # Scrivi le righe direttamente nel file — evita la variabile ROWS gonfia
-        local _COUNT=0
+        # Genera righe HTML direttamente da file temp — escaping inline senza subshell
         while IFS=$'\t' read -r _TS _MOD _DESC; do
             [[ -z "$_TS" ]] && continue
-            (( _COUNT++ > 1000 )) && break
+            # Escaping inline: nessun subshell, nessun fork
+            local _TE="${_TS//&/&amp;}"; _TE="${_TE//</&lt;}"; _TE="${_TE//>/&gt;}"
+            local _ME="${_MOD//&/&amp;}"; _ME="${_ME//</&lt;}"; _ME="${_ME//>/&gt;}"
+            local _D="${_DESC:0:150}"
+            local _DE="${_D//&/&amp;}"; _DE="${_DE//</&lt;}"; _DE="${_DE//>/&gt;}"
             local _BC="var(--accent)"
             case "${_MOD,,}" in
                 *evtx*|*service*|*ifeo*|*wmi*|*sam*|*ntds*) _BC="var(--accent2)" ;;
                 *ps_hist*|*script*|*prefetch*|*amcache*)     _BC="var(--accent4)" ;;
                 *browser*|*lnk*|*shell*|*userassist*)        _BC="var(--accent3)" ;;
             esac
-            local _TE; _TE=$(html_esc "$_TS")
-            local _ME; _ME=$(html_esc "$_MOD")
-            local _DE; _DE=$(html_esc "${_DESC:0:150}")
             printf '<tr><td class="mono ok" style="white-space:nowrap;font-size:.72rem">%s</td>' "$_TE"
             printf '<td><span style="background:rgba(88,166,255,.1);border:1px solid rgba(88,166,255,.2);'
             printf 'color:%s;font-family:var(--mono);font-size:.65rem;padding:.15rem .5rem;border-radius:2px">%s</span></td>' "$_BC" "$_ME"
             printf '<td class="mono" style="font-size:.72rem;color:var(--text)">%s</td></tr>\n' "$_DE"
-        done <<< "$TL_SORTED"
+        done < "$_TL_TMP"
 
-        cat << 'SCRIPTEOF'
+        cat << 'TABLEEOF'
   </tbody>
 </table>
 </div>
-<script>
-function filterTimeline() {
-  var ft  = document.getElementById('tl-filter-ts').value.toLowerCase();
-  var fm  = document.getElementById('tl-filter-mod').value.toLowerCase();
-  var fd  = document.getElementById('tl-filter-desc').value.toLowerCase();
-  document.querySelectorAll('#tl-body tr').forEach(function(row) {
-    var c = row.querySelectorAll('td');
-    if (!c.length) return;
-    var ok = (!ft || c[0].textContent.toLowerCase().includes(ft)) &&
-             (!fm || c[1].textContent.toLowerCase().includes(fm)) &&
-             (!fd || c[2].textContent.toLowerCase().includes(fd));
-    row.style.display = ok ? '' : 'none';
-  });
-}
-</script>
 </main>
-SCRIPTEOF
+TABLEEOF
 
         html_footer "$SCAN" "$WIN_ROOT"
     } > "$REPORT_HTML"
+    rm -f "$_TL_TMP"
     register_report "$REPORT_HTML"
     ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
     open_report_prompt "$REPORT_HTML"
@@ -7249,6 +7224,9 @@ module_pad_offline() {
     "$PY3" - "$NTDS_TO_USE" "${SYSTEM_HIVE}" "$REPORT_HTML" "$SCAN" "$WIN_ROOT" "$NTDS_HASH" "$(dirname "$NTDS_PATH")" "$TMP_PAD_DIR" << 'PYEOF' 2>"$PYERR_FILE"
 import sys, os, struct, datetime, traceback, html as html_mod
 
+# Bilingual helper: reads LANG env var set by fiuto.sh
+def L(it, en): return it if os.environ.get('LANG', 'en') == 'it' else en
+
 ntds_path   = sys.argv[1]
 sys_hive    = sys.argv[2] if len(sys.argv) > 2 else ''
 report_path = sys.argv[3]
@@ -7293,7 +7271,7 @@ for _log_src_dir in _log_search_dirs:
 if _has_ese_logs:
     sys.stderr.write("INFO: log ESE trovati e copiati in tmp — impacket tenterà soft-recovery\n")
 else:
-    sys.stderr.write("INFO: nessun log ESE trovato — verrà usata solo patch dirty state\n")
+    sys.stderr.write("INFO: no ESE log found — only dirty state patch will be applied\n")
 
 try:
     from impacket.ese import ESENT_DB as _ESENT_DB_CLS
@@ -7310,7 +7288,7 @@ except ImportError:
     _HAVE_PYESEDB = False
 
 if not _HAVE_IMPACKET and not _HAVE_PYESEDB:
-    sys.stderr.write("FATAL: nessuna libreria ESE disponibile. Installa impacket o libesedb-python.\n")
+    sys.stderr.write("FATAL: no ESE library available. Install impacket or libesedb-python.\n")
     sys.exit(1)
 
 # ── Wrapper pyesedb compatibile con l'API impacket ───────────────
@@ -7672,7 +7650,7 @@ if db is None and _HAVE_IMPACKET:
         sys.stderr.write(f"INFO: impacket fallito ({e})\n")
 
 if db is None:
-    sys.stderr.write("FATAL: impossibile aprire NTDS.dit con nessun backend disponibile.\n")
+    sys.stderr.write("FATAL: unable to open NTDS.dit: no backend available.\n")
     sys.stderr.write("INFO: installa libesedb-python: pip install libesedb-python\n")
     sys.exit(1)
 
@@ -8191,7 +8169,7 @@ for c in computers:
 # ── Sezione ACL ────────────────────────────────────────────────────
 def ace_rows(aces):
     if not aces:
-        return "<tr><td colspan='5' class='dim' style='padding:1rem;text-align:center'>Nessun ACE pericoloso rilevato (o nTSecurityDescriptor non trovato)</td></tr>"
+        return "<tr><td colspan='5' class='dim' style='padding:1rem;text-align:center'>{L("Nessun ACE pericoloso rilevato (o nTSecurityDescriptor non trovato)", "No dangerous ACE found (or nTSecurityDescriptor not present)")}</td></tr>"
     out = ''
     for a in aces:
         cls = 'row-bad' if a['everyone'] else 'row-warn'
@@ -8216,7 +8194,7 @@ _catalog_corrupt_html = ""
 if _catalog_corrupt:
     _objects_count = len(objects)
     _catalog_corrupt_html = f"""
-<div class="stitle" style="color:var(--accent2)">&#9888; NTDS.dit &mdash; Catalogo ESE corrotto: analisi privilegiata non disponibile</div>
+<div class="stitle" style="color:var(--accent2)">&#9888; NTDS.dit &mdash; {L("Catalogo ESE corrotto: analisi privilegiata non disponibile", "Corrupt ESE catalogue: privileged analysis unavailable")}</div>
 <div class="card" style="border-color:rgba(255,123,114,.5);background:rgba(255,123,114,.06)">
 <div style="padding:1.4rem 1.6rem;font-family:var(--mono);font-size:.82rem;line-height:1.9">
 <div style="color:var(--accent2);font-weight:700;font-size:.95rem;margin-bottom:.9rem">Stato: DirtyShutdown &mdash; Pagine ESE corrotte nel catalogo di sistema</div>
@@ -8224,18 +8202,18 @@ if _catalog_corrupt:
   <div style="background:rgba(0,0,0,.25);border-radius:6px;padding:.9rem 1rem">
     <div style="color:var(--accent3);font-weight:700;margin-bottom:.5rem">&#10003; Dati estratti con successo</div>
     <div style="color:var(--text-mid)">&#x2022; Password KRBTGT (pwdLastSet)</div>
-    <div style="color:var(--text-mid)">&#x2022; Livello funzionale dominio</div>
-    <div style="color:var(--text-mid)">&#x2022; Oggetti GPO e percorsi</div>
-    <div style="color:var(--text-mid)">&#x2022; Elenco computer (parziale)</div>
+    <div style="color:var(--text-mid)">&#x2022; {L("Livello funzionale dominio", "Domain functional level")}</div>
+    <div style="color:var(--text-mid)">&#x2022; {L("Oggetti GPO e percorsi", "GPO objects and paths")}</div>
+    <div style="color:var(--text-mid)">&#x2022; {L("Elenco computer (parziale)", "Computer list (partial)")}</div>
     <div style="color:var(--text-mid)">&#x2022; {_objects_count} oggetti datatable recuperati</div>
   </div>
   <div style="background:rgba(0,0,0,.25);border-radius:6px;padding:.9rem 1rem">
     <div style="color:var(--accent2);font-weight:700;margin-bottom:.5rem">&#10007; Dati non disponibili</div>
     <div style="color:var(--text-mid)">&#x2022; sAMAccountName (colonna non mappata)</div>
     <div style="color:var(--text-mid)">&#x2022; samAccountType / userAccountControl</div>
-    <div style="color:var(--text-mid)">&#x2022; Membership gruppi privilegiati</div>
+    <div style="color:var(--text-mid)">&#x2022; {L("Membership gruppi privilegiati", "Privileged group membership")}</div>
     <div style="color:var(--text-mid)">&#x2022; Link-table group membership</div>
-    <div style="color:var(--text-mid)">&#x2022; Hash delle password</div>
+    <div style="color:var(--text-mid)">&#x2022; {L("Hash delle password", "Password hashes")}</div>
   </div>
 </div>
 <div style="color:var(--text-dim);margin-bottom:1rem">
@@ -8247,7 +8225,7 @@ if _catalog_corrupt:
 <div style="margin-top:.8rem;color:var(--text);font-weight:700;border-top:1px solid rgba(255,255,255,.08);padding-top:.8rem">Procedura di recupero</div>
 <div style="margin:.6rem 0">
   <div style="color:var(--accent3);font-weight:600">Opzione 1 &mdash; esentutl su Windows <span style="color:var(--text-dim)">(recovery completo, consigliato)</span></div>
-  <div style="color:var(--text-dim);margin:.2rem 0 .2rem 1rem">Sul DC sorgente o una VM Windows con ntds.dit + log ESE nella stessa cartella:</div>
+  <div style="color:var(--text-dim);margin:.2rem 0 .2rem 1rem">{L("Sul DC sorgente o una VM Windows con ntds.dit + log ESE nella stessa cartella:", "On the source DC or a Windows VM with ntds.dit + ESE log files in the same folder:")}</div>
   <div style="background:rgba(0,0,0,.3);border-radius:4px;padding:.4rem .8rem;margin:.2rem 0 .4rem 1rem;color:var(--accent)">esentutl /r edb /l "C:\\Windows\\NTDS" /s "C:\\Windows\\NTDS" /!32768</div>
   <div style="color:var(--text-dim);margin-left:1rem">Poi copia ntds.dit recuperato e rilancia il modulo 38.</div>
 </div>
@@ -8273,83 +8251,83 @@ if _catalog_corrupt:
   <b style="color:var(--accent2)">Perch&eacute; il soft-recovery non basta:</b>
   <span style="color:var(--text-dim)"> Il replay dei log ESE corregge solo lo stato <i>DirtyShutdown</i> (transazioni non committed).
   Le pagine di catalogo 14, 19&ndash;22 di questo NTDS.dit sono fisicamente danneggiate (byte corrotti nel payload ESE):
-  nessun log pu&ograve; ripristinare dati che non esistono pi&ugrave; sul disco.</span>
+  {L("nessun log pu&ograve; ripristinare dati che non esistono pi&ugrave; sul disco.", "no log files can restore data that no longer exists on disk.")}</span>
 </div>
 </div></div>"""
 
 # ── HTML output ────────────────────────────────────────────────────
 html_out = f"""<!DOCTYPE html>
-<html lang="it"><head><meta charset="UTF-8">
+<html lang="{L("it", "en")}"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>PAD Offline — DFIR Report</title>
 <style>{CSS}</style></head><body>
 <header>
   <div class="hicon">AD</div>
   <div class="htxt">
-    <h1>PAD Offline — <span>Panoramica Active Directory</span></h1>
+    <h1>PAD Offline — <span>{L("Panoramica Active Directory", "Active Directory Overview")}</span></h1>
     <div class="sub">NTDS.dit offline forensic analysis</div>
   </div>
   <div class="hmeta">
-    <div>Scansione: <span class="val">{h(scan_date)}</span></div>
-    <div>Sorgente: <span class="val">{h(source_root)}</span></div>
+    <div>{L("Scansione:", "Scan:")} <span class="val">{h(scan_date)}</span></div>
+    <div>{L("Sorgente:", "Source:")} <span class="val">{h(source_root)}</span></div>
     <div style="font-size:.6rem">SHA256: <span class="val" style="word-break:break-all">{h(ntds_hash)}</span></div>
   </div>
 </header>
 <div class="statsbar">
-  <div class="stat"><div class="label">Utenti Privilegiati</div><div class="value">{total_priv}</div></div>
-  <div class="stat"><div class="label">Gruppi Monitorati</div><div class="value info" style="color:var(--accent)">{len(PRIV_GROUPS)}</div></div>
-  <div class="stat"><div class="label">KRBTGT (giorni)</div><div class="value {krbtgt_cls}">{krbtgt_days if krbtgt_days is not None else 'N/A'}</div></div>
-  <div class="stat"><div class="label">Password Stale (&gt;24h)</div><div class="value">{total_stale}</div></div>
-  <div class="stat"><div class="label">GPO Modificate (30gg)</div><div class="value {"" if gpo_recent==0 else ""}">{gpo_recent}/{total_gpo}</div></div>
-  <div class="stat ok"><div class="label">Computer nel Dominio</div><div class="value">{total_comp}</div></div>
+  <div class="stat"><div class="label">{L("Utenti Privilegiati", "Privileged Users")}</div><div class="value">{total_priv}</div></div>
+  <div class="stat"><div class="label">{L("Gruppi Monitorati", "Monitored Groups")}</div><div class="value info" style="color:var(--accent)">{len(PRIV_GROUPS)}</div></div>
+  <div class="stat"><div class="label">{L("KRBTGT (giorni)", "KRBTGT (days)")}</div><div class="value {krbtgt_cls}">{krbtgt_days if krbtgt_days is not None else 'N/A'}</div></div>
+  <div class="stat"><div class="label">{L("Password Stale (&gt;24h)", "Stale Passwords (&gt;24h)")}</div><div class="value">{total_stale}</div></div>
+  <div class="stat"><div class="label">{L("GPO Modificate (30gg)", "Modified GPOs (30d)")}</div><div class="value {"" if gpo_recent==0 else ""}">{gpo_recent}/{total_gpo}</div></div>
+  <div class="stat ok"><div class="label">{L("Computer nel Dominio", "Domain Computers")}</div><div class="value">{total_comp}</div></div>
 </div>
 <main>
 
-<div class="stitle">Configurazione Dominio</div>
+<div class="stitle">{L("Configurazione Dominio", "Domain Configuration")}</div>
 <div class="card"><table>
-<thead><tr><th>Parametro</th><th>Valore</th><th>Note</th></tr></thead>
+<thead><tr><th>{L("Parametro", "Parameter")}</th><th>{L("Valore", "Value")}</th><th>Note</th></tr></thead>
 <tbody>
 <tr><td class="mono dim">Domain Functional Level</td>
     <td class="mono {fl_badge_cls}">{h(domain_fl)}</td><td></td></tr>
 <tr><td class="mono dim">KRBTGT pwdLastSet</td>
     <td class="mono {krbtgt_cls}">{h(krbtgt_pwd)}</td>
-    <td>{krbtgt_badge}{'<span class="tag tag-bad">GOLDEN TICKET RISK: rotazione &gt;180gg</span>' if (krbtgt_days and krbtgt_days>180) else ''}</td></tr>
+    <td>{krbtgt_badge}{'<span class="tag tag-bad">{L("GOLDEN TICKET RISK: rotazione &gt;180gg", "GOLDEN TICKET RISK: rotation &gt;180d")}</span>' if (krbtgt_days and krbtgt_days>180) else ''}</td></tr>
 <tr><td class="mono dim">AD Recycle Bin</td>
     <td class="mono {"ok" if recycle_bin=="Enabled" else "bad"}">{h(recycle_bin)}</td>
     <td>{"" if recycle_bin=="Enabled" else "<span class='tag tag-warn'>Oggetti eliminati non recuperabili</span>"}</td></tr>
-<tr><td class="mono dim">Utenti Privilegiati Disabilitati</td>
+<tr><td class="mono dim">{L("Utenti Privilegiati", "Privileged Users")} Disabilitati</td>
     <td class="mono {"warn" if total_disabled>0 else "ok"}">{total_disabled}</td><td></td></tr>
 </tbody></table></div>
 
 {_catalog_corrupt_html}
-<div class="stitle">Utenti Privilegiati — {total_priv} account ({len(PRIV_GROUPS)} gruppi monitorati)</div>
+<div class="stitle">{L("Utenti Privilegiati", "Privileged Users")} — {total_priv} account ({len(PRIV_GROUPS)} gruppi monitorati)</div>
 <div class="card"><table>
-<thead><tr><th>sAMAccountName</th><th>Gruppi (Direct/Nested)</th><th>pwdLastSet</th><th>lastLogon</th><th>Flags</th><th>SID</th></tr></thead>
-<tbody>{rows_priv if rows_priv else "<tr><td colspan='6' class='dim' style='padding:1rem;text-align:center'>Nessun utente privilegiato trovato</td></tr>"}</tbody>
+<thead><tr><th>sAMAccountName</th><th>{L("Gruppi (Direct/Nested)", "Groups (Direct/Nested)")}</th><th>pwdLastSet</th><th>lastLogon</th><th>Flags</th><th>SID</th></tr></thead>
+<tbody>{rows_priv if rows_priv else "<tr><td colspan='6' class='dim' style='padding:1rem;text-align:center'>{L("Nessun utente privilegiato trovato", "No privileged users found")}</td></tr>"}</tbody>
 </table></div>
 
-<div class="stitle">ACL Domain Root — ACE con diritti pericolosi</div>
+<div class="stitle">{L("ACL Domain Root — ACE con diritti pericolosi", "ACL Domain Root — Dangerous ACE rights")}</div>
 <div class="card"><table>
-<thead><tr><th>Trustee</th><th>SID</th><th>Diritti</th><th>Access Mask</th><th>Flags</th></tr></thead>
+<thead><tr><th>Trustee</th><th>SID</th><th>{L("Diritti", "Rights")}</th><th>Access Mask</th><th>Flags</th></tr></thead>
 <tbody>{ace_rows(root_aces)}</tbody>
 </table></div>
 
-<div class="stitle">ACL OU Domain Controllers — ACE con diritti pericolosi</div>
+<div class="stitle">{L("ACL OU Domain Controllers — ACE con diritti pericolosi", "ACL OU Domain Controllers — Dangerous ACE rights")}</div>
 <div class="card"><table>
-<thead><tr><th>Trustee</th><th>SID</th><th>Diritti</th><th>Access Mask</th><th>Flags</th></tr></thead>
+<thead><tr><th>Trustee</th><th>SID</th><th>{L("Diritti", "Rights")}</th><th>Access Mask</th><th>Flags</th></tr></thead>
 <tbody>{ace_rows(dc_ou_aces)}</tbody>
 </table></div>
 
-<div class="stitle">Group Policy Objects — {total_gpo} GPO totali</div>
+<div class="stitle">Group Policy Objects — {total_gpo} {L("GPO totali", "total GPOs")}</div>
 <div class="card"><table>
-<thead><tr><th>Display Name</th><th>Ultima Modifica</th><th>Path SYSVOL</th></tr></thead>
-<tbody>{rows_gpo if rows_gpo else "<tr><td colspan='3' class='dim' style='padding:1rem;text-align:center'>Nessuna GPO trovata</td></tr>"}</tbody>
+<thead><tr><th>Display Name</th><th>{L("Ultima Modifica", "Last Modified")}</th><th>Path SYSVOL</th></tr></thead>
+<tbody>{rows_gpo if rows_gpo else "<tr><td colspan='3' class='dim' style='padding:1rem;text-align:center'>{L("Nessuna GPO trovata", "No GPOs found")}</td></tr>"}</tbody>
 </table></div>
 
-<div class="stitle">Computer nel Dominio — {total_comp} oggetti</div>
+<div class="stitle">{L("Computer nel Dominio", "Domain Computers")} — {total_comp} oggetti</div>
 <div class="card"><table>
 <thead><tr><th>Computer Name</th><th>Operating System</th><th>Distinguished Name</th></tr></thead>
-<tbody>{rows_comp if rows_comp else "<tr><td colspan='3' class='dim' style='padding:1rem;text-align:center'>Nessun computer trovato</td></tr>"}</tbody>
+<tbody>{rows_comp if rows_comp else "<tr><td colspan='3' class='dim' style='padding:1rem;text-align:center'>{L("Nessun computer trovato", "No computers found")}</td></tr>"}</tbody>
 </table></div>
 
 </main>
