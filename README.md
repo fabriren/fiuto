@@ -1,5 +1,332 @@
 # FIUTO 🔍
 
+## 🇬🇧 English Version
+
+**FIUTO** (**F**orensic **I**nvestigation **U**tility **T**ool for **O**ffline) is a unified DFIR (Digital Forensics and Incident Response) toolkit for comprehensive offline Windows disk analysis. It automates the extraction and analysis of 38+ critical forensic artifacts, generating detailed HTML reports for rapid and effective investigations.
+
+---
+
+## 📋 Key Features
+
+### Comprehensive Windows Artifact Coverage
+FIUTO collects and analyzes:
+- **Execution histories** (Prefetch, AmCache, ShimCache, BAM)
+- **Persistence artifacts** (Run Keys, Scheduled Tasks, Services, WMI)
+- **Navigation history** (Browser history, URL MRU, TypedPaths)
+- **User activity** (UserAssist, ShellBags, LNK files, JumpLists)
+- **Network artifacts** (Interfaces, DNS cache, WLAN/VPN profiles)
+- **Windows event logs** (Security, System, PowerShell, RDP)
+- **Virtual memory** (Pagefile, Hibernation, SRUM)
+- **Removable devices** (USB history, connection timeline)
+- **Active Directory** (NTDS.dit, domain hashes, PAD offline analysis)
+- **And much more...**
+
+### Flexible Execution Modes
+```bash
+./fiuto.sh                          # Interactive menu
+./fiuto.sh /mnt/windows             # Specify Windows volume root
+./fiuto.sh /mnt/windows --all       # Run all modules
+./fiuto.sh /mnt/windows --module 3  # Run specific module
+```
+
+### Professional Output
+- Interactive and navigable HTML reports
+- Aggregated chronological timelines
+- Detailed logs for audit and tracking
+- Batch summaries with execution metrics
+
+---
+
+## 🛠️ Dependencies
+
+### System Requirements
+- **Bash 4.0+**
+- **Python 3.9+** (with multi-version compatibility)
+- **Linux (or WSL) or macOS** (for mounting/analyzing offline Windows disks)
+
+### Required Python Modules
+```bash
+pip install regipy          # Offline registry hive parsing
+pip install python-evtx     # Reading .evtx files
+```
+
+### Support Scripts
+The script uses internal bash helpers for:
+- Binary Windows file parsing
+- FILETIME timestamp decoding
+- Proprietary format metadata extraction
+
+---
+
+## 📦 Installation
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/fabriren/fiuto.git
+   cd fiuto
+   ```
+
+2. **Make the script executable**
+   ```bash
+   chmod +x fiuto.sh
+   ```
+
+3. **Install Python dependencies**
+   ```bash
+   pip install regipy python-evtx
+   # On macOS with Homebrew:
+   # python3 -m pip install --user regipy python-evtx
+   ```
+
+4. **Mount the Windows disk (example)**
+   ```bash
+   # On Linux with ntfs-3g
+   sudo mount -t ntfs-3g -o ro /dev/sda3 /mnt/windows
+
+   # On macOS
+   sudo mount -t ntfs -o rdonly /dev/disk0s3 /mnt/windows
+   ```
+
+---
+
+## 🚀 Quick Start Guide
+
+### Interactive Analysis
+```bash
+./fiuto.sh /mnt/windows
+```
+The script will present a numbered menu with 38 available modules. Select the module number or type `--all` to run them all.
+
+### Automated Batch Analysis
+```bash
+./fiuto.sh /mnt/windows --all
+```
+Runs all modules sequentially, generates a final summary, and saves reports to `fiuto_reports/`.
+
+### Single Module
+```bash
+./fiuto.sh /mnt/windows --module 12
+```
+Runs only module 12 (Event Log in our example).
+
+### Output
+Generated reports are located in:
+```
+fiuto_reports/
+├── 001_PSReadLine_History.html
+├── 002_IFEO.html
+├── 012_Event_Log.html
+├── ...
+└── 38_PAD_Offline.html
+```
+
+---
+
+## 📊 The 38 Analysis Modules
+
+| # | Module Name | Windows Artifact | Usage |
+|---|---|---|---|
+| 1 | PowerShell PSReadLine History | PSReadLine history file | Retrieve executed commands and sensitive strings |
+| 2 | IFEO | Registry SOFTWARE | Detect executable manipulation |
+| 3 | BAM | Registry SYSTEM | Timeline of background executions |
+| 4 | RDP Cache | Terminal Server Client Cache | Reconstruct RDP sessions |
+| 5 | Run Keys & Persistence | Registry NTUSER.DAT, SOFTWARE | Detect backdoors and malware |
+| 6 | Prefetch | Windows/Prefetch/*.pf | Program execution history |
+| 7 | Notepad TabState | AppData Packages | Recover unsaved text |
+| 8 | Scheduled Tasks | Windows/System32/Tasks | Find scheduled droppers |
+| 9 | USB/Devices | Registry SYSTEM | USB device insertion history |
+| 10 | LNK & JumpList | AppData Recent | Recently used files |
+| 11 | Services | Registry SYSTEM | Anomalous or custom services |
+| 12 | Event Log | Windows/System32/winevt/Logs/*.evtx | Logins, RDP, suspicious activity |
+| 13 | Amcache + Shimcache | Amcache.hve, Registry | Execution history with hashes |
+| 14 | Recycle Bin | $Recycle.Bin | Recover deleted files |
+| 15 | WMI Subscriptions | OBJECTS.DATA | Fileless persistence |
+| 16 | SRUM | SRUDB.dat | Resource consumption by app |
+| 17 | Browser History | SQLite History/places | Web navigation |
+| 18 | UserAssist + MRU | Registry NTUSER.DAT | GUI-launched apps |
+| 19 | ShellBags | Registry NTUSER.DAT/UsrClass | Folder navigation |
+| 20 | SAM Hash | Windows/System32/config/SAM | NTLM hashes of local accounts |
+| 21 | MFT Timeline | $MFT | Granular NTFS changes |
+| 22 | OpenSaveMRU | Registry NTUSER.DAT | Open/save file history |
+| 23 | USN Journal | $UsnJrnl:$J | Massive file system activity |
+| 24 | NTDS.dit | ntds.dit, Registry SYSTEM | Domain user hashes |
+| 25 | Hibernation/Pagefile | hiberfil.sys, pagefile.sys | Memory dump analysis |
+| 26 | WER Files | WER Report Archive | System crashes and errors |
+| 27 | Credential Manager | Credentials DPAPI | Saved network credentials |
+| 28 | WLAN & VPN Profiles | Wlansvc Profiles | SSIDs and VPN profiles |
+| 29 | AppX / UWP Packages | AppData/Local/Packages | Installed modern apps |
+| 30 | Browser Downloads & Logins | SQLite databases | Downloads and credentials |
+| 31 | Clipboard History | ActivitiesCache.db | Clipboard history |
+| 32 | Office MRU & Recent | NTUSER.DAT, AppData | Recently opened documents |
+| 33 | Defender Quarantine | Quarantine folder | Identified threats |
+| 34 | PowerShell Script Block | Event Log 4104 | Executed scripts |
+| 35 | JumpLists | Recent Destinations | App user interaction |
+| 36 | Network Artifacts | Registry SYSTEM | DNS, interfaces, networks |
+| 37 | Master Timeline | (Aggregated) | Cross-artifact timeline |
+| 38 | PAD Offline | NTDS.dit | Advanced Active Directory |
+
+---
+
+## 🔍 Use Cases
+
+### Malware Investigations
+Use persistence modules (Run Keys, Services, WMI) to find backdoors, and PowerShell logs to track obfuscated payload execution.
+
+### Incident Response
+Combine BAM, Prefetch, and Event Logs to build an accurate timeline of what was executed and when, helping identify patient zero.
+
+### Compliance & Audit
+Extract network activity (SRUM, DNS) and RDP access (RDP Cache, Event Logs) to demonstrate who accessed which systems.
+
+### Ransomware Forensics
+Analyze USN Journal, MFT Timeline, Recycle Bin, and Browser Downloads to trace infection spread and origins.
+
+### Threat Hunting
+Use USB history, WLAN/VPN profiles, and web navigation to uncover data exfiltration or communication with suspicious IPs.
+
+---
+
+## ⚙️ Advanced Options
+
+### Specify User
+```bash
+./fiuto.sh /mnt/windows --user Administrator
+```
+Focus analysis on a specific user.
+
+### Load IoC List
+```bash
+./fiuto.sh /mnt/windows --ioc /path/to/ioc_list.txt
+```
+Scan artifacts for matches with indicators of compromise.
+
+### Silent Mode
+```bash
+./fiuto.sh /mnt/windows --all --silent
+```
+Run without interactive output (useful for automated scripts).
+
+---
+
+## 📄 Report Output
+
+Each module generates an HTML report with:
+- **Structured data table** that is sortable and filterable
+- **Timeline** with UTC timestamps and decoded FILETIME values
+- **Highlighting** of suspicious elements (passwords, tokens, obfuscated commands)
+- **Metadata** (hashes, absolute paths, involved accounts)
+- **Forensic notes** on how to interpret results
+
+### Example Report
+```
+┌─ Report: Event Log (Module 12)
+│
+├─ Timespan: 2025-03-15 08:30:00 UTC → 2025-04-14 17:42:00 UTC
+├─ Total Events: 12,847
+├─ Critical Events: 8
+│  ├─ Suspicious PowerShell: 3
+│  ├─ Failed RDP Logins: 4
+│  └─ Service Installs: 1
+│
+└─ Top Events
+   ├─ [08:45:32] EID 4688 - Process Created: powershell.exe -NoP -W H -C "IEX ..."
+   ├─ [14:22:15] EID 4768 - Kerberos Auth Failure: Administrator
+   └─ ...
+```
+
+---
+
+## 🐛 Troubleshooting
+
+### Error: "regipy module not found"
+```bash
+# Install for correct Python version
+python3 -m pip install regipy
+# Or check which Python has regipy:
+which python3 | xargs python3 -c "import regipy; print('OK')"
+```
+
+### Read-only file system
+The script opens the disk in read-only mode (`-o ro`) by default. It never modifies the analyzed system.
+
+### Permission denied on some files
+Some artifacts (SAM, NTDS.dit) may require elevated privileges:
+```bash
+sudo ./fiuto.sh /mnt/windows --all
+```
+
+### Reports not generated
+Verify the `fiuto_reports/` directory exists and is writable:
+```bash
+mkdir -p fiuto_reports
+chmod 755 fiuto_reports
+```
+
+---
+
+## 📝 Logging
+
+The script creates a detailed session log in:
+```
+fiuto_reports/session_YYYY-MM-DD_HH-MM-SS.log
+```
+
+Useful for debugging and audit trail:
+```bash
+tail -f fiuto_reports/session_*.log
+```
+
+---
+
+## 🤝 Contributing
+
+If you have improvements, bug reports, or additional modules:
+
+1. Fork the repository
+2. Create a branch for your feature (`git checkout -b feature/new-module`)
+3. Commit your changes (`git commit -am 'Add new module'`)
+4. Push to the branch (`git push origin feature/new-module`)
+5. Open a Pull Request
+
+---
+
+## ⚖️ License
+
+This project is distributed under the **MIT License**.
+
+---
+
+## 👤 Author
+
+Created by **zi®iginal** for the DFIR community.
+
+---
+
+## 📚 Recommended Resources
+
+- [SANS Windows Artifact Analysis](https://www.sans.org)
+- [Plaso - Timeline log2timeline](https://plaso.readthedocs.io)
+- [Registry Explorer](https://www.sans.org/tools/registry-explorer/)
+- [KAPE - Kroll Artifact Parser](https://www.kroll.com/en/services/cyber-risk/incident-response-forensics/kape)
+- [Hayabusa - Windows Event Log Analysis](https://github.com/Yamato-Security/hayabusa)
+
+---
+
+## ⚠️ Legal Disclaimer
+
+FIUTO is a tool to accelerate legitimate digital forensic analysis, intended for authorized offline analysis. It must be used **only** on systems you have the legal right to analyze. Unauthorized use may violate privacy and data protection laws.
+
+**We are not responsible for:**
+- Unauthorized or illegal tool usage
+- Privacy or data protection violations
+- Direct or indirect damages from using fiuto
+
+---
+
+---
+
+# 🇮🇹 Versione Italiana
+
 **FIUTO** (**F**orensic **I**nvestigation **U**tility **T**ool for **O**ffline) è un toolkit DFIR (Digital Forensics and Incident Response) unificato per l'analisi completa di dischi Windows offline. Automatizza l'estrazione e l'analisi di 38+ artefatti critici in ottica forense digitale, generando report HTML dettagliati per investigazioni rapide ed efficaci.
 
 ---
@@ -40,7 +367,7 @@ FIUTO raccoglie e analizza:
 ### Requisiti di Sistema
 - **Bash 4.0+**
 - **Python 3.9+** (con module di compatibilità multiple versioni)
-- **Linux o macOS** (per montare/analizzare dischi Windows offline)
+- **Linux (anche WSL) o macOS** (per montare/analizzare dischi Windows offline)
 
 ### Moduli Python Richiesti
 ```bash
@@ -80,7 +407,7 @@ Lo script utilizza internamente helper bash per:
    ```bash
    # Su Linux con ntfs-3g
    sudo mount -t ntfs-3g -o ro /dev/sda3 /mnt/windows
-   
+
    # Su macOS
    sudo mount -t ntfs -o rdonly /dev/disk0s3 /mnt/windows
    ```
@@ -321,9 +648,7 @@ FIUTO è uno strumento per velocizzare le analisi forensi digitale legittimo, da
 
 ---
 
-**Ultima modifica:** 2026-04-14 | **Versione:** 2.6
+**Last update:** 2026-04-15 | **Version:** 2.7 (Bilingual)
 
-<img width="982" height="574" alt="image" src="https://github.com/user-attachments/assets/0ddc9024-0736-4fe0-ae47-1e6fb6c7c003" />
+<img width="982" height="574" alt="image" src="https://github.com/user-attachments/assets/0ddc9023-0736-4fe0-ae47-1e6fb6c7c003" />
 <img width="983" height="934" alt="image" src="https://github.com/user-attachments/assets/3d8a3c09-fe3c-4711-baca-9d3e8c65bff7" />
-
-
