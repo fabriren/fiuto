@@ -648,7 +648,9 @@ FIUTO è uno strumento per velocizzare le analisi forensi digitale legittimo, da
 
 ---
 
-**Last update:** 2026-04-15 | **Version:** 2.7 (Bilingual)
+**Last update:** 2026-04-15 | **Version:** 1.0 
+<img width="630" height="511" alt="image" src="https://github.com/user-attachments/assets/732f7cbb-f099-4987-913c-d02a5045f61f" />
+<img width="973" height="1014" alt="image" src="https://github.com/user-attachments/assets/b5ec0335-db89-4732-96e3-584b54007c02" />
+<img width="1852" height="915" alt="image" src="https://github.com/user-attachments/assets/c9fb9a77-85db-4d28-9e4d-597c06160b03" />
 
-<img width="982" height="574" alt="image" src="https://github.com/user-attachments/assets/0ddc9023-0736-4fe0-ae47-1e6fb6c7c003" />
-<img width="983" height="934" alt="image" src="https://github.com/user-attachments/assets/3d8a3c09-fe3c-4711-baca-9d3e8c65bff7" />
+
