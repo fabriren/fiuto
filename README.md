@@ -163,7 +163,7 @@ fiuto_reports/
 | 35 | JumpLists | Recent Destinations | App user interaction |
 | 36 | Network Artifacts | Registry SYSTEM | DNS, interfaces, networks |
 | 37 | Master Timeline | (Aggregated) | Cross-artifact timeline |
-| 38 | PAD Offline | NTDS.dit | Advanced Active Directory |
+| 38 | PAD Offline | NTDS.dit | Active Directory Panoramic |
 
 ---
 
@@ -488,7 +488,7 @@ fiuto_reports/
 | 35 | JumpLists | Recent Destinations | Interazione utente app |
 | 36 | Network Artifacts | Registry SYSTEM | DNS, interfacce, reti |
 | 37 | Master Timeline | (Aggregato) | Timeline cross-artefatto |
-| 38 | PAD Offline | NTDS.dit | Active Directory avanzato |
+| 38 | PAD Offline | NTDS.dit | Panoramica Active Directory |
 
 ---
 
