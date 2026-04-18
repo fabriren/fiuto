@@ -664,6 +664,8 @@ Bug fix.
 **Date:** 2026-04-15 | **Version:** 1.0
 First release.
 
+---
+**Screenshot:**
 
 <img width="1021" height="407" alt="image" src="https://github.com/user-attachments/assets/a6287b54-b09a-4653-a513-b23d9c15eaaf" />
 
