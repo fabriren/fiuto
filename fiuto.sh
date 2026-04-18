@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ================================================================
-#  fiuto.sh  –  v1.0
+#  fiuto.sh  –  v1.1
 #  Toolkit DFIR unificato per analisi di disco Windows offline
 #
 #  Uso:
@@ -11,6 +11,22 @@
 # ================================================================
 
 set -uo pipefail
+
+# -- Cleanup globale file temporanei (signal-safe) ----------------
+# La trap EXIT viene invocata su ritorno normale, SIGINT (Ctrl+C),
+# SIGTERM, SIGHUP e errori.
+# SIGKILL (kill -9) non e' intercettabile per design del kernel.
+declare -a _GLOBAL_TMP_FILES=()
+_global_cleanup() {
+    local _f
+    for _f in "${_GLOBAL_TMP_FILES[@]:-}"; do
+        [[ -e "$_f" ]] && rm -rf "$_f" 2>/dev/null || true
+    done
+}
+trap _global_cleanup EXIT
+
+# Helper: registra un file/dir temporaneo per cleanup automatico
+register_tmp() { _GLOBAL_TMP_FILES+=("$1"); }
 
 # ── Colori ───────────────────────────────────────────────────────
 RED='\033[0;31m';    GREEN='\033[0;32m';  YELLOW='\033[1;33m'
@@ -234,7 +250,7 @@ print_banner() {
     echo "  ║      ╚═╝       ╚═╝   ╚═════╝      ╚═╝      ╚═════╝       ║"
     echo "  ║                                                          ║"
     echo -e "  ║    ${CYAN}${BOLD}F${RESET}${CYAN}orensic ${BOLD}I${RESET}${CYAN}nvestigation ${BOLD}U${RESET}${CYAN}tility ${BOLD}T${RESET}${CYAN}ool for ${BOLD}O${RESET}${CYAN}ffline${RESET}       ${CYAN}${BOLD}║"
-    echo -e "  ║                    ${MAGENTA}${BOLD}v1.0 - zi®iginal${RESET}${CYAN}                      ║"
+    echo -e "  ║                    ${MAGENTA}${BOLD}v1.1 - zi®iginal${RESET}${CYAN}                      ║"
     echo "  ╚══════════════════════════════════════════════════════════╝"
     echo -e "${RESET}"
     local DATE_LABEL="$([ "$LANG" = "it" ] && echo "Data" || echo "Date")"
@@ -1701,7 +1717,7 @@ module_notepad_tabstate() {
     # Parser .bin inline (stessa logica di notepad_tabstate.sh)
     local PARSER_PY=""
     PARSER_PY=$(mktemp /tmp/npad_parse_XXXXXX.py)
-    trap '[[ -n "${PARSER_PY:-}" ]] && rm -f "$PARSER_PY"' RETURN
+    register_tmp "$PARSER_PY"
     cat > "$PARSER_PY" << 'PYEOF'
 import sys, json, html as html_mod
 
@@ -2568,7 +2584,7 @@ PYEOF
     # File JSONL globale — accumula tutti gli eventi senza limiti argv
     local TMP_ALL=""
     TMP_ALL=$(mktemp /tmp/dfir_allevt_XXXXXX.jsonl)
-    trap '[[ -n "${PARSER_EVTX:-}" ]] && rm -f "$PARSER_EVTX"; [[ -n "${TMP_ALL:-}" ]] && rm -f "$TMP_ALL"' RETURN
+    register_tmp "$PARSER_EVTX"; register_tmp "$TMP_ALL"
 
     local TOTAL_FOUND=0 SUSP_COUNT=0
 
@@ -3001,7 +3017,7 @@ module_recycle_bin() {
     # Parser $I files — formato binario con path originale e timestamp
     local IPARSE=""
     IPARSE=$(mktemp /tmp/dfir_rb_XXXXXX.py)
-    trap '[[ -n "${IPARSE:-}" ]] && rm -f "$IPARSE"' RETURN
+    register_tmp "$IPARSE"
     cat > "$IPARSE" << 'PYEOF'
 import sys, struct, datetime, os
 
@@ -3521,7 +3537,7 @@ module_browser() {
         return 1
     }
 
-    trap 'rm -f "${HIST_PARSER:-}" "${TMP_ROWS:-}" 2>/dev/null' RETURN
+    register_tmp "$HIST_PARSER"; register_tmp "$TMP_ROWS"
     cat > "$HIST_PARSER" << 'PYEOF'
 import sys, sqlite3, shutil, os, tempfile, datetime, json
 
@@ -4371,9 +4387,9 @@ PYEOF
     echo ""
 
     local TMP_DIR; TMP_DIR=$(mktemp -d /tmp/dfir_sam_XXXXXX)
-    trap '[[ -n "${TMP_DIR:-}" ]] && rm -rf "$TMP_DIR"' RETURN
-    cp "$SAM_HIVE" "$TMP_DIR/SAM" 2>/dev/null || true
-    cp "$SYS_HIVE" "$TMP_DIR/SYSTEM" 2>/dev/null || true
+    register_tmp "$TMP_DIR"
+    cp "$SAM_HIVE" "$TMP_DIR/SAM" 2>/dev/null || { err "Copia hive fallita"; return 1; }
+    cp "$SYS_HIVE" "$TMP_DIR/SYSTEM" 2>/dev/null || { err "Copia hive fallita"; return 1; }
     chmod 600 "$TMP_DIR/SAM" "$TMP_DIR/SYSTEM" 2>/dev/null || true
 
     local DUMP_OUT
@@ -4526,7 +4542,7 @@ module_mft() {
             if ntfscat -f "$DEV" '$MFT' > "$TMP_MFT" 2>/dev/null && [[ -s "$TMP_MFT" ]]; then
                 MFT_FILE="$TMP_MFT"
                 ok "$(L "\$MFT estratto con ntfscat" "\$MFT extracted with ntfscat") ($(du -h "$MFT_FILE" | cut -f1))"
-                trap '[[ -n "${TMP_MFT:-}" ]] && rm -f "$TMP_MFT"' RETURN
+                register_tmp "$TMP_MFT"
             else
                 rm -f "$TMP_MFT"
                 TMP_MFT=""
@@ -4595,7 +4611,7 @@ module_mft() {
 
     local TMP_MFT_CSV; TMP_MFT_CSV=$(mktemp /tmp/dfir_mft_XXXXXX.csv)
     local TMP_MFT_ROWS; TMP_MFT_ROWS=$(mktemp /tmp/dfir_mft_rows_XXXXXX.html)
-    trap '[[ -n "${TMP_MFT_CSV:-}" ]] && rm -f "$TMP_MFT_CSV"; [[ -n "${TMP_MFT_ROWS:-}" ]] && rm -f "$TMP_MFT_ROWS"' RETURN
+    register_tmp "$TMP_MFT_CSV"; register_tmp "$TMP_MFT_ROWS"
 
     "$PY3" - "$MFT_FILE" "$TMP_MFT_CSV" << 'PYEOF' 2>/dev/null
 import sys, json, datetime
@@ -4987,7 +5003,7 @@ module_usn() {
             if ntfscat -f "$DEV" '$Extend/$UsnJrnl:$J' > "$TMP_USN" 2>/dev/null && [[ -s "$TMP_USN" ]]; then
                 UJFILE="$TMP_USN"
                 ok "$(L "\$UsnJrnl estratto" "\$UsnJrnl extracted") ($(du -h "$UJFILE" | cut -f1))"
-                trap '[[ -n "${TMP_USN:-}" ]] && rm -f "$TMP_USN"' RETURN
+                register_tmp "$TMP_USN"
             else
                 rm -f "$TMP_USN"
                 warn "$(L "\$UsnJrnl non accessibile. Monta con: mount -t ntfs-3g -o ro,show_sys_files" "\$UsnJrnl not accessible. Mount with: mount -t ntfs-3g -o ro,show_sys_files")"
@@ -5004,7 +5020,7 @@ module_usn() {
 
     local TMP_USN_CSV; TMP_USN_CSV=$(mktemp /tmp/dfir_usn_XXXXXX.csv)
     local TMP_USN_ROWS; TMP_USN_ROWS=$(mktemp /tmp/dfir_usn_rows_XXXXXX.html)
-    trap '[[ -n "${TMP_USN_CSV:-}" ]] && rm -f "$TMP_USN_CSV"; [[ -n "${TMP_USN_ROWS:-}" ]] && rm -f "$TMP_USN_ROWS"' RETURN
+    register_tmp "$TMP_USN_CSV"; register_tmp "$TMP_USN_ROWS"
 
     "$PY3" - "$UJFILE" "$TMP_USN_CSV" << 'PYEOF' 2>/dev/null || true
 import sys, struct, datetime, os
@@ -5177,7 +5193,7 @@ module_ntds() {
 
     info "$(L "Estrazione hash con impacket NTDSHashes..." "Extracting hashes with impacket NTDSHashes...")"
     local TMP_DIR; TMP_DIR=$(mktemp -d /tmp/dfir_ntds_XXXXXX)
-    trap '[[ -n "${TMP_DIR:-}" ]] && rm -rf "$TMP_DIR"' RETURN
+    register_tmp "$TMP_DIR"
 
     # Copia con timeout: su share SMB da DC live la copia può bloccarsi indefinitamente
     info "$(L "Copia ntds.dit in /tmp (timeout 180s — file di rete, attendere)..." "Copying ntds.dit to /tmp (timeout 180s — network file, please wait)...")"
@@ -5993,7 +6009,7 @@ module_browser_extra() {
 
     local TMP_DL_ROWS; TMP_DL_ROWS=$(mktemp /tmp/dfir_dlrows_XXXXXX.html)
     local TMP_LG_ROWS; TMP_LG_ROWS=$(mktemp /tmp/dfir_lgrows_XXXXXX.html)
-    trap '[[ -n "${TMP_DL_ROWS:-}" ]] && rm -f "$TMP_DL_ROWS"; [[ -n "${TMP_LG_ROWS:-}" ]] && rm -f "$TMP_LG_ROWS"' RETURN
+    register_tmp "$TMP_DL_ROWS"; register_tmp "$TMP_LG_ROWS"
     local TOTAL_DL=0 TOTAL_LG=0
 
     while IFS= read -r USER_DIR; do
@@ -8452,7 +8468,7 @@ run_all_modules() {
     run_batch_module 23 module_usn "USN Journal" 38
     run_batch_module 24 module_ntds "NTDS.dit" 38
     run_batch_module 25 module_hiberfil "Hibernation / Pagefile" 38
-    run_batch_module 26 module_evtx_tamper "EVTX Tampering" 38
+    run_batch_module 26 module_wer_files "WER Files" 38
     run_batch_module 27 module_credential_manager "Credential Manager" 38
     run_batch_module 28 module_wlan "WLAN Profiles" 38
     run_batch_module 29 module_appx "AppX / UWP" 38
