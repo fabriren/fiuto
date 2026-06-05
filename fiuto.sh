@@ -1012,9 +1012,16 @@ html_header() {
     display:flex; justify-content:space-between; }
   footer span { color:var(--accent); }
   /* ── Barra di ricerca / Search bar ── */
-  #fz-search { position:fixed; top:.7rem; right:.9rem; z-index:50; display:flex; align-items:center;
-    gap:.4rem; background:var(--bg3); border:1px solid var(--border); border-radius:6px;
-    padding:.35rem .5rem; box-shadow:0 4px 18px rgba(0,0,0,.45); font-family:var(--mono); }
+  #fz-toolbar { position:fixed; top:.7rem; right:.9rem; z-index:50; display:flex; align-items:center;
+    gap:.4rem; font-family:var(--mono); }
+  #fz-csv { display:flex; align-items:center; gap:.35rem; background:var(--bg3);
+    border:1px solid var(--border); border-radius:6px; color:var(--text); cursor:pointer;
+    font-family:var(--mono); font-size:.74rem; padding:.4rem .6rem; box-shadow:0 4px 18px rgba(0,0,0,.45); }
+  #fz-csv:hover { border-color:var(--accent3); color:var(--accent3); }
+  #fz-csv svg { width:.95rem; height:.95rem; }
+  #fz-search { display:flex; align-items:center; gap:.4rem; background:var(--bg3);
+    border:1px solid var(--border); border-radius:6px; padding:.35rem .5rem;
+    box-shadow:0 4px 18px rgba(0,0,0,.45); }
   #fz-search input { background:var(--bg); border:1px solid var(--border); color:var(--text);
     font-family:var(--mono); font-size:.78rem; padding:.3rem .55rem; border-radius:4px; width:15rem;
     outline:none; }
@@ -1026,10 +1033,9 @@ html_header() {
   #fz-close:hover { border-color:var(--accent2); color:var(--accent2); }
   #fz-count { font-size:.7rem; color:var(--text-dim); min-width:4.2rem; text-align:center; }
   #fz-search.fz-hidden { display:none; }
-  #fz-toggle { position:fixed; top:.7rem; right:.9rem; z-index:50; display:none; align-items:center;
-    justify-content:center; width:2.1rem; height:2.1rem; background:var(--bg3);
-    border:1px solid var(--border); border-radius:6px; color:var(--text-mid); cursor:pointer;
-    box-shadow:0 4px 18px rgba(0,0,0,.45); }
+  #fz-toggle { display:none; align-items:center; justify-content:center; width:2.1rem; height:2.1rem;
+    background:var(--bg3); border:1px solid var(--border); border-radius:6px; color:var(--text-mid);
+    cursor:pointer; box-shadow:0 4px 18px rgba(0,0,0,.45); }
   #fz-toggle.fz-show { display:flex; }
   #fz-toggle:hover { border-color:var(--accent); color:var(--accent); }
   #fz-toggle svg { width:1.05rem; height:1.05rem; }
@@ -1038,14 +1044,17 @@ html_header() {
 </style>
 </head>
 <body>
-<div id="fz-search">
-  <input id="fz-q" type="search" placeholder="$(L "Cerca nel report…" "Search report…")" autocomplete="off" spellcheck="false">
-  <span id="fz-count"></span>
-  <button id="fz-prev" title="$(L "Precedente" "Previous")">▲</button>
-  <button id="fz-next" title="$(L "Successivo" "Next")">▼</button>
-  <button id="fz-close" title="$(L "Chiudi ricerca" "Close search")">✕</button>
+<div id="fz-toolbar">
+  <button id="fz-csv" title="$(L "Scarica tutti i dati in CSV" "Download all data as CSV")"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"></path><path d="M7 11l5 5 5-5"></path><path d="M5 21h14"></path></svg>CSV</button>
+  <div id="fz-search">
+    <input id="fz-q" type="search" placeholder="$(L "Cerca nel report…" "Search report…")" autocomplete="off" spellcheck="false">
+    <span id="fz-count"></span>
+    <button id="fz-prev" title="$(L "Precedente" "Previous")">▲</button>
+    <button id="fz-next" title="$(L "Successivo" "Next")">▼</button>
+    <button id="fz-close" title="$(L "Chiudi ricerca" "Close search")">✕</button>
+  </div>
+  <button id="fz-toggle" title="$(L "Cerca nel report" "Search report")"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.5" y2="16.5"></line></svg></button>
 </div>
-<button id="fz-toggle" title="$(L "Cerca nel report" "Search report")"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.5" y2="16.5"></line></svg></button>
 HTMLEOF
 }
 
@@ -1088,7 +1097,43 @@ HTMLEOF
   var q=document.getElementById('fz-q'), cnt=document.getElementById('fz-count'),
       prev=document.getElementById('fz-prev'), next=document.getElementById('fz-next'),
       bar=document.getElementById('fz-search'), closeBtn=document.getElementById('fz-close'),
-      toggle=document.getElementById('fz-toggle');
+      toggle=document.getElementById('fz-toggle'), csvBtn=document.getElementById('fz-csv');
+  // ── Export CSV: serializza TUTTE le tabelle e i blocchi <pre> del report ──
+  function csvCell(v){ v=(v==null?'':String(v)); return /[",\r\n]/.test(v) ? '"'+v.replace(/"/g,'""')+'"' : v; }
+  function exportCSV(){
+    var root=document.querySelector('main')||document.body;
+    var nodes=root.querySelectorAll('table, pre');
+    var lines=[], lastLabel='';
+    nodes.forEach(function(node){
+      var card=node.closest ? node.closest('.card') : null, label='';
+      if(card){
+        var u=card.querySelector('.uname'), p=card.querySelector('.upath');
+        label=[u&&u.textContent.trim(), p&&p.textContent.trim()].filter(Boolean).join(' — ');
+      }
+      if(label && label!==lastLabel){ lines.push('# '+csvCell(label)); lastLabel=label; }
+      if(node.tagName==='TABLE'){
+        node.querySelectorAll('tr').forEach(function(tr){
+          var row=[];
+          tr.querySelectorAll('th,td').forEach(function(c){ row.push(csvCell(c.textContent.replace(/\s+/g,' ').trim())); });
+          if(row.length) lines.push(row.join(','));
+        });
+      } else {
+        node.textContent.split('\n').forEach(function(l){
+          l=l.replace(/^\s*\d+\s/,'').replace(/\s+$/,'');   // toglie il numero di riga
+          if(l.trim()!=='') lines.push(csvCell(l));
+        });
+      }
+      lines.push('');
+    });
+    if(!lines.length){ return; }
+    var blob=new Blob(['\ufeff'+lines.join('\r\n')], {type:'text/csv;charset=utf-8'});
+    var name=(document.title||'fiuto_report').replace(/\s*—.*$/,'').replace(/[^\w.-]+/g,'_').replace(/^_+|_+$/g,'').slice(0,80)||'fiuto_report';
+    var a=document.createElement('a');
+    a.href=URL.createObjectURL(blob); a.download=name+'.csv';
+    document.body.appendChild(a); a.click();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 200);
+  }
+  if(csvBtn) csvBtn.addEventListener('click', exportCSV);
   if(!q) return;
   var hits=[], idx=-1, timer=null;
   function openBar(){ bar.classList.remove('fz-hidden'); if(toggle) toggle.classList.remove('fz-show'); q.focus(); q.select(); }
@@ -6408,7 +6453,7 @@ try:
         WHERE a.anno_attribute_id IN (
             SELECT id FROM moz_anno_attributes WHERE name='downloads/destinationFileName'
         )
-        ORDER BY h.visit_date DESC LIMIT 10000
+        ORDER BY h.visit_date DESC LIMIT 100000
     """)
     for row in cur.fetchall():
         url = (row[0] or '')[:300]
@@ -6455,7 +6500,7 @@ try:
     cur = conn.cursor()
     cur.execute("""
         SELECT tab_url, target_path, start_time, total_bytes
-        FROM downloads ORDER BY start_time DESC LIMIT 10000
+        FROM downloads ORDER BY start_time DESC LIMIT 100000
     """)
     def ct(t):
         if not t: return ''
@@ -6505,7 +6550,7 @@ try:
     shutil.copy2(db_path, tmp)
     conn = sqlite3.connect(tmp)
     cur = conn.cursor()
-    cur.execute("SELECT origin_url, username_value, length(password_value), date_password_changed FROM logins ORDER BY date_password_changed DESC LIMIT 10000")
+    cur.execute("SELECT origin_url, username_value, length(password_value), date_password_changed FROM logins ORDER BY date_password_changed DESC LIMIT 100000")
     for row in cur.fetchall():
         url  = (row[0] or '')[:200]
         uname= (row[1] or '???')[:80]
@@ -7402,7 +7447,7 @@ PYEOF
     # Ordina per timestamp decrescente, scrive su file temp per evitare
     # problemi con here-string su variabili di grandi dimensioni
     local _TL_TMP; _TL_TMP=$(mktemp)
-    printf '%s\n' "$TL_RAW" | sort -t$'\t' -k1 -r | head -1000 > "$_TL_TMP"
+    printf '%s\n' "$TL_RAW" | sort -t$'\t' -k1 -r | head -100000 > "$_TL_TMP"
     local SHOW_COUNT; SHOW_COUNT=$(wc -l < "$_TL_TMP")
 
     separator
@@ -10378,11 +10423,11 @@ module_linux_journal() {
     for JF in "${JFILES[@]}"; do
         local TXT=""
         if [[ $HAVE_JCTL -eq 1 ]]; then
-            TXT=$(journalctl --no-pager --file "$JF" -o short-iso 2>/dev/null | head -2000)
+            TXT=$(journalctl --no-pager --file "$JF" -o short-iso 2>/dev/null | head -100000)
         fi
         if [[ -z "$TXT" ]]; then
             # fallback: estrazione stringhe leggibili dal binario
-            TXT=$(strings -n 8 "$JF" 2>/dev/null | grep -iE 'MESSAGE=|_COMM=|_EXE=|_HOSTNAME=' | sed 's/^MESSAGE=//' | head -1500)
+            TXT=$(strings -n 8 "$JF" 2>/dev/null | grep -iE 'MESSAGE=|_COMM=|_EXE=|_HOSTNAME=' | sed 's/^MESSAGE=//' | head -100000)
         fi
         [[ -z "$TXT" ]] && continue
         PARSED=$((PARSED + 1))
@@ -10559,7 +10604,7 @@ module_linux_browser() {
             local BASE="$HOME_DIR/$CR"; [[ -d "$BASE" ]] || continue
             while IFS= read -r HISTDB; do
                 [[ -f "$HISTDB" ]] || continue
-                local ROWS; ROWS=$(query_sqlite "$HISTDB" "SELECT datetime(last_visit_time/1000000-11644473600,'unixepoch'), url, title FROM urls ORDER BY last_visit_time DESC LIMIT 10000")
+                local ROWS; ROWS=$(query_sqlite "$HISTDB" "SELECT datetime(last_visit_time/1000000-11644473600,'unixepoch'), url, title FROM urls ORDER BY last_visit_time DESC LIMIT 100000")
                 [[ -z "$ROWS" || "$ROWS" == ERROR* ]] && continue
                 UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + 1))
                 ok "$UNAME — $(basename "$(dirname "$HISTDB")") (Chromium)"
@@ -10570,7 +10615,7 @@ module_linux_browser() {
         for FR in ".mozilla/firefox" "snap/firefox/common/.mozilla/firefox" ".var/app/org.mozilla.firefox/.mozilla/firefox"; do
             local FBASE="$HOME_DIR/$FR"; [[ -d "$FBASE" ]] || continue
             while IFS= read -r PLACES; do
-                local ROWS; ROWS=$(query_sqlite "$PLACES" "SELECT datetime(last_visit_date/1000000,'unixepoch'), url, title FROM moz_places WHERE last_visit_date IS NOT NULL ORDER BY last_visit_date DESC LIMIT 10000")
+                local ROWS; ROWS=$(query_sqlite "$PLACES" "SELECT datetime(last_visit_date/1000000,'unixepoch'), url, title FROM moz_places WHERE last_visit_date IS NOT NULL ORDER BY last_visit_date DESC LIMIT 100000")
                 [[ -z "$ROWS" || "$ROWS" == ERROR* ]] && continue
                 UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + 1))
                 ok "$UNAME — $(basename "$(dirname "$PLACES")") (Firefox)"
@@ -10826,7 +10871,7 @@ module_linux_packages() {
         FOUND=$((FOUND + 1))
         local PKGS; PKGS=$(grep -c '^Package:' "$DPKG" 2>/dev/null)
         ok "dpkg — ${BOLD}$PKGS pacchetti"
-        local TAB; TAB=$(awk '/^Package:/{p=$2} /^Version:/{v=$2} /^Status:/{s=$0} /^$/{if(p)printf "<tr><td class=mono>%s</td><td class=\"mono dim\">%s</td></tr>\n",p,v; p=v=""}' "$DPKG" | head -3000)
+        local TAB; TAB=$(awk '/^Package:/{p=$2} /^Version:/{v=$2} /^Status:/{s=$0} /^$/{if(p)printf "<tr><td class=mono>%s</td><td class=\"mono dim\">%s</td></tr>\n",p,v; p=v=""}' "$DPKG" | head -100000)
         BODY+=$(generic_card_html "dpkg packages" "$DPKG" "$PKGS pkg" "<table><tr><th>Package</th><th>Version</th></tr>$TAB</table>" "▦")
     fi
     # apt history (timeline installazioni)
@@ -10842,7 +10887,7 @@ module_linux_packages() {
         FOUND=$((FOUND + 1)); ok "rpm db $(L "presente" "present")"
         local RTAB=""
         if command -v rpm >/dev/null 2>&1; then
-            RTAB=$(rpm -qa --dbpath "$RPMDB" 2>/dev/null | sort | head -3000 | "$PY3" -c 'import sys,html;[print(f"<tr><td class=mono>{html.escape(l.strip())}</td></tr>") for l in sys.stdin]')
+            RTAB=$(rpm -qa --dbpath "$RPMDB" 2>/dev/null | sort | head -100000 | "$PY3" -c 'import sys,html;[print(f"<tr><td class=mono>{html.escape(l.strip())}</td></tr>") for l in sys.stdin]')
         fi
         BODY+=$(generic_card_html "rpm packages" "$RPMDB" "" "<table><tr><th>Package</th></tr>${RTAB:-<tr><td class=dim>rpm CLI non disponibile per dump offline</td></tr>}</table>" "▦")
     fi
@@ -10914,7 +10959,7 @@ module_linux_timeline() {
         local D; D=$(ci_find_dir "$WIN_ROOT" "$A")
         [[ -z "$D" ]] && continue
         SCANNED=$((SCANNED + 1))
-        find "$D" -xdev -type f -printf '%T+\t%A+\t%C+\t%s\t%p\n' 2>/dev/null | head -4000 >> "$TMPF"
+        find "$D" -xdev -type f -printf '%T+\t%A+\t%C+\t%s\t%p\n' 2>/dev/null | head -100000 >> "$TMPF"
     done
     local N; N=$(wc -l < "$TMPF" 2>/dev/null || echo 0)
     if [[ "$N" -eq 0 ]]; then warn "$(L "Nessun file nelle aree sensibili." "No files in sensitive areas.")"; rm -f "$TMPF"; return 0; fi
@@ -11119,11 +11164,11 @@ module_macos_quarantine() {
             # L'URL diretto del file (LSQuarantineDataURLString) è spesso vuoto su Chrome:
             # in tal caso si usa l'URL della pagina di origine (LSQuarantineOriginURLString).
             # Mostra anche la pagina di origine come colonna separata.
-            local ROWS; ROWS=$(query_sqlite "$DB" "SELECT datetime(LSQuarantineTimeStamp+978307200,'unixepoch'), LSQuarantineAgentName, COALESCE(NULLIF(LSQuarantineDataURLString,''), LSQuarantineOriginURLString, ''), COALESCE(LSQuarantineOriginURLString,'') FROM LSQuarantineEvent ORDER BY LSQuarantineTimeStamp DESC LIMIT 10000")
+            local ROWS; ROWS=$(query_sqlite "$DB" "SELECT datetime(LSQuarantineTimeStamp+978307200,'unixepoch'), LSQuarantineAgentName, COALESCE(NULLIF(LSQuarantineDataURLString,''), LSQuarantineOriginURLString, ''), COALESCE(LSQuarantineOriginURLString,'') FROM LSQuarantineEvent ORDER BY LSQuarantineTimeStamp DESC LIMIT 100000")
             local HEADERS_EXTRA=1
             if [[ -z "$ROWS" || "$ROWS" == ERROR* ]]; then
                 # Fallback per schema più vecchi/parziali
-                ROWS=$(query_sqlite "$DB" "SELECT datetime(LSQuarantineTimeStamp+978307200,'unixepoch'), LSQuarantineAgentName, LSQuarantineDataURLString FROM LSQuarantineEvent ORDER BY LSQuarantineTimeStamp DESC LIMIT 10000")
+                ROWS=$(query_sqlite "$DB" "SELECT datetime(LSQuarantineTimeStamp+978307200,'unixepoch'), LSQuarantineAgentName, LSQuarantineDataURLString FROM LSQuarantineEvent ORDER BY LSQuarantineTimeStamp DESC LIMIT 100000")
                 HEADERS_EXTRA=0
             fi
             [[ -z "$ROWS" || "$ROWS" == ERROR* ]] && continue
@@ -11185,7 +11230,7 @@ module_macos_knowledgec() {
         local U; U=$(basename "$HOME_DIR")
         local DB; DB=$(ci_find_file "$(ci_find_dir "$HOME_DIR" "Library/Application Support/Knowledge")" "knowledgeC.db")
         [[ -z "$DB" ]] && continue
-        local ROWS; ROWS=$(query_sqlite "$DB" "SELECT datetime(ZCREATIONDATE+978307200,'unixepoch'), ZSTREAMNAME, ZVALUESTRING FROM ZOBJECT WHERE ZVALUESTRING IS NOT NULL ORDER BY ZCREATIONDATE DESC LIMIT 10000")
+        local ROWS; ROWS=$(query_sqlite "$DB" "SELECT datetime(ZCREATIONDATE+978307200,'unixepoch'), ZSTREAMNAME, ZVALUESTRING FROM ZOBJECT WHERE ZVALUESTRING IS NOT NULL ORDER BY ZCREATIONDATE DESC LIMIT 100000")
         [[ -z "$ROWS" || "$ROWS" == ERROR* ]] && continue
         local N; N=$(printf '%s\n' "$ROWS" | grep -c .); TOTAL=$((TOTAL + N))
         ok "$U — ${BOLD}$N $(L "eventi" "events")"
@@ -11210,7 +11255,7 @@ module_macos_browser() {
         # Safari
         local SAF; SAF=$(ci_find_file "$(ci_find_dir "$HOME_DIR" "Library/Safari")" "History.db")
         if [[ -n "$SAF" ]]; then
-            local ROWS; ROWS=$(query_sqlite "$SAF" "SELECT datetime(v.visit_time+978307200,'unixepoch'), i.url, v.title FROM history_visits v JOIN history_items i ON v.history_item=i.id ORDER BY v.visit_time DESC LIMIT 10000")
+            local ROWS; ROWS=$(query_sqlite "$SAF" "SELECT datetime(v.visit_time+978307200,'unixepoch'), i.url, v.title FROM history_visits v JOIN history_items i ON v.history_item=i.id ORDER BY v.visit_time DESC LIMIT 100000")
             if [[ -n "$ROWS" && "$ROWS" != ERROR* ]]; then
                 UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + 1)); ok "$U — Safari"
                 CARDS+=$(generic_card_html "Safari" "$SAF" "$(printf '%s\n' "$ROWS" | grep -c .) URL" "$(_rows_to_table "$ROWS" "$(L "Data" "Date")" "URL" "$(L "Titolo" "Title")")" "◐")
@@ -11220,7 +11265,7 @@ module_macos_browser() {
         for CR in "Library/Application Support/Google/Chrome" "Library/Application Support/BraveSoftware/Brave-Browser" "Library/Application Support/Microsoft Edge"; do
             local BASE; BASE=$(ci_find_dir "$HOME_DIR" "$CR"); [[ -z "$BASE" ]] && continue
             while IFS= read -r HISTDB; do
-                local ROWS; ROWS=$(query_sqlite "$HISTDB" "SELECT datetime(last_visit_time/1000000-11644473600,'unixepoch'), url, title FROM urls ORDER BY last_visit_time DESC LIMIT 10000")
+                local ROWS; ROWS=$(query_sqlite "$HISTDB" "SELECT datetime(last_visit_time/1000000-11644473600,'unixepoch'), url, title FROM urls ORDER BY last_visit_time DESC LIMIT 100000")
                 [[ -z "$ROWS" || "$ROWS" == ERROR* ]] && continue
                 UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + 1)); ok "$U — $(basename "$(dirname "$HISTDB")") (Chromium)"
                 CARDS+=$(_browser_table_card "$HISTDB" "$ROWS")
@@ -11230,7 +11275,7 @@ module_macos_browser() {
         local FB; FB=$(ci_find_dir "$HOME_DIR" "Library/Application Support/Firefox/Profiles")
         if [[ -n "$FB" ]]; then
             while IFS= read -r PLACES; do
-                local ROWS; ROWS=$(query_sqlite "$PLACES" "SELECT datetime(last_visit_date/1000000,'unixepoch'), url, title FROM moz_places WHERE last_visit_date IS NOT NULL ORDER BY last_visit_date DESC LIMIT 10000")
+                local ROWS; ROWS=$(query_sqlite "$PLACES" "SELECT datetime(last_visit_date/1000000,'unixepoch'), url, title FROM moz_places WHERE last_visit_date IS NOT NULL ORDER BY last_visit_date DESC LIMIT 100000")
                 [[ -z "$ROWS" || "$ROWS" == ERROR* ]] && continue
                 UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + 1)); ok "$U — Firefox"
                 CARDS+=$(_browser_table_card "$PLACES" "$ROWS")
@@ -11410,7 +11455,7 @@ PYEOF
 
     local TOTAL; TOTAL=$(printf '%s' "$TL_RAW" | grep -c $'\t' 2>/dev/null || echo 0)
     local _TMP; _TMP=$(mktemp)
-    printf '%s\n' "$TL_RAW" | awk 'NF' | sort -t$'\t' -k1 -r | head -5000 > "$_TMP"
+    printf '%s\n' "$TL_RAW" | awk 'NF' | sort -t$'\t' -k1 -r | head -100000 > "$_TMP"
     local SHOW; SHOW=$(wc -l < "$_TMP" 2>/dev/null || echo 0)
 
     separator
