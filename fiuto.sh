@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # ================================================================
-#  fiuto.sh  –  v1.2
-#  Toolkit DFIR unificato per analisi di disco Windows offline
+#  fiuto.sh  –  v2.0
+#  Toolkit DFIR unificato per analisi offline di dischi Windows/Linux/macOS
 #
 #  Uso:
 #    ./fiuto.sh                        # menu interattivo
-#    ./fiuto.sh /mnt/windows           # specifica la root
-#    ./fiuto.sh /mnt/windows --all     # esegui tutto
-#    ./fiuto.sh /mnt/windows --module 3  # modulo specifico
+#    ./fiuto.sh /mnt/disk              # specifica la root (Windows/Linux/macOS)
+#    ./fiuto.sh /mnt/disk --all        # esegui tutto
+#    ./fiuto.sh /mnt/disk --module 3   # modulo specifico
 # ================================================================
 
 set -uo pipefail
@@ -54,7 +54,8 @@ _find_user_cwd() {
 }
 INVOCATION_DIR="$(_find_user_cwd)"
 unset -f _find_user_cwd
-WIN_ROOT=""          # root del volume Windows (es. /mnt/windows)
+WIN_ROOT=""          # root del volume selezionato (Windows/Linux/macOS — es. /mnt/disk)
+OS_TYPE=""           # tipo OS del volume: windows | linux | macos | unknown
 REPORT_BASE_DIR=""   # directory base dei report HTML
 SCAN_DATE=""         # impostata all'avvio
 declare -a GENERATED_REPORTS=()  # lista dei report HTML generati nella sessione
@@ -250,7 +251,7 @@ print_banner() {
     echo "  ║      ╚═╝       ╚═╝   ╚═════╝      ╚═╝      ╚═════╝       ║"
     echo "  ║                                                          ║"
     echo -e "  ║    ${CYAN}${BOLD}F${RESET}${CYAN}orensic ${BOLD}I${RESET}${CYAN}nvestigation ${BOLD}U${RESET}${CYAN}tility ${BOLD}T${RESET}${CYAN}ool for ${BOLD}O${RESET}${CYAN}ffline${RESET}       ${CYAN}${BOLD}║"
-    echo -e "  ║                    ${MAGENTA}${BOLD}v1.2 - zi®iginal${RESET}${CYAN}                      ║"
+    echo -e "  ║                    ${MAGENTA}${BOLD}v2.0 - zi®iginal${RESET}${CYAN}                      ║"
     echo "  ╚══════════════════════════════════════════════════════════╝"
     echo -e "${RESET}"
     local DATE_LABEL="$([ "$LANG" = "it" ] && echo "Data" || echo "Date")"
@@ -413,7 +414,16 @@ ci_find_file() {
 
 gather_host_info() {
     [[ -n "$WIN_ROOT" ]] || return 1
-    
+
+    # Per i volumi non-Windows usa una raccolta info dedicata e termina qui.
+    if [[ "$OS_TYPE" == "linux" ]]; then
+        gather_host_info_linux
+        return 0
+    elif [[ "$OS_TYPE" == "macos" ]]; then
+        gather_host_info_macos
+        return 0
+    fi
+
     local SYSTEM_HIVE; SYSTEM_HIVE=$(get_hive "SYSTEM")
     local SOFTWARE_HIVE; SOFTWARE_HIVE=$(get_hive "SOFTWARE")
     
@@ -505,6 +515,59 @@ PYEOF
     print_host_info_table
 }
 
+# Raccolta info host per volumi Linux (hostname + distro da /etc)
+gather_host_info_linux() {
+    info "$(t retrieving_info)"
+    local ETC; ETC=$(ci_find_dir "$WIN_ROOT" "etc")
+    if [[ -n "$ETC" ]]; then
+        local HN; HN=$(ci_find_file "$ETC" "hostname")
+        [[ -n "$HN" && -f "$HN" ]] && HOST_NAME=$(head -1 "$HN" 2>/dev/null | tr -d '[:space:]')
+        local OSR; OSR=$(ci_find_file "$ETC" "os-release")
+        if [[ -n "$OSR" && -f "$OSR" ]]; then
+            OS_VER=$(grep -E '^PRETTY_NAME=' "$OSR" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"')
+        fi
+    fi
+    [[ -z "$OS_VER" ]] && OS_VER="Linux"
+    DOMAIN_NAME=""; IP_ADDR=""
+    if [[ -z "$HOST_NAME" ]]; then
+        local _SUGGESTED_NAME; _SUGGESTED_NAME=$(basename "$WIN_ROOT")
+        echo -ne "  ${YELLOW}[?]${RESET} $(t hostname_prompt) [${BOLD}${_SUGGESTED_NAME}${RESET}]: "
+        read -r HOST_NAME
+        [[ -z "$HOST_NAME" ]] && HOST_NAME="$_SUGGESTED_NAME"
+    fi
+    print_host_info_table
+}
+
+# Raccolta info host per volumi macOS (da SystemVersion.plist)
+gather_host_info_macos() {
+    info "$(t retrieving_info)"
+    local SV
+    SV=$(ci_find_file "$(ci_find_dir "$WIN_ROOT" "System/Library/CoreServices")" "SystemVersion.plist")
+    if [[ -n "$SV" && -f "$SV" ]]; then
+        local PLIST_TXT; PLIST_TXT=$(read_plist "$SV" 2>/dev/null)
+        local PROD VER BUILD
+        PROD=$(echo "$PLIST_TXT"  | grep -i 'ProductName:'        | head -1 | sed "s/.*: '\\?//; s/'\\?$//")
+        VER=$(echo "$PLIST_TXT"   | grep -i 'ProductVersion:'     | head -1 | sed "s/.*: '\\?//; s/'\\?$//")
+        BUILD=$(echo "$PLIST_TXT" | grep -i 'ProductBuildVersion:'| head -1 | sed "s/.*: '\\?//; s/'\\?$//")
+        OS_VER=$(echo "${PROD} ${VER} (${BUILD})" | sed 's/  */ /g; s/ ()//')
+    fi
+    [[ -z "$OS_VER" ]] && OS_VER="macOS"
+    # hostname: prova preferences.plist di SystemConfiguration
+    local PREF
+    PREF=$(ci_find_file "$(ci_find_dir "$WIN_ROOT" "Library/Preferences/SystemConfiguration")" "preferences.plist")
+    if [[ -n "$PREF" && -f "$PREF" ]]; then
+        HOST_NAME=$(read_plist "$PREF" 2>/dev/null | grep -iE 'HostName:|LocalHostName:|ComputerName:' | head -1 | sed "s/.*: '\\?//; s/'\\?$//")
+    fi
+    DOMAIN_NAME=""; IP_ADDR=""
+    if [[ -z "$HOST_NAME" ]]; then
+        local _SUGGESTED_NAME; _SUGGESTED_NAME=$(basename "$WIN_ROOT")
+        echo -ne "  ${YELLOW}[?]${RESET} $(t hostname_prompt) [${BOLD}${_SUGGESTED_NAME}${RESET}]: "
+        read -r HOST_NAME
+        [[ -z "$HOST_NAME" ]] && HOST_NAME="$_SUGGESTED_NAME"
+    fi
+    print_host_info_table
+}
+
 print_host_info_table() {
     local TITLE="$([ "$LANG" = "it" ] && echo "INFORMAZIONI MACCHINA TARGET" || echo "TARGET MACHINE INFORMATION")"
     echo -e "  ${CYAN}${BOLD}┌────────────────────────────────────────────────────────────────────────────┐${RESET}"
@@ -580,6 +643,49 @@ ci_find_file() {
     find "$BASE" -maxdepth 1 -iname "$NAME" -type f 2>/dev/null | head -1
 }
 
+# ----------------------------------------------------------------
+# Rilevamento OS del volume montato.
+# Restituisce: windows | linux | macos | unknown
+# NB: macOS va testato PRIMA di Linux, perché un volume macOS contiene anche /etc.
+# ----------------------------------------------------------------
+detect_os_type() {
+    local ROOT="$1"
+    [[ -z "$ROOT" || ! -d "$ROOT" ]] && { echo "unknown"; return; }
+
+    # --- macOS ---
+    if [[ -f "$ROOT/System/Library/CoreServices/SystemVersion.plist" ]] \
+       || [[ -d "$ROOT/private/var/db/dslocal/nodes/Default" ]] \
+       || [[ -d "$ROOT/var/db/dslocal/nodes/Default" ]] \
+       || [[ -n "$(ci_find_dir "$ROOT" "System/Library/CoreServices")" ]]; then
+        echo "macos"; return
+    fi
+
+    # --- Windows ---
+    if [[ -d "$ROOT/Windows/System32" || -d "$ROOT/Users" ]] \
+       || [[ -n "$(ci_find_dir "$ROOT" "Windows/System32")" ]] \
+       || [[ -n "$(ci_find_dir "$ROOT" "Users")" ]]; then
+        echo "windows"; return
+    fi
+
+    # --- Linux ---
+    if [[ -f "$ROOT/etc/os-release" || -f "$ROOT/etc/passwd" ]] \
+       || { [[ -d "$ROOT/etc" && -d "$ROOT/var" && -d "$ROOT/bin" ]]; }; then
+        echo "linux"; return
+    fi
+
+    echo "unknown"
+}
+
+# Etichetta leggibile dell'OS rilevato (per badge/menu)
+os_label() {
+    case "${1:-$OS_TYPE}" in
+        windows) echo "Windows" ;;
+        linux)   echo "Linux" ;;
+        macos)   echo "macOS" ;;
+        *)       echo "$(L "sconosciuto" "unknown")" ;;
+    esac
+}
+
 # Verifica che WIN_ROOT sia impostata e contenga una struttura Windows
 check_win_root() {
     if [[ -z "$WIN_ROOT" ]]; then
@@ -619,6 +725,155 @@ get_user_homes() {
         esac
         [[ -d "$D" ]] && echo "$D"
     done
+}
+
+# ----------------------------------------------------------------
+# Validazione root generica in base a OS_TYPE (usata dai moduli Linux/macOS).
+# I moduli Windows continuano a usare check_win_root.
+# ----------------------------------------------------------------
+check_target_root() {
+    if [[ -z "$WIN_ROOT" ]]; then
+        err "$(t root_not_set)"
+        return 1
+    fi
+    case "$OS_TYPE" in
+        windows) check_win_root ;;
+        linux)
+            if [[ ! -d "$WIN_ROOT/etc" && -z "$(ci_find_dir "$WIN_ROOT" "etc")" \
+                  && ! -d "$WIN_ROOT/home" && -z "$(ci_find_dir "$WIN_ROOT" "home")" ]]; then
+                err "$(L "Struttura Linux non trovata in:" "Linux structure not found in:") $WIN_ROOT"
+                return 1
+            fi
+            return 0 ;;
+        macos)
+            if [[ ! -d "$WIN_ROOT/Users" && -z "$(ci_find_dir "$WIN_ROOT" "Users")" \
+                  && ! -d "$WIN_ROOT/System" && -z "$(ci_find_dir "$WIN_ROOT" "System")" ]]; then
+                err "$(L "Struttura macOS non trovata in:" "macOS structure not found in:") $WIN_ROOT"
+                return 1
+            fi
+            return 0 ;;
+        *)
+            err "$(L "Tipo OS del volume non riconosciuto." "Volume OS type not recognised.")"
+            return 1 ;;
+    esac
+}
+
+# ----------------------------------------------------------------
+# Elenca le home degli utenti reali su un volume Linux.
+# Usa /etc/passwd (UID >= 1000) quando disponibile, con fallback a /home/* + /root.
+# ----------------------------------------------------------------
+get_linux_user_homes() {
+    local ETC PASSWD
+    ETC=$(ci_find_dir "$WIN_ROOT" "etc")
+    [[ -n "$ETC" ]] && PASSWD=$(ci_find_file "$ETC" "passwd")
+    local -A SEEN=()
+    if [[ -n "$PASSWD" && -f "$PASSWD" ]]; then
+        while IFS=':' read -r _user _pw _uid _gid _gecos _home _shell; do
+            [[ -z "$_home" ]] && continue
+            # root (uid 0) + utenti normali (uid >= 1000), esclusi gli pseudo-account
+            if [[ "$_uid" == "0" || ( "$_uid" =~ ^[0-9]+$ && "$_uid" -ge 1000 && "$_uid" -lt 65534 ) ]]; then
+                local ABS="$WIN_ROOT/${_home#/}"
+                [[ -d "$ABS" && -z "${SEEN[$ABS]+x}" ]] && { SEEN[$ABS]=1; echo "$ABS"; }
+            fi
+        done < "$PASSWD"
+    fi
+    # Fallback / integrazione: /home/* e /root
+    local HOMEDIR ROOTDIR
+    HOMEDIR=$(ci_find_dir "$WIN_ROOT" "home")
+    if [[ -n "$HOMEDIR" ]]; then
+        for D in "$HOMEDIR"/*/; do
+            [[ -d "$D" ]] || continue
+            local A="${D%/}"
+            [[ -z "${SEEN[$A]+x}" ]] && { SEEN[$A]=1; echo "$A"; }
+        done
+    fi
+    ROOTDIR=$(ci_find_dir "$WIN_ROOT" "root")
+    [[ -n "$ROOTDIR" && -d "$ROOTDIR" && -z "${SEEN[$ROOTDIR]+x}" ]] && echo "$ROOTDIR"
+}
+
+# Elenca le home degli utenti su un volume macOS (/Users/*, esclusi account speciali)
+get_macos_user_homes() {
+    local USERS_DIR
+    USERS_DIR=$(ci_find_dir "$WIN_ROOT" "Users")
+    [[ -z "$USERS_DIR" ]] && return
+    for D in "$USERS_DIR"/*/; do
+        [[ -d "$D" ]] || continue
+        local U; U=$(basename "$D")
+        case "${U,,}" in
+            "shared"|"guest"|".localized") continue ;;
+        esac
+        echo "${D%/}"
+    done
+}
+
+# Home utenti coerenti con l'OS del volume corrente
+get_target_user_homes() {
+    case "$OS_TYPE" in
+        windows) get_user_homes ;;
+        linux)   get_linux_user_homes ;;
+        macos)   get_macos_user_homes ;;
+    esac
+}
+
+# ----------------------------------------------------------------
+# Legge un plist (binario o XML) e ne stampa una rappresentazione testuale.
+# ----------------------------------------------------------------
+read_plist() {
+    local F="$1"
+    [[ -f "$F" ]] || return 1
+    "$PY3" - "$F" << 'PYEOF'
+import sys, plistlib
+def walk(o, indent=0):
+    pad = "  " * indent
+    if isinstance(o, dict):
+        for k, v in o.items():
+            if isinstance(v, (dict, list)):
+                print(f"{pad}{k}:")
+                walk(v, indent + 1)
+            else:
+                print(f"{pad}{k}: {v!r}")
+    elif isinstance(o, list):
+        for i, v in enumerate(o):
+            if isinstance(v, (dict, list)):
+                print(f"{pad}[{i}]")
+                walk(v, indent + 1)
+            else:
+                print(f"{pad}[{i}] {v!r}")
+    else:
+        print(f"{pad}{o!r}")
+try:
+    with open(sys.argv[1], 'rb') as fh:
+        data = plistlib.load(fh)
+    walk(data)
+except Exception as e:
+    print(f"ERROR: {e}", file=sys.stderr)
+PYEOF
+}
+
+# ----------------------------------------------------------------
+# Esegue una query SQL su un DB SQLite, operando su una COPIA temporanea
+# (evita lock/WAL su volumi read-only). Output: righe tab-separated.
+# ----------------------------------------------------------------
+query_sqlite() {
+    local DB="$1" SQL="$2"
+    [[ -f "$DB" ]] || return 1
+    local TMP; TMP=$(mktemp)
+    cp -f "$DB" "$TMP" 2>/dev/null || { rm -f "$TMP"; return 1; }
+    # copia anche -wal/-shm se presenti, per leggere transazioni non ancora consolidate
+    [[ -f "${DB}-wal" ]] && cp -f "${DB}-wal" "${TMP}-wal" 2>/dev/null
+    [[ -f "${DB}-shm" ]] && cp -f "${DB}-shm" "${TMP}-shm" 2>/dev/null
+    "$PY3" - "$TMP" "$SQL" << 'PYEOF'
+import sys, sqlite3
+try:
+    con = sqlite3.connect(sys.argv[1])
+    cur = con.execute(sys.argv[2])
+    for row in cur.fetchall():
+        print("\t".join("" if c is None else str(c) for c in row))
+    con.close()
+except Exception as e:
+    print(f"ERROR: {e}", file=sys.stderr)
+PYEOF
+    rm -f "$TMP" "${TMP}-wal" "${TMP}-shm"
 }
 
 # Prepara la directory report e restituisce il path del file HTML.
@@ -9466,8 +9721,17 @@ _find_windows_mounts() {
         [[ "$MNT" == /snap/* || "$MNT" == /run/* || "$MNT" == /tmp/* ]] && continue
         [[ "$RAW_DEV" == *.AppImage ]] && continue
         [[ "$FSTYPE" == "fuse.ewfmount" || "$FSTYPE" == "fuse.xmount" ]] && continue
+        # Marcatori Windows
         if [[ -d "$MNT/Users" || -d "$MNT/Windows" ||
               -d "$MNT/users" || -d "$MNT/windows" ]]; then
+            CANDIDATES+=("$MNT"); continue
+        fi
+        # Marcatori macOS
+        if [[ -d "$MNT/System/Library/CoreServices" || -d "$MNT/private/var/db/dslocal" ]]; then
+            CANDIDATES+=("$MNT"); continue
+        fi
+        # Marcatori Linux
+        if [[ -f "$MNT/etc/os-release" || -f "$MNT/etc/passwd" ]]; then
             CANDIDATES+=("$MNT"); continue
         fi
         if find "$MNT" -maxdepth 1 -type d \( -iname "Users" -o -iname "Windows" \) \
@@ -9482,12 +9746,32 @@ _find_windows_mounts() {
     done
 }
 
+# Conta gli utenti reali su un volume, in base al suo OS (per il menu di selezione)
+_count_volume_users() {
+    local MNT="$1" VOS="$2"
+    case "$VOS" in
+        windows|macos)
+            local UD
+            UD=$(find "$MNT" -maxdepth 1 -type d -iname "Users" 2>/dev/null | head -1)
+            [[ -z "$UD" ]] && { echo 0; return; }
+            find "$UD" -maxdepth 1 -mindepth 1 -type d 2>/dev/null \
+                | grep -ciEv '/(Public|Default|Default User|All Users|Shared|Guest|\.localized)$' || echo 0 ;;
+        linux)
+            local HD C=0
+            HD=$(find "$MNT" -maxdepth 1 -type d -iname "home" 2>/dev/null | head -1)
+            [[ -n "$HD" ]] && C=$(find "$HD" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | wc -l)
+            [[ -d "$MNT/root" ]] && C=$((C + 1))
+            echo "$C" ;;
+        *) echo 0 ;;
+    esac
+}
+
 autodetect_win_root() {
     local SILENT="${1:-}"
     local -a FOUND=()
     mapfile -t FOUND < <(_find_windows_mounts)
     if [[ ${#FOUND[@]} -eq 0 ]]; then
-        [[ "$SILENT" != "silent" ]] && warn "$(L "Nessun volume Windows rilevato tra i filesystem montati." "No Windows volume detected among mounted filesystems.")"
+        [[ "$SILENT" != "silent" ]] && warn "$(L "Nessun volume analizzabile rilevato tra i filesystem montati." "No analysable volume detected among mounted filesystems.")"
         return 1
     fi
 
@@ -9510,18 +9794,22 @@ autodetect_win_root() {
     local -a ALL_PATHS=("${FOUND[@]}" "${EXTRA_PATHS[@]}")
 
     echo ""
-    echo -e "  ${CYAN}${BOLD}$(L "Volumi Windows rilevati:" "Detected Windows volumes:")${RESET}"
+    echo -e "  ${CYAN}${BOLD}$(L "Volumi rilevati:" "Detected volumes:")${RESET}"
     echo ""
     local IDX=1
     for MNT in "${FOUND[@]}"; do
         local LABEL; LABEL=$(basename "$MNT")
-        local USERS_DIR
-        USERS_DIR=$(find "$MNT" -maxdepth 1 -type d -iname "Users" 2>/dev/null | head -1)
-        local USER_COUNT=0
-        [[ -n "$USERS_DIR" ]] && \
-            USER_COUNT=$(find "$USERS_DIR" -maxdepth 1 -mindepth 1 -type d 2>/dev/null \
-                | grep -ciEv '/(Public|Default|Default User|All Users)$' || true)
-        echo -e "  ${GREEN}[${IDX}]${RESET}  ${BOLD}${MNT}${RESET} ${MAGENTA}(${LABEL})${RESET}  ${CYAN}${USER_COUNT} $(L "utenti" "users")${RESET}"
+        local VOS; VOS=$(detect_os_type "$MNT")
+        local BADGE_COLOR
+        case "$VOS" in
+            windows) BADGE_COLOR="$BLUE" ;;
+            linux)   BADGE_COLOR="$YELLOW" ;;
+            macos)   BADGE_COLOR="$WHITE" ;;
+            *)       BADGE_COLOR="$DIM" ;;
+        esac
+        local USER_COUNT
+        USER_COUNT=$(_count_volume_users "$MNT" "$VOS")
+        echo -e "  ${GREEN}[${IDX}]${RESET}  ${BOLD}${MNT}${RESET} ${MAGENTA}(${LABEL})${RESET}  ${BADGE_COLOR}[$(os_label "$VOS")]${RESET}  ${CYAN}${USER_COUNT} $(L "utenti" "users")${RESET}"
         IDX=$((IDX + 1))
     done
     # Mostra le opzioni Windows.old con indicatore visivo
@@ -9541,7 +9829,7 @@ autodetect_win_root() {
 
     local CHOICE
     if [[ ${#ALL_PATHS[@]} -eq 1 ]]; then
-        echo -ne "  ${YELLOW}[?]${RESET} $(L "Usare" "Use") ${BOLD}${ALL_PATHS[0]}${RESET} $(L "come root Windows? [S/n]:" "as Windows root? [Y/n]:") "
+        echo -ne "  ${YELLOW}[?]${RESET} $(L "Usare" "Use") ${BOLD}${ALL_PATHS[0]}${RESET} $(L "come root da analizzare? [S/n]:" "as analysis root? [Y/n]:") "
         read -r CHOICE || true
         [[ "${CHOICE,,}" == "n" ]] && return 1
         _apply_win_root "${ALL_PATHS[0]}"; return 0
@@ -9568,7 +9856,8 @@ autodetect_win_root() {
 _apply_win_root() {
     local ROOT="$1"
     WIN_ROOT="$ROOT"
-    ok "$(L "Root impostata:" "Root set:") ${BOLD}$WIN_ROOT"
+    OS_TYPE=$(detect_os_type "$ROOT")
+    ok "$(L "Root impostata:" "Root set:") ${BOLD}$WIN_ROOT${RESET}  ${CYAN}[$(os_label)]${RESET}"
 
     # Recupera info macchina (hostname, OS, IP, dominio)
     gather_host_info
@@ -9583,13 +9872,13 @@ _apply_win_root() {
 set_win_root() {
     echo ""
     # Prima prova autodetect
-    echo -e "  ${CYAN}[*]${RESET} Ricerca volumi Windows montati..."
+    echo -e "  ${CYAN}[*]${RESET} $(L "Ricerca volumi montati (Windows/Linux/macOS)..." "Searching mounted volumes (Windows/Linux/macOS)...")"
     if autodetect_win_root; then
         return 0
     fi
     # Fallback: input manuale
     echo ""
-    echo -ne "  ${YELLOW}[?]${RESET} $(L "Inserisci il path della root Windows (es. /mnt/windows):" "Enter Windows root path (e.g. /mnt/windows):") "
+    echo -ne "  ${YELLOW}[?]${RESET} $(L "Inserisci il path della root da analizzare (es. /mnt/disk):" "Enter analysis root path (e.g. /mnt/disk):") "
     read -r INPUT_ROOT
     [[ -z "$INPUT_ROOT" ]] && return 1
     INPUT_ROOT=$(realpath -m "$INPUT_ROOT" 2>/dev/null || echo "$INPUT_ROOT")
@@ -9676,6 +9965,1253 @@ setup_report_dir() {
 # ================================================================
 #  MENU PRINCIPALE
 # ================================================================
+# ================================================================
+#  HELPER CONDIVISI PER I MODULI LINUX / macOS
+# ================================================================
+
+# Blocco <style> per i <pre> con numeri di riga ed evidenziazione (riuso dal modulo PS)
+pre_style_block() {
+    cat << 'EOF'
+<style>
+  .hist-pre{font-family:var(--mono);font-size:.75rem;line-height:1.7;padding:.8rem 1rem;
+    overflow-x:auto;max-height:520px;overflow-y:auto;}
+  .hist-pre::-webkit-scrollbar{width:5px;height:5px}
+  .hist-pre::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+  .line{display:block;color:var(--text);white-space:pre;padding:.05rem .5rem;border-radius:2px}
+  .line:hover{background:rgba(88,166,255,.05)}
+  .line.sensitive{color:var(--accent2);background:rgba(255,123,114,.07);
+    border-left:2px solid rgba(255,123,114,.5);padding-left:calc(.5rem - 2px)}
+  .lnum{color:var(--text-dim);user-select:none;margin-right:1rem;font-size:.7rem}
+  .grp{margin-bottom:1.5rem}
+</style>
+EOF
+}
+
+# Genera il contenuto di un <pre> (numeri di riga + escape HTML + evidenziazione IoC).
+# $1 = file, $2 = keyword separate da '|' (case-insensitive) per marcare le righe sensibili.
+render_pre_block() {
+    local FILE="$1" KW="$2"
+    "$PY3" - "$FILE" "$KW" << 'PYEOF'
+import sys, html
+path, kw = sys.argv[1], sys.argv[2].lower()
+keys = [k for k in kw.split('|') if k]
+try:
+    with open(path, 'rb') as f:
+        raw = f.read()
+    text = raw.decode('utf-8', 'replace').replace('\r\n', '\n').replace('\r', '\n')
+    out = []
+    for i, line in enumerate(text.split('\n'), 1):
+        esc = html.escape(line)
+        css = 'line sensitive' if any(k in line.lower() for k in keys) else 'line'
+        out.append(f'<span class="{css}"><span class="lnum">{i:5d}</span> {esc}</span>')
+    print('\n'.join(out))
+except Exception as e:
+    print(f'<span class="line bad">{html.escape(str(e))}</span>')
+PYEOF
+}
+
+# Stampa a console le righe di un file con evidenziazione IoC (rosso sulle corrispondenze).
+# $1 = file, $2 = regex grep (-iE), $3 = max righe (default 200)
+print_file_lines() {
+    local FILE="$1" KW="$2" MAX="${3:-200}"
+    [[ -f "$FILE" ]] || return
+    local LN=0
+    while IFS= read -r LINE || [[ -n "$LINE" ]]; do
+        LN=$((LN + 1))
+        if [[ $LN -gt $MAX ]]; then
+            echo -e "      ${DIM}... ($(L "troncato a" "truncated at") $MAX $(L "righe" "lines"))${RESET}"
+            break
+        fi
+        if [[ -n "$KW" ]] && printf '%s' "$LINE" | grep -qiE "$KW"; then
+            printf "      ${RED}%5d  %s${RESET}\n" "$LN" "$LINE"
+        else
+            printf "      ${DIM}%5d${RESET}  %s\n" "$LN" "$LINE"
+        fi
+    done < "$FILE"
+}
+
+# Card HTML per un singolo file di testo (header con metadati + <pre> evidenziato).
+# $1 = file, $2 = keyword IoC, $3 = icona (default ≣)
+file_card_html() {
+    local F="$1" KW="$2" ICON="${3:-≣}"
+    local SZ MT BODY
+    SZ=$(stat -c %s "$F" 2>/dev/null || echo "?")
+    MT=$(stat -c %y "$F" 2>/dev/null | cut -d. -f1 || echo "?")
+    BODY=$(render_pre_block "$F" "$KW")
+    printf "<div class='card' style='margin-bottom:.8rem'><div class='card-header'><div class='uicon' style='font-size:.7rem'>%s</div><div><div class='uname' style='font-size:.85rem'>%s</div><div class='upath'>%s</div></div><div style='margin-left:auto;text-align:right;font-family:var(--mono);font-size:.65rem;color:var(--text-dim)'><div class='mid'>%s</div><div>%s B</div></div></div><div class='hist-content'><pre class='hist-pre'>%s</pre></div></div>" \
+        "$ICON" "$(html_esc "$(basename "$F")")" "$(html_esc "$F")" "$MT" "$SZ" "$BODY"
+}
+
+# Card HTML generica con corpo arbitrario (tabella/pre già formattati).
+# $1 = titolo, $2 = sottopath, $3 = badge, $4 = corpo HTML, $5 = icona
+generic_card_html() {
+    printf "<div class='card'><div class='card-header'><div class='uicon'>%s</div><div class='user-info'><div class='uname'>%s</div><div class='upath'>%s</div></div><div class='badge'>%s</div></div><div style='padding:1rem 1.5rem'>%s</div></div>" \
+        "${5:-▣}" "$(html_esc "$1")" "$(html_esc "$2")" "$3" "$4"
+}
+
+# Scrive il report HTML finale e lo registra.
+# $1 slug · $2 titolo · $3 icona · $4 sottotitolo · $5 stats_html · $6 body_html
+finish_report() {
+    local REPORT_HTML; REPORT_HTML=$(prepare_report_dir "$1")
+    local SCAN; SCAN=$(date "+%d/%m/%Y %H:%M:%S")
+    {
+        html_header "$2"
+        html_page_header "$3" "$2" "$4" "$SCAN" "$WIN_ROOT"
+        [[ -n "$5" ]] && printf "<div class='statsbar'>%s</div>\n" "$5"
+        echo "<main>"
+        pre_style_block
+        printf '%s\n' "$6"
+        echo "</main>"
+        html_footer "$SCAN" "$WIN_ROOT"
+    } > "$REPORT_HTML"
+    register_report "$REPORT_HTML"
+    ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
+    open_report_prompt "$REPORT_HTML"
+}
+
+# Helper per una stat della statsbar
+stat_box() { printf "<div class='stat %s'><div class='label'>%s</div><div class='value'>%s</div></div>" "${3:-}" "$1" "$2"; }
+
+# ================================================================
+#  MODULI LINUX
+# ================================================================
+
+# --- LINUX 1 — System Logs (/var/log testuali) ---
+module_linux_syslog() {
+    section_header "Linux — System Logs" "$GREEN"
+    check_target_root || return 1
+    local LOGDIR; LOGDIR=$(ci_find_dir "$WIN_ROOT" "var/log")
+    [[ -z "$LOGDIR" ]] && { warn "$(L "Directory var/log non trovata." "var/log directory not found.")"; return 0; }
+
+    local TARGETS=(syslog messages kern.log dmesg auth.log secure boot.log faillog dpkg.log yum.log)
+    local KW="fail|error|denied|refused|invalid|segfault|root|sudo|su:|authentication failure|break-in|illegal"
+    local BODY="" FOUND=0
+    for NAME in "${TARGETS[@]}"; do
+        local F; F=$(ci_find_file "$LOGDIR" "$NAME")
+        [[ -z "$F" || ! -s "$F" ]] && continue
+        FOUND=$((FOUND + 1))
+        ok "$NAME — ${BOLD}$(stat -c %s "$F" 2>/dev/null) B"
+        print_file_lines "$F" "$KW" 60
+        echo ""
+        BODY+=$(file_card_html "$F" "$KW" "≣")
+    done
+    separator
+    info "$(L "Log trovati:" "Logs found:") ${BOLD}$FOUND"
+    [[ $FOUND -eq 0 ]] && { warn "$(L "Nessun log testuale trovato." "No text log found.")"; return 0; }
+    ask_yn "Generare report HTML?" || return 0
+    local STATS; STATS=$(stat_box "$(L "Log analizzati" "Logs analysed")" "$FOUND" "info")
+    finish_report "linux_syslog" "Linux System Logs" "LOG" "/var/log" "$STATS" "<div class='cards'>$BODY</div>"
+}
+
+# --- LINUX 2 — systemd Journal ---
+module_linux_journal() {
+    section_header "Linux — systemd Journal" "$GREEN"
+    check_target_root || return 1
+    local JDIR; JDIR=$(ci_find_dir "$WIN_ROOT" "var/log/journal")
+    [[ -z "$JDIR" ]] && { warn "$(L "Nessun journal persistente (var/log/journal assente)." "No persistent journal (var/log/journal missing).")"; return 0; }
+    mapfile -t JFILES < <(find "$JDIR" -type f -iname "*.journal" 2>/dev/null)
+    [[ ${#JFILES[@]} -eq 0 ]] && { warn "$(L "Nessun file .journal trovato." "No .journal file found.")"; return 0; }
+    ok "$(L "File journal trovati:" "Journal files found:") ${BOLD}${#JFILES[@]}"
+
+    local KW="fail|error|denied|refused|sudo|root|segfault|authentication"
+    local BODY="" PARSED=0 HAVE_JCTL=0
+    command -v journalctl >/dev/null 2>&1 && HAVE_JCTL=1
+    for JF in "${JFILES[@]}"; do
+        local TXT=""
+        if [[ $HAVE_JCTL -eq 1 ]]; then
+            TXT=$(journalctl --no-pager --file "$JF" -o short-iso 2>/dev/null | head -2000)
+        fi
+        if [[ -z "$TXT" ]]; then
+            # fallback: estrazione stringhe leggibili dal binario
+            TXT=$(strings -n 8 "$JF" 2>/dev/null | grep -iE 'MESSAGE=|_COMM=|_EXE=|_HOSTNAME=' | sed 's/^MESSAGE=//' | head -1500)
+        fi
+        [[ -z "$TXT" ]] && continue
+        PARSED=$((PARSED + 1))
+        echo -e "  ${DIM}• $(basename "$JF")${RESET}"
+        local TMPF; TMPF=$(mktemp); printf '%s\n' "$TXT" > "$TMPF"
+        BODY+=$(file_card_html "$TMPF" "$KW" "◷")
+        rm -f "$TMPF"
+    done
+    [[ $HAVE_JCTL -eq 0 ]] && warn "$(L "journalctl non disponibile: usato fallback 'strings' (output parziale)." "journalctl unavailable: used 'strings' fallback (partial output).")"
+    separator
+    info "$(L "Journal elaborati:" "Journals processed:") ${BOLD}$PARSED"
+    [[ $PARSED -eq 0 ]] && { warn "$(L "Impossibile estrarre contenuti dal journal." "Could not extract journal contents.")"; return 0; }
+    ask_yn "Generare report HTML?" || return 0
+    local STATS; STATS=$(stat_box "$(L "File journal" "Journal files")" "${#JFILES[@]}" "info")
+    finish_report "linux_journal" "systemd Journal" "JRN" "/var/log/journal" "$STATS" "<div class='cards'>$BODY</div>"
+}
+
+# --- LINUX 3 — Login History (wtmp/btmp/lastlog) ---
+module_linux_logins() {
+    section_header "Linux — Login History" "$CYAN"
+    check_target_root || return 1
+    local LOGDIR; LOGDIR=$(ci_find_dir "$WIN_ROOT" "var/log")
+    local VARRUN; VARRUN=$(ci_find_dir "$WIN_ROOT" "var/run")
+    local WTMP BTMP LASTLOG
+    [[ -n "$LOGDIR" ]] && { WTMP=$(ci_find_file "$LOGDIR" "wtmp"); BTMP=$(ci_find_file "$LOGDIR" "btmp"); LASTLOG=$(ci_find_file "$LOGDIR" "lastlog"); }
+    if [[ -z "$WTMP" && -z "$BTMP" ]]; then
+        warn "$(L "wtmp/btmp non trovati." "wtmp/btmp not found.")"; return 0
+    fi
+    local BODY="" TOTAL=0
+    for PAIR in "wtmp|$WTMP|$(L "Login riusciti" "Successful logins")" "btmp|$BTMP|$(L "Login FALLITI" "FAILED logins")"; do
+        IFS='|' read -r TAG FILE LABEL <<< "$PAIR"
+        [[ -z "$FILE" || ! -s "$FILE" ]] && continue
+        echo -e "  ${BOLD}${LABEL}${RESET}  ${DIM}($FILE)${RESET}"
+        local OUT; OUT=$(_parse_utmp "$FILE")
+        local N; N=$(printf '%s\n' "$OUT" | grep -c . || echo 0)
+        TOTAL=$((TOTAL + N))
+        printf '%s\n' "$OUT" | head -40 | while IFS= read -r R; do echo -e "      ${DIM}$R${RESET}"; done
+        local TMPF; TMPF=$(mktemp); printf '%s\n' "$OUT" > "$TMPF"
+        local KW; [[ "$TAG" == "btmp" ]] && KW=".*" || KW="root|0\\.0\\.0\\.0"
+        BODY+=$(generic_card_html "$LABEL" "$FILE" "$N record" "<pre class='hist-pre'>$(render_pre_block "$TMPF" "$KW")</pre>" "⇆")
+        rm -f "$TMPF"
+        echo ""
+    done
+    separator
+    info "$(L "Record totali:" "Total records:") ${BOLD}$TOTAL"
+    [[ $TOTAL -eq 0 ]] && { warn "$(L "Nessun record di login leggibile." "No readable login record.")"; return 0; }
+    ask_yn "Generare report HTML?" || return 0
+    local STATS; STATS=$(stat_box "$(L "Record login" "Login records")" "$TOTAL" "info")
+    finish_report "linux_logins" "Linux Login History" "LOG" "wtmp / btmp / lastlog" "$STATS" "<div class='cards'>$BODY</div>"
+}
+
+# Parser binario utmp/wtmp/btmp (struct standard glibc, 384 byte/record)
+_parse_utmp() {
+    "$PY3" - "$1" << 'PYEOF'
+import sys, struct, datetime
+# struct utmp (Linux x86-64): ut_type(h) pad(2x) ut_pid(i) ut_line(32s) ut_id(4s)
+# ut_user(32s) ut_host(256s) ut_exit(4s) ut_session(i) tv_sec(i) tv_usec(i) ut_addr_v6(16s) unused(20s)
+REC = 384
+TYPES = {0:'EMPTY',1:'RUNLVL',2:'BOOT',3:'NEWTIME',4:'OLDTIME',5:'INIT',6:'LOGIN',7:'USER',8:'DEAD'}
+try:
+    with open(sys.argv[1],'rb') as f:
+        data=f.read()
+    rows=[]
+    for off in range(0,len(data)-REC+1,REC):
+        rec=data[off:off+REC]
+        try:
+            ut_type=struct.unpack('<h',rec[0:2])[0]
+            pid=struct.unpack('<i',rec[4:8])[0]
+            line=rec[8:40].split(b'\x00')[0].decode('utf-8','replace')
+            user=rec[44:76].split(b'\x00')[0].decode('utf-8','replace')
+            host=rec[76:332].split(b'\x00')[0].decode('utf-8','replace')
+            tv_sec=struct.unpack('<i',rec[340:344])[0]
+        except Exception:
+            continue
+        if tv_sec<=0 and not user: continue
+        try: ts=datetime.datetime.utcfromtimestamp(tv_sec).strftime('%Y-%m-%d %H:%M:%S')
+        except Exception: ts='?'
+        t=TYPES.get(ut_type,str(ut_type))
+        if not user and t in ('EMPTY','DEAD'): continue
+        rows.append(f"{ts}  {t:7s}  {user:16s}  {line:12s}  {host}")
+    print('\n'.join(rows))
+except Exception as e:
+    print(f"ERROR: {e}", file=sys.stderr)
+PYEOF
+}
+
+# --- LINUX 4 — Shell History (per utente) ---
+module_linux_shell_history() {
+    section_header "Linux — Shell History" "$MAGENTA"
+    check_target_root || return 1
+    local FILES=(.bash_history .zsh_history .sh_history .history .python_history .mysql_history .psql_history .lesshst .node_repl_history)
+    local KW="password|passwd|secret|credential|token|ssh|scp|curl|wget|nc |ncat|base64|sudo|chmod \\+x|/dev/tcp|reverse|nmap|chattr"
+    local BODY="" TOTAL=0 USERS=0
+    while IFS= read -r HOME_DIR; do
+        local UNAME; UNAME=$(basename "$HOME_DIR")
+        local CARDS="" UCOUNT=0
+        for HF in "${FILES[@]}"; do
+            local F="$HOME_DIR/$HF"
+            [[ -f "$F" && -s "$F" ]] || continue
+            UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + 1))
+            CARDS+=$(file_card_html "$F" "$KW" "\$")
+        done
+        # fish history
+        local FISH; FISH=$(ci_find_dir "$HOME_DIR" ".local/share/fish")
+        [[ -n "$FISH" ]] && for FF in "$FISH"/fish_history; do
+            [[ -f "$FF" && -s "$FF" ]] || continue
+            UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + 1)); CARDS+=$(file_card_html "$FF" "$KW" "\$")
+        done
+        [[ $UCOUNT -eq 0 ]] && { dim_msg "$UNAME — $(L "nessuna history" "no history")"; continue; }
+        USERS=$((USERS + 1))
+        ok "$UNAME — ${BOLD}$UCOUNT file"
+        for HF in "${FILES[@]}"; do
+            local F="$HOME_DIR/$HF"; [[ -f "$F" && -s "$F" ]] || continue
+            echo -e "  ${DIM}• $HF${RESET}"; print_file_lines "$F" "$KW" 30; echo ""
+        done
+        BODY+=$(generic_card_html "$UNAME" "$HOME_DIR" "$UCOUNT file" "$CARDS" "◢")
+    done < <(get_linux_user_homes)
+    separator
+    info "$(L "Utenti con history:" "Users with history:") ${BOLD}$USERS${RESET}  |  File: ${BOLD}$TOTAL"
+    [[ $TOTAL -eq 0 ]] && { warn "$(L "Nessuna history trovata." "No history found.")"; return 0; }
+    ask_yn "Generare report HTML?" || return 0
+    local STATS; STATS="$(stat_box "$(L "File history" "History files")" "$TOTAL")$(stat_box "$(L "Utenti" "Users")" "$USERS" "info")"
+    finish_report "linux_shell_history" "Linux Shell History" "SH" "~/.bash_history · .zsh_history · ..." "$STATS" "<div class='cards'>$BODY</div>"
+}
+
+# --- LINUX 5 — AI CLI History ---
+module_linux_ai_history() {
+    section_header "Linux — AI CLI History" "$MAGENTA"
+    check_target_root || return 1
+    # path relativi alla home da scandire (file o directory)
+    local REL=(.claude .config/claude .aider.chat.history.md .aider.input.history .config/aichat .ollama/history
+               .config/io.datasette.llm .codeium .config/github-copilot .continue .cursor)
+    local KW="password|secret|token|api_key|apikey|key=|credential"
+    local BODY="" TOTAL=0 USERS=0
+    while IFS= read -r HOME_DIR; do
+        local UNAME; UNAME=$(basename "$HOME_DIR")
+        local CARDS="" UCOUNT=0
+        for R in "${REL[@]}"; do
+            local P="$HOME_DIR/$R"
+            if [[ -f "$P" && -s "$P" ]]; then
+                UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + 1)); CARDS+=$(file_card_html "$P" "$KW" "◈")
+            elif [[ -d "$P" ]]; then
+                while IFS= read -r AF; do
+                    [[ -s "$AF" ]] || continue
+                    UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + 1)); CARDS+=$(file_card_html "$AF" "$KW" "◈")
+                done < <(find "$P" -maxdepth 3 -type f \( -iname "*.json" -o -iname "*.jsonl" -o -iname "*history*" -o -iname "*.md" \) 2>/dev/null | head -25)
+            fi
+        done
+        [[ $UCOUNT -eq 0 ]] && continue
+        USERS=$((USERS + 1)); ok "$UNAME — ${BOLD}$UCOUNT file AI"
+        BODY+=$(generic_card_html "$UNAME" "$HOME_DIR" "$UCOUNT file" "$CARDS" "◈")
+    done < <(get_linux_user_homes)
+    separator
+    info "$(L "Artefatti AI trovati:" "AI artifacts found:") ${BOLD}$TOTAL"
+    [[ $TOTAL -eq 0 ]] && { warn "$(L "Nessuna history di assistenti AI trovata." "No AI assistant history found.")"; return 0; }
+    ask_yn "Generare report HTML?" || return 0
+    local STATS; STATS="$(stat_box "$(L "File AI" "AI files")" "$TOTAL")$(stat_box "$(L "Utenti" "Users")" "$USERS" "info")"
+    finish_report "linux_ai_history" "Linux AI CLI History" "AI" "claude · aider · aichat · ollama · copilot" "$STATS" "<div class='cards'>$BODY</div>"
+}
+
+# --- LINUX 6 — Browser History ---
+module_linux_browser() {
+    section_header "Linux — Browser History" "$CYAN"
+    check_target_root || return 1
+    local BODY="" TOTAL=0 USERS=0
+    while IFS= read -r HOME_DIR; do
+        local UNAME; UNAME=$(basename "$HOME_DIR")
+        local CARDS="" UCOUNT=0
+        # Chromium-like: History (SQLite) sotto vari profili
+        local CHROME_ROOTS=(".config/google-chrome" ".config/chromium" ".config/BraveSoftware/Brave-Browser"
+                            ".config/microsoft-edge" ".config/vivaldi"
+                            "snap/chromium/common/chromium" ".var/app/com.google.Chrome/config/google-chrome")
+        for CR in "${CHROME_ROOTS[@]}"; do
+            local BASE="$HOME_DIR/$CR"; [[ -d "$BASE" ]] || continue
+            while IFS= read -r HISTDB; do
+                [[ -f "$HISTDB" ]] || continue
+                local ROWS; ROWS=$(query_sqlite "$HISTDB" "SELECT datetime(last_visit_time/1000000-11644473600,'unixepoch'), url, title FROM urls ORDER BY last_visit_time DESC LIMIT 500")
+                [[ -z "$ROWS" || "$ROWS" == ERROR* ]] && continue
+                UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + 1))
+                ok "$UNAME — $(basename "$(dirname "$HISTDB")") (Chromium)"
+                CARDS+=$(_browser_table_card "$HISTDB" "$ROWS")
+            done < <(find "$BASE" -maxdepth 2 -name "History" -type f 2>/dev/null)
+        done
+        # Firefox: places.sqlite
+        for FR in ".mozilla/firefox" "snap/firefox/common/.mozilla/firefox" ".var/app/org.mozilla.firefox/.mozilla/firefox"; do
+            local FBASE="$HOME_DIR/$FR"; [[ -d "$FBASE" ]] || continue
+            while IFS= read -r PLACES; do
+                local ROWS; ROWS=$(query_sqlite "$PLACES" "SELECT datetime(last_visit_date/1000000,'unixepoch'), url, title FROM moz_places WHERE last_visit_date IS NOT NULL ORDER BY last_visit_date DESC LIMIT 500")
+                [[ -z "$ROWS" || "$ROWS" == ERROR* ]] && continue
+                UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + 1))
+                ok "$UNAME — $(basename "$(dirname "$PLACES")") (Firefox)"
+                CARDS+=$(_browser_table_card "$PLACES" "$ROWS")
+            done < <(find "$FBASE" -maxdepth 2 -name "places.sqlite" -type f 2>/dev/null)
+        done
+        [[ $UCOUNT -eq 0 ]] && continue
+        USERS=$((USERS + 1))
+        BODY+=$(generic_card_html "$UNAME" "$HOME_DIR" "$UCOUNT profili" "$CARDS" "◐")
+    done < <(get_linux_user_homes)
+    separator
+    info "$(L "Profili browser con history:" "Browser profiles with history:") ${BOLD}$TOTAL"
+    [[ $TOTAL -eq 0 ]] && { warn "$(L "Nessuna history browser trovata." "No browser history found.")"; return 0; }
+    ask_yn "Generare report HTML?" || return 0
+    local STATS; STATS="$(stat_box "$(L "Profili" "Profiles")" "$TOTAL")$(stat_box "$(L "Utenti" "Users")" "$USERS" "info")"
+    finish_report "linux_browser" "Linux Browser History" "WEB" "Firefox · Chrome · Chromium · Brave · Edge" "$STATS" "<div class='cards'>$BODY</div>"
+}
+
+# Tabella HTML per le righe (data\turl\ttitolo) di un DB browser
+_browser_table_card() {
+    local DB="$1" ROWS="$2"
+    local _RTMP; _RTMP=$(mktemp); printf '%s\n' "$ROWS" > "$_RTMP"
+    local TABLE; TABLE=$("$PY3" - "$_RTMP" << 'PYEOF'
+import sys, html
+print("<table><tr><th>Data</th><th>URL</th><th>Titolo</th></tr>")
+for line in open(sys.argv[1], errors='replace'):
+    parts=line.rstrip('\n').split('\t')
+    if len(parts)<2: continue
+    d=html.escape(parts[0]); u=html.escape(parts[1]); t=html.escape(parts[2] if len(parts)>2 else '')
+    print(f"<tr><td class='mono dim'>{d}</td><td class='mono'>{u}</td><td>{t}</td></tr>")
+print("</table>")
+PYEOF
+)
+    rm -f "$_RTMP"
+    local N; N=$(printf '%s\n' "$ROWS" | grep -c . || echo 0)
+    generic_card_html "$(basename "$(dirname "$DB")")" "$DB" "$N URL" "$TABLE" "◐"
+}
+
+# --- LINUX 7 — User Accounts ---
+module_linux_accounts() {
+    section_header "Linux — User Accounts" "$RED"
+    check_target_root || return 1
+    local ETC; ETC=$(ci_find_dir "$WIN_ROOT" "etc")
+    [[ -z "$ETC" ]] && { warn "$(L "Directory etc non trovata." "etc directory not found.")"; return 0; }
+    local BODY="" FOUND=0
+    # passwd: evidenzia UID 0 e shell interattive
+    local PASSWD; PASSWD=$(ci_find_file "$ETC" "passwd")
+    if [[ -n "$PASSWD" ]]; then
+        FOUND=$((FOUND + 1))
+        ok "passwd"
+        local TABLE; TABLE=$("$PY3" - "$PASSWD" << 'PYEOF'
+import sys, html
+print("<table><tr><th>User</th><th>UID</th><th>GID</th><th>Home</th><th>Shell</th></tr>")
+for line in open(sys.argv[1], errors='replace'):
+    line=line.rstrip('\n')
+    if not line or line.startswith('#'): continue
+    p=line.split(':')
+    if len(p)<7: continue
+    uid=p[2]; sh=p[6]
+    bad = uid=='0' or (sh and not sh.endswith(('nologin','false','sync')))
+    cls=" class='bad'" if uid=='0' else ""
+    print(f"<tr{cls}><td class='mono'>{html.escape(p[0])}</td><td class='mono'>{uid}</td><td class='mono'>{p[3]}</td><td class='mono dim'>{html.escape(p[5])}</td><td class='mono'>{html.escape(sh)}</td></tr>")
+print("</table>")
+PYEOF
+)
+        awk -F: '$3==0{print "      \033[0;31m[UID 0] "$1" → "$7"\033[0m"}' "$PASSWD"
+        BODY+=$(generic_card_html "passwd" "$PASSWD" "$(grep -cv '^#' "$PASSWD" 2>/dev/null) account" "$TABLE" "◉")
+    fi
+    # shadow: stato password (hash presente / vuoto / lock)
+    local SHADOW; SHADOW=$(ci_find_file "$ETC" "shadow")
+    if [[ -n "$SHADOW" && -r "$SHADOW" ]]; then
+        FOUND=$((FOUND + 1)); ok "shadow"
+        local STAB; STAB=$("$PY3" - "$SHADOW" << 'PYEOF'
+import sys, html
+print("<table><tr><th>User</th><th>Stato password</th></tr>")
+for line in open(sys.argv[1], errors='replace'):
+    line=line.rstrip('\n')
+    if not line or line.startswith('#'): continue
+    p=line.split(':')
+    if len(p)<2: continue
+    h=p[1]
+    if h in ('!','*','!!',''): st='bloccata / nessuna'
+    elif h.startswith('!'): st='bloccata (hash presente)'
+    else: st='hash impostato'
+    cls=" class='bad'" if h=='' else ""
+    print(f"<tr{cls}><td class='mono'>{html.escape(p[0])}</td><td>{st}</td></tr>")
+print("</table>")
+PYEOF
+)
+        BODY+=$(generic_card_html "shadow" "$SHADOW" "" "$STAB" "◉")
+    elif [[ -n "$SHADOW" ]]; then
+        warn "shadow $(L "presente ma non leggibile" "present but unreadable")"
+    fi
+    # group, sudoers, sudoers.d
+    for NF in group sudoers; do
+        local F; F=$(ci_find_file "$ETC" "$NF")
+        [[ -n "$F" && -s "$F" ]] || continue
+        FOUND=$((FOUND + 1)); ok "$NF"
+        BODY+=$(file_card_html "$F" "wheel|sudo|admin|ALL|NOPASSWD|root" "◉")
+    done
+    local SUDOERSD; SUDOERSD=$(ci_find_dir "$ETC" "sudoers.d")
+    if [[ -n "$SUDOERSD" ]]; then
+        while IFS= read -r F; do
+            [[ -s "$F" ]] || continue; FOUND=$((FOUND + 1))
+            BODY+=$(file_card_html "$F" "NOPASSWD|ALL|root" "◉")
+        done < <(find "$SUDOERSD" -maxdepth 1 -type f 2>/dev/null)
+    fi
+    separator
+    info "$(L "File analizzati:" "Files analysed:") ${BOLD}$FOUND"
+    [[ $FOUND -eq 0 ]] && return 0
+    ask_yn "Generare report HTML?" || return 0
+    local STATS; STATS=$(stat_box "$(L "File account" "Account files")" "$FOUND" "info")
+    finish_report "linux_accounts" "Linux User Accounts" "USR" "/etc/passwd · shadow · group · sudoers" "$STATS" "<div class='cards'>$BODY</div>"
+}
+
+# --- LINUX 8 — Persistence ---
+module_linux_persistence() {
+    section_header "Linux — Persistence" "$ORANGE"
+    check_target_root || return 1
+    local KW="curl|wget|/tmp/|/dev/shm|base64|nc |ncat|python -c|bash -i|/dev/tcp|chmod|reverse|\\.onion|http"
+    local BODY="" FOUND=0
+    _persist_add() { # label, path(file o dir), glob
+        local LABEL="$1" P="$2"
+        if [[ -f "$P" && -s "$P" ]]; then
+            FOUND=$((FOUND + 1)); ok "$LABEL — $(basename "$P")"
+            BODY+=$(file_card_html "$P" "$KW" "⟳")
+        elif [[ -d "$P" ]]; then
+            while IFS= read -r F; do
+                [[ -s "$F" ]] || continue; FOUND=$((FOUND + 1))
+                BODY+=$(file_card_html "$F" "$KW" "⟳")
+            done < <(find "$P" -maxdepth 2 -type f 2>/dev/null | head -60)
+            [[ -n "$(find "$P" -maxdepth 2 -type f 2>/dev/null | head -1)" ]] && ok "$LABEL ($(basename "$P"))"
+        fi
+    }
+    local ETC; ETC=$(ci_find_dir "$WIN_ROOT" "etc")
+    if [[ -n "$ETC" ]]; then
+        _persist_add "cron" "$(ci_find_file "$ETC" "crontab")"
+        for D in cron.d cron.daily cron.hourly cron.weekly cron.monthly; do
+            _persist_add "cron" "$(ci_find_dir "$ETC" "$D")"
+        done
+        _persist_add "init" "$(ci_find_file "$ETC" "rc.local")"
+        _persist_add "init.d" "$(ci_find_dir "$ETC" "init.d")"
+        _persist_add "systemd" "$(ci_find_dir "$ETC" "systemd/system")"
+        _persist_add "xdg-autostart" "$(ci_find_dir "$ETC" "xdg/autostart")"
+        _persist_add "ld.so.preload" "$(ci_find_file "$ETC" "ld.so.preload")"
+    fi
+    # user crontabs
+    local SPOOL; SPOOL=$(ci_find_dir "$WIN_ROOT" "var/spool/cron")
+    [[ -n "$SPOOL" ]] && _persist_add "user-cron" "$SPOOL"
+    # systemd vendor units
+    local USRLIB; USRLIB=$(ci_find_dir "$WIN_ROOT" "usr/lib/systemd/system")
+    # per-user autostart, systemd user, shell init
+    while IFS= read -r HOME_DIR; do
+        _persist_add "autostart" "$(ci_find_dir "$HOME_DIR" ".config/autostart")"
+        _persist_add "systemd-user" "$(ci_find_dir "$HOME_DIR" ".config/systemd/user")"
+        for RC in .bashrc .bash_profile .profile .zshrc .zprofile; do
+            _persist_add "shell-init" "$HOME_DIR/$RC"
+        done
+    done < <(get_linux_user_homes)
+    separator
+    info "$(L "Artefatti di persistenza:" "Persistence artifacts:") ${BOLD}$FOUND"
+    [[ $FOUND -eq 0 ]] && { warn "$(L "Nessun artefatto di persistenza trovato." "No persistence artifact found.")"; return 0; }
+    ask_yn "Generare report HTML?" || return 0
+    local STATS; STATS=$(stat_box "$(L "Artefatti" "Artifacts")" "$FOUND" "info")
+    finish_report "linux_persistence" "Linux Persistence" "PER" "cron · systemd · autostart · rc · shell-init" "$STATS" "<div class='cards'>$BODY</div>"
+}
+
+# --- LINUX 9 — SSH Artifacts ---
+module_linux_ssh() {
+    section_header "Linux — SSH Artifacts" "$YELLOW"
+    check_target_root || return 1
+    local KW="ssh-rsa|ssh-ed25519|ecdsa|PermitRootLogin|PasswordAuthentication|AuthorizedKeys|ForwardAgent"
+    local BODY="" FOUND=0
+    # sshd_config di sistema
+    local ETC; ETC=$(ci_find_dir "$WIN_ROOT" "etc/ssh")
+    if [[ -n "$ETC" ]]; then
+        local SC; SC=$(ci_find_file "$ETC" "sshd_config")
+        [[ -n "$SC" && -s "$SC" ]] && { FOUND=$((FOUND + 1)); ok "sshd_config"; print_file_lines "$SC" "PermitRootLogin|PasswordAuthentication|AllowUsers" 40; echo ""; BODY+=$(file_card_html "$SC" "$KW" "⚿"); }
+    fi
+    while IFS= read -r HOME_DIR; do
+        local UNAME; UNAME=$(basename "$HOME_DIR")
+        local SSHD; SSHD=$(ci_find_dir "$HOME_DIR" ".ssh")
+        [[ -z "$SSHD" ]] && continue
+        local CARDS="" UCOUNT=0
+        for KF in authorized_keys authorized_keys2 known_hosts config; do
+            local F="$SSHD/$KF"
+            [[ -f "$F" && -s "$F" ]] || continue
+            UCOUNT=$((UCOUNT + 1)); FOUND=$((FOUND + 1)); CARDS+=$(file_card_html "$F" "$KW" "⚿")
+        done
+        # chiavi private presenti (solo presenza, non contenuto)
+        local PRIV; PRIV=$(find "$SSHD" -maxdepth 1 -type f -name "id_*" ! -name "*.pub" 2>/dev/null | wc -l)
+        [[ "$PRIV" -gt 0 ]] && CARDS+="<div class='card' style='margin-bottom:.8rem'><div class='card-header'><div class='uicon'>⚿</div><div><div class='uname'>$(L "Chiavi private" "Private keys")</div><div class='upath'>$SSHD/id_*</div></div><div class='badge warn'>$PRIV $(L "chiavi" "keys")</div></div></div>"
+        [[ $UCOUNT -eq 0 && "$PRIV" -eq 0 ]] && continue
+        ok "$UNAME — ${BOLD}$UCOUNT file"
+        BODY+=$(generic_card_html "$UNAME" "$SSHD" "$UCOUNT file" "$CARDS" "⚿")
+    done < <(get_linux_user_homes)
+    separator
+    info "$(L "Artefatti SSH:" "SSH artifacts:") ${BOLD}$FOUND"
+    [[ $FOUND -eq 0 ]] && { warn "$(L "Nessun artefatto SSH trovato." "No SSH artifact found.")"; return 0; }
+    ask_yn "Generare report HTML?" || return 0
+    local STATS; STATS=$(stat_box "$(L "File SSH" "SSH files")" "$FOUND" "info")
+    finish_report "linux_ssh" "Linux SSH Artifacts" "SSH" "authorized_keys · known_hosts · sshd_config" "$STATS" "<div class='cards'>$BODY</div>"
+}
+
+# --- LINUX 10 — Network Config ---
+module_linux_network() {
+    section_header "Linux — Network Config" "$CYAN"
+    check_target_root || return 1
+    local KW="psk|password|key=|wpa|pre-shared|nameserver|DROP|ACCEPT|REJECT|-j |MASQUERADE"
+    local BODY="" FOUND=0
+    local ETC; ETC=$(ci_find_dir "$WIN_ROOT" "etc")
+    [[ -z "$ETC" ]] && { warn "$(L "Directory etc non trovata." "etc directory not found.")"; return 0; }
+    for NF in hosts resolv.conf hostname; do
+        local F; F=$(ci_find_file "$ETC" "$NF")
+        [[ -n "$F" && -s "$F" ]] || continue
+        FOUND=$((FOUND + 1)); ok "$NF"; BODY+=$(file_card_html "$F" "$KW" "⇄")
+    done
+    # NetworkManager connections (contengono PSK Wi-Fi)
+    local NM; NM=$(ci_find_dir "$ETC" "NetworkManager/system-connections")
+    if [[ -n "$NM" ]]; then
+        while IFS= read -r F; do
+            [[ -s "$F" ]] || continue; FOUND=$((FOUND + 1)); ok "NM: $(basename "$F")"
+            BODY+=$(file_card_html "$F" "$KW" "⇄")
+        done < <(find "$NM" -maxdepth 1 -type f 2>/dev/null)
+    fi
+    # netplan
+    local NP; NP=$(ci_find_dir "$ETC" "netplan")
+    [[ -n "$NP" ]] && while IFS= read -r F; do
+        [[ -s "$F" ]] || continue; FOUND=$((FOUND + 1)); BODY+=$(file_card_html "$F" "$KW" "⇄")
+    done < <(find "$NP" -maxdepth 1 -type f 2>/dev/null)
+    # iptables/nftables salvate
+    for RF in "iptables/rules.v4" "iptables/rules.v6" "nftables.conf"; do
+        local F; F=$(ci_find_file "$ETC" "$(basename "$RF")")
+        [[ -n "$F" && -s "$F" ]] || continue; FOUND=$((FOUND + 1)); ok "$(basename "$RF")"
+        BODY+=$(file_card_html "$F" "$KW" "⇄")
+    done
+    separator
+    info "$(L "File di rete:" "Network files:") ${BOLD}$FOUND"
+    [[ $FOUND -eq 0 ]] && { warn "$(L "Nessun file di configurazione di rete." "No network configuration file.")"; return 0; }
+    ask_yn "Generare report HTML?" || return 0
+    local STATS; STATS=$(stat_box "$(L "File rete" "Network files")" "$FOUND" "info")
+    finish_report "linux_network" "Linux Network Config" "NET" "hosts · NetworkManager · netplan · iptables" "$STATS" "<div class='cards'>$BODY</div>"
+}
+
+# --- LINUX 11 — Installed Packages ---
+module_linux_packages() {
+    section_header "Linux — Installed Packages" "$GREEN"
+    check_target_root || return 1
+    local BODY="" FOUND=0
+    # dpkg
+    local DPKG; DPKG=$(ci_find_file "$(ci_find_dir "$WIN_ROOT" "var/lib/dpkg")" "status")
+    if [[ -n "$DPKG" && -s "$DPKG" ]]; then
+        FOUND=$((FOUND + 1))
+        local PKGS; PKGS=$(grep -c '^Package:' "$DPKG" 2>/dev/null)
+        ok "dpkg — ${BOLD}$PKGS pacchetti"
+        local TAB; TAB=$(awk '/^Package:/{p=$2} /^Version:/{v=$2} /^Status:/{s=$0} /^$/{if(p)printf "<tr><td class=mono>%s</td><td class=\"mono dim\">%s</td></tr>\n",p,v; p=v=""}' "$DPKG" | head -3000)
+        BODY+=$(generic_card_html "dpkg packages" "$DPKG" "$PKGS pkg" "<table><tr><th>Package</th><th>Version</th></tr>$TAB</table>" "▦")
+    fi
+    # apt history (timeline installazioni)
+    local APTLOG; APTLOG=$(ci_find_file "$(ci_find_dir "$WIN_ROOT" "var/log/apt")" "history.log")
+    if [[ -n "$APTLOG" && -s "$APTLOG" ]]; then
+        FOUND=$((FOUND + 1)); ok "apt history.log"
+        print_file_lines "$APTLOG" "Install:|Remove:|Purge:" 40; echo ""
+        BODY+=$(file_card_html "$APTLOG" "Install:|Remove:|Purge:|Commandline:" "▦")
+    fi
+    # rpm (db binario: solo presenza + tentativo via rpm se disponibile)
+    local RPMDB; RPMDB=$(ci_find_dir "$WIN_ROOT" "var/lib/rpm")
+    if [[ -n "$RPMDB" ]]; then
+        FOUND=$((FOUND + 1)); ok "rpm db $(L "presente" "present")"
+        local RTAB=""
+        if command -v rpm >/dev/null 2>&1; then
+            RTAB=$(rpm -qa --dbpath "$RPMDB" 2>/dev/null | sort | head -3000 | "$PY3" -c 'import sys,html;[print(f"<tr><td class=mono>{html.escape(l.strip())}</td></tr>") for l in sys.stdin]')
+        fi
+        BODY+=$(generic_card_html "rpm packages" "$RPMDB" "" "<table><tr><th>Package</th></tr>${RTAB:-<tr><td class=dim>rpm CLI non disponibile per dump offline</td></tr>}</table>" "▦")
+    fi
+    # snap / flatpak (elenco directory)
+    local SNAP; SNAP=$(ci_find_dir "$WIN_ROOT" "var/lib/snapd/snaps")
+    [[ -n "$SNAP" ]] && { FOUND=$((FOUND + 1)); ok "snap"; local STAB; STAB=$(find "$SNAP" -maxdepth 1 -name "*.snap" 2>/dev/null | sort | "$PY3" -c 'import sys,html,os;[print(f"<tr><td class=mono>{html.escape(os.path.basename(l.strip()))}</td></tr>") for l in sys.stdin]'); BODY+=$(generic_card_html "snap" "$SNAP" "" "<table><tr><th>Snap</th></tr>$STAB</table>" "▦"); }
+    separator
+    info "$(L "Fonti pacchetti:" "Package sources:") ${BOLD}$FOUND"
+    [[ $FOUND -eq 0 ]] && { warn "$(L "Nessun database pacchetti trovato." "No package database found.")"; return 0; }
+    ask_yn "Generare report HTML?" || return 0
+    local STATS; STATS=$(stat_box "$(L "Fonti" "Sources")" "$FOUND" "info")
+    finish_report "linux_packages" "Linux Installed Packages" "PKG" "dpkg · rpm · apt history · snap" "$STATS" "<div class='cards'>$BODY</div>"
+}
+
+# --- LINUX 12 — Trash & Recent ---
+module_linux_trash() {
+    section_header "Linux — Trash & Recent" "$GREEN"
+    check_target_root || return 1
+    local BODY="" TOTAL=0 USERS=0
+    while IFS= read -r HOME_DIR; do
+        local UNAME; UNAME=$(basename "$HOME_DIR")
+        local CARDS="" UCOUNT=0
+        # Trash info files (.trashinfo: path + DeletionDate)
+        local TINFO; TINFO=$(ci_find_dir "$HOME_DIR" ".local/share/Trash/info")
+        if [[ -n "$TINFO" ]]; then
+            local TTAB="" TN=0
+            while IFS= read -r TF; do
+                [[ -s "$TF" ]] || continue; TN=$((TN + 1))
+                local OPATH DDATE
+                OPATH=$(grep -m1 '^Path=' "$TF" 2>/dev/null | cut -d= -f2-)
+                DDATE=$(grep -m1 '^DeletionDate=' "$TF" 2>/dev/null | cut -d= -f2-)
+                TTAB+="<tr><td class='mono dim'>$(html_esc "$DDATE")</td><td class='mono'>$(html_esc "$OPATH")</td></tr>"
+            done < <(find "$TINFO" -maxdepth 1 -name "*.trashinfo" 2>/dev/null)
+            if [[ $TN -gt 0 ]]; then
+                UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + TN))
+                ok "$UNAME — ${BOLD}$TN $(L "file cestinati" "trashed files")"
+                CARDS+=$(generic_card_html "Trash" "$TINFO" "$TN file" "<table><tr><th>$(L "Cancellato il" "Deleted on")</th><th>$(L "Percorso originale" "Original path")</th></tr>$TTAB</table>" "♺")
+            fi
+        fi
+        # recently-used.xbel
+        local XBEL; XBEL=$(ci_find_file "$HOME_DIR" ".local/share/recently-used.xbel")
+        [[ -z "$XBEL" ]] && XBEL=$(ci_find_file "$HOME_DIR" ".recently-used.xbel")
+        if [[ -n "$XBEL" && -s "$XBEL" ]]; then
+            UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + 1))
+            CARDS+=$(file_card_html "$XBEL" "href|exec|modified|visited" "♺")
+        fi
+        [[ $UCOUNT -eq 0 ]] && continue
+        USERS=$((USERS + 1))
+        BODY+=$(generic_card_html "$UNAME" "$HOME_DIR" "$UCOUNT" "$CARDS" "♺")
+    done < <(get_linux_user_homes)
+    separator
+    info "$(L "Voci trovate:" "Items found:") ${BOLD}$TOTAL"
+    [[ $TOTAL -eq 0 ]] && { warn "$(L "Nessun elemento nel cestino / recenti." "No trash / recent items.")"; return 0; }
+    ask_yn "Generare report HTML?" || return 0
+    local STATS; STATS="$(stat_box "$(L "Voci" "Items")" "$TOTAL")$(stat_box "$(L "Utenti" "Users")" "$USERS" "info")"
+    finish_report "linux_trash" "Linux Trash & Recent" "TRH" "~/.local/share/Trash · recently-used.xbel" "$STATS" "<div class='cards'>$BODY</div>"
+}
+
+# --- LINUX 13 — Filesystem Timeline ---
+module_linux_timeline() {
+    section_header "Linux — Filesystem Timeline" "$YELLOW"
+    check_target_root || return 1
+    info "$(L "Raccolta timestamp MAC nelle aree sensibili (può richiedere tempo)..." "Collecting MAC timestamps in sensitive areas (may take a while)...")"
+    # aree di interesse forense
+    local AREAS=(tmp var/tmp dev/shm root home etc/cron.d etc/systemd/system usr/local/bin var/www)
+    local TMPF; TMPF=$(mktemp)
+    local SCANNED=0
+    for A in "${AREAS[@]}"; do
+        local D; D=$(ci_find_dir "$WIN_ROOT" "$A")
+        [[ -z "$D" ]] && continue
+        SCANNED=$((SCANNED + 1))
+        find "$D" -xdev -type f -printf '%T+\t%A+\t%C+\t%s\t%p\n' 2>/dev/null | head -4000 >> "$TMPF"
+    done
+    local N; N=$(wc -l < "$TMPF" 2>/dev/null || echo 0)
+    if [[ "$N" -eq 0 ]]; then warn "$(L "Nessun file nelle aree sensibili." "No files in sensitive areas.")"; rm -f "$TMPF"; return 0; fi
+    ok "$(L "File raccolti:" "Files collected:") ${BOLD}$N"
+    # ordina per mtime desc, mostra anteprima
+    sort -r "$TMPF" -o "$TMPF"
+    head -25 "$TMPF" | while IFS=$'\t' read -r MT AT CT SZ P; do
+        echo -e "      ${DIM}$MT${RESET}  ${P#$WIN_ROOT}"
+    done
+    separator
+    ask_yn "Generare report HTML?" || { rm -f "$TMPF"; return 0; }
+    local TABLE; TABLE=$("$PY3" - "$TMPF" "$WIN_ROOT" << 'PYEOF'
+import sys, html
+root=sys.argv[2]
+print("<table><tr><th>Modified</th><th>Accessed</th><th>Changed</th><th>Size</th><th>Path</th></tr>")
+with open(sys.argv[1]) as f:
+    for line in f:
+        c=line.rstrip('\n').split('\t')
+        if len(c)<5: continue
+        mt,at,ct,sz,p=c[0],c[1],c[2],c[3],c[4]
+        rel=p[len(root):] if p.startswith(root) else p
+        print(f"<tr><td class='mono dim'>{html.escape(mt)}</td><td class='mono dim'>{html.escape(at)}</td><td class='mono dim'>{html.escape(ct)}</td><td class='mono'>{sz}</td><td class='mono'>{html.escape(rel)}</td></tr>")
+print("</table>")
+PYEOF
+)
+    rm -f "$TMPF"
+    local BODY; BODY=$(generic_card_html "$(L "Timeline aree sensibili" "Sensitive areas timeline")" "$WIN_ROOT" "$N file" "$TABLE" "◷")
+    local STATS; STATS="$(stat_box "$(L "File" "Files")" "$N")$(stat_box "$(L "Aree" "Areas")" "$SCANNED" "info")"
+    finish_report "linux_timeline" "Linux Filesystem Timeline" "TML" "MAC times (find/stat)" "$STATS" "<div class='cards'>$BODY</div>"
+}
+
+# ================================================================
+#  MODULI macOS
+# ================================================================
+
+# Renderizza una tabella HTML da righe tab-separated. $1=righe, $2.. = intestazioni
+_rows_to_table() {
+    local ROWS="$1"; shift
+    local _RTMP; _RTMP=$(mktemp); printf '%s\n' "$ROWS" > "$_RTMP"
+    printf '%s\n' "$@" > "${_RTMP}.h"
+    "$PY3" - "$_RTMP" "${_RTMP}.h" << 'PYEOF'
+import sys, html
+heads=[h.rstrip('\n') for h in open(sys.argv[2])]
+print("<table><tr>"+''.join(f'<th>{html.escape(h)}</th>' for h in heads)+"</tr>")
+for line in open(sys.argv[1], errors='replace'):
+    if not line.strip(): continue
+    cells=line.rstrip('\n').split('\t')
+    tds=''.join(f"<td class='mono'>{html.escape(c)}</td>" for c in cells)
+    print(f"<tr>{tds}</tr>")
+print("</table>")
+PYEOF
+    rm -f "$_RTMP" "${_RTMP}.h"
+}
+
+# --- macOS 1 — System Logs ---
+module_macos_logs() {
+    section_header "macOS — System Logs" "$GREEN"
+    check_target_root || return 1
+    local KW="fail|error|denied|invalid|sudo|root|unauthorized|jailbreak|malware"
+    local BODY="" FOUND=0
+    local LOGDIR; LOGDIR=$(ci_find_dir "$WIN_ROOT" "var/log")
+    if [[ -n "$LOGDIR" ]]; then
+        for NAME in system.log install.log secure.log wifi.log appfirewall.log; do
+            local F; F=$(ci_find_file "$LOGDIR" "$NAME")
+            [[ -n "$F" && -s "$F" ]] || continue
+            FOUND=$((FOUND + 1)); ok "$NAME"; print_file_lines "$F" "$KW" 40; echo ""
+            BODY+=$(file_card_html "$F" "$KW" "≣")
+        done
+        # ASL (formato binario: estrazione stringhe)
+        local ASL; ASL=$(ci_find_dir "$LOGDIR" "asl")
+        if [[ -n "$ASL" ]]; then
+            local ACOUNT; ACOUNT=$(find "$ASL" -maxdepth 1 -type f 2>/dev/null | wc -l)
+            [[ "$ACOUNT" -gt 0 ]] && { FOUND=$((FOUND + 1)); ok "asl ($ACOUNT file)"; BODY+="<div class='card'><div class='card-header'><div class='uicon'>≣</div><div><div class='uname'>ASL logs</div><div class='upath'>$ASL</div></div><div class='badge'>$ACOUNT file</div></div><div style='padding:1rem 1.5rem'><p class='dim mono' style='font-size:.72rem'>$(L "Formato binario ASL — analisi approfondita fuori scope offline." "Binary ASL format — deep parsing out of offline scope.")</p></div></div>"; }
+        fi
+    fi
+    # Nota: unified logs .tracev3 esplicitamente fuori scope
+    warn "$(L "Unified logs (.tracev3) non analizzati: richiedono il tool 'log' o parser dedicati (fuori scope)." "Unified logs (.tracev3) not parsed: require the 'log' tool or dedicated parsers (out of scope).")"
+    separator
+    info "$(L "Log trovati:" "Logs found:") ${BOLD}$FOUND"
+    [[ $FOUND -eq 0 ]] && { warn "$(L "Nessun log testuale trovato." "No text log found.")"; return 0; }
+    ask_yn "Generare report HTML?" || return 0
+    local STATS; STATS=$(stat_box "$(L "Log" "Logs")" "$FOUND" "info")
+    finish_report "macos_logs" "macOS System Logs" "LOG" "system.log · install.log · asl" "$STATS" "<div class='cards'>$BODY</div>"
+}
+
+# Estrae i campi salienti da un plist utente dslocal
+_parse_dslocal_user() {
+    "$PY3" - "$1" << 'PYEOF'
+import sys, plistlib
+try:
+    d = plistlib.load(open(sys.argv[1], 'rb'))
+    def g(k):
+        v = d.get(k)
+        return str(v[0]) if isinstance(v, list) and v else (str(v) if v is not None else '')
+    has_hash = 'yes' if d.get('ShadowHashData') else 'no'
+    print(f"{g('name')}\t{g('uid')}\t{g('gid')}\t{g('home')}\t{g('shell')}\t{has_hash}")
+except Exception as e:
+    print(f"ERROR\t{e}\t\t\t\t")
+PYEOF
+}
+
+# --- macOS 2 — User Accounts (dslocal) ---
+module_macos_accounts() {
+    section_header "macOS — User Accounts" "$RED"
+    check_target_root || return 1
+    local UDIR
+    UDIR=$(ci_find_dir "$WIN_ROOT" "var/db/dslocal/nodes/Default/users")
+    [[ -z "$UDIR" ]] && UDIR=$(ci_find_dir "$WIN_ROOT" "private/var/db/dslocal/nodes/Default/users")
+    [[ -z "$UDIR" ]] && { warn "$(L "Database dslocal non trovato." "dslocal database not found.")"; return 0; }
+    local ROWS="" COUNT=0
+    while IFS= read -r PL; do
+        local R; R=$(_parse_dslocal_user "$PL")
+        [[ "$R" == ERROR* ]] && continue
+        local UNAME; UNAME=$(printf '%s' "$R" | cut -f1)
+        [[ "$UNAME" == _* ]] && continue   # account di servizio
+        COUNT=$((COUNT + 1)); ROWS+="$R"$'\n'
+        ok "$UNAME $(printf '%s' "$R" | awk -F'\t' '{print "(uid "$2", hash:"$6")"}')"
+    done < <(find "$UDIR" -maxdepth 1 -type f -iname "*.plist" 2>/dev/null)
+    separator
+    info "$(L "Account utente:" "User accounts:") ${BOLD}$COUNT"
+    [[ $COUNT -eq 0 ]] && { warn "$(L "Nessun account utente reale trovato." "No real user account found.")"; return 0; }
+    ask_yn "Generare report HTML?" || return 0
+    local TABLE; TABLE=$(_rows_to_table "${ROWS%$'\n'}" "User" "UID" "GID" "Home" "Shell" "Hash")
+    local BODY; BODY=$(generic_card_html "dslocal users" "$UDIR" "$COUNT account" "$TABLE" "◉")
+    local STATS; STATS=$(stat_box "$(L "Account" "Accounts")" "$COUNT" "info")
+    finish_report "macos_accounts" "macOS User Accounts" "USR" "/var/db/dslocal/.../users/*.plist" "$STATS" "<div class='cards'>$BODY</div>"
+}
+
+# --- macOS 3 — Persistence (LaunchAgents/Daemons/cron) ---
+module_macos_persistence() {
+    section_header "macOS — Persistence" "$ORANGE"
+    check_target_root || return 1
+    local KW="curl|wget|/tmp/|/var/tmp|base64|python|bash -i|nc |/dev/tcp|RunAtLoad|KeepAlive|http"
+    local BODY="" FOUND=0
+    _mac_persist_dir() { # label, dir
+        local LABEL="$1" D="$2"; [[ -z "$D" || ! -d "$D" ]] && return
+        local n=0
+        while IFS= read -r F; do
+            [[ -s "$F" ]] || continue; FOUND=$((FOUND + 1)); n=$((n + 1))
+            if [[ "$F" == *.plist ]]; then
+                # rende leggibili anche i plist binari
+                local TMPF; TMPF=$(mktemp); read_plist "$F" > "$TMPF" 2>/dev/null
+                [[ -s "$TMPF" ]] || cat "$F" > "$TMPF" 2>/dev/null
+                BODY+=$(generic_card_html "$(basename "$F")" "$F" "$LABEL" "<pre class='hist-pre'>$(render_pre_block "$TMPF" "$KW")</pre>" "⟳")
+                rm -f "$TMPF"
+            else
+                BODY+=$(file_card_html "$F" "$KW" "⟳")
+            fi
+        done < <(find "$D" -maxdepth 1 -type f \( -iname "*.plist" -o -iname "*.conf" \) 2>/dev/null)
+        [[ $n -gt 0 ]] && ok "$LABEL — $n plist ($D)"
+    }
+    _mac_persist_dir "LaunchDaemons" "$(ci_find_dir "$WIN_ROOT" "Library/LaunchDaemons")"
+    _mac_persist_dir "LaunchAgents"  "$(ci_find_dir "$WIN_ROOT" "Library/LaunchAgents")"
+    _mac_persist_dir "System LaunchDaemons" "$(ci_find_dir "$WIN_ROOT" "System/Library/LaunchDaemons")"
+    # cron + periodic
+    local CRON; CRON=$(ci_find_dir "$WIN_ROOT" "var/at/tabs"); _mac_persist_dir "cron" "$CRON"
+    local PERIODIC; PERIODIC=$(ci_find_dir "$WIN_ROOT" "etc/periodic")
+    # per-user LaunchAgents
+    while IFS= read -r HOME_DIR; do
+        _mac_persist_dir "$(basename "$HOME_DIR") LaunchAgents" "$(ci_find_dir "$HOME_DIR" "Library/LaunchAgents")"
+    done < <(get_macos_user_homes)
+    separator
+    info "$(L "Artefatti di persistenza:" "Persistence artifacts:") ${BOLD}$FOUND"
+    [[ $FOUND -eq 0 ]] && { warn "$(L "Nessun artefatto di persistenza trovato." "No persistence artifact found.")"; return 0; }
+    ask_yn "Generare report HTML?" || return 0
+    local STATS; STATS=$(stat_box "$(L "Artefatti" "Artifacts")" "$FOUND" "info")
+    finish_report "macos_persistence" "macOS Persistence" "PER" "LaunchAgents · LaunchDaemons · cron" "$STATS" "<div class='cards'>$BODY</div>"
+}
+
+# --- macOS 4 — Login Items (BTM) ---
+module_macos_loginitems() {
+    section_header "macOS — Login Items (BTM)" "$RED"
+    check_target_root || return 1
+    local BODY="" FOUND=0
+    # backgrounditems.btm (vari percorsi a seconda della versione)
+    mapfile -t BTM < <(find "$WIN_ROOT" -maxdepth 8 -iname "backgrounditems.btm" -type f 2>/dev/null; find "$WIN_ROOT" -maxdepth 8 -path "*backgroundtaskmanagementagent*" -type f 2>/dev/null | head -20)
+    for F in "${BTM[@]}"; do
+        [[ -s "$F" ]] || continue; FOUND=$((FOUND + 1)); ok "$(basename "$F")"
+        # BTM è un blob binario: estrai riferimenti a path/app leggibili
+        local STR; STR=$(strings -n 5 "$F" 2>/dev/null | grep -iE '\.app|/Users/|/Library/|/usr/|\.plist|\.sh$' | sort -u | head -100)
+        local TMPF; TMPF=$(mktemp); printf '%s\n' "$STR" > "$TMPF"
+        BODY+=$(generic_card_html "$(basename "$F")" "$F" "$(printf '%s\n' "$STR" | grep -c .) ref" "<pre class='hist-pre'>$(render_pre_block "$TMPF" "tmp|/private|curl|\\.sh")</pre>" "⚑")
+        rm -f "$TMPF"
+    done
+    separator
+    info "$(L "File BTM trovati:" "BTM files found:") ${BOLD}$FOUND"
+    [[ $FOUND -eq 0 ]] && { warn "$(L "Nessun login item (BTM) trovato." "No login item (BTM) found.")"; return 0; }
+    ask_yn "Generare report HTML?" || return 0
+    local STATS; STATS=$(stat_box "$(L "File BTM" "BTM files")" "$FOUND" "info")
+    finish_report "macos_loginitems" "macOS Login Items (BTM)" "BTM" "backgrounditems.btm" "$STATS" "<div class='cards'>$BODY</div>"
+}
+
+# --- macOS 5 — Quarantine / Downloads ---
+module_macos_quarantine() {
+    section_header "macOS — Quarantine / Downloads" "$CYAN"
+    check_target_root || return 1
+    local BODY="" TOTAL=0
+    while IFS= read -r HOME_DIR; do
+        local UNAME; UNAME=$(basename "$HOME_DIR")
+        mapfile -t QDB < <(find "$HOME_DIR" -maxdepth 4 -iname "com.apple.LaunchServices.QuarantineEventsV2*" -type f 2>/dev/null)
+        for DB in "${QDB[@]}"; do
+            local ROWS; ROWS=$(query_sqlite "$DB" "SELECT datetime(LSQuarantineTimeStamp+978307200,'unixepoch'), LSQuarantineAgentName, LSQuarantineDataURLString FROM LSQuarantineEvent ORDER BY LSQuarantineTimeStamp DESC LIMIT 500")
+            [[ -z "$ROWS" || "$ROWS" == ERROR* ]] && continue
+            local N; N=$(printf '%s\n' "$ROWS" | grep -c .); TOTAL=$((TOTAL + N))
+            ok "$UNAME — ${BOLD}$N $(L "download tracciati" "tracked downloads")"
+            local TABLE; TABLE=$(_rows_to_table "$ROWS" "$(L "Data" "Date")" "Agent" "URL")
+            BODY+=$(generic_card_html "$UNAME" "$DB" "$N" "$TABLE" "⤓")
+        done
+    done < <(get_macos_user_homes)
+    separator
+    info "$(L "Eventi di quarantena:" "Quarantine events:") ${BOLD}$TOTAL"
+    [[ $TOTAL -eq 0 ]] && { warn "$(L "Nessun evento di quarantena trovato." "No quarantine event found.")"; return 0; }
+    ask_yn "Generare report HTML?" || return 0
+    local STATS; STATS=$(stat_box "$(L "Eventi" "Events")" "$TOTAL" "info")
+    finish_report "macos_quarantine" "macOS Quarantine / Downloads" "DL" "QuarantineEventsV2" "$STATS" "<div class='cards'>$BODY</div>"
+}
+
+# --- macOS 6 — TCC Privacy ---
+module_macos_tcc() {
+    section_header "macOS — TCC Privacy" "$RED"
+    check_target_root || return 1
+    local BODY="" TOTAL=0
+    _tcc_card() { # db, label
+        local DB="$1" LBL="$2"
+        local ROWS; ROWS=$(query_sqlite "$DB" "SELECT service, client, CASE auth_value WHEN 0 THEN 'denied' WHEN 2 THEN 'allowed' ELSE auth_value END FROM access ORDER BY service")
+        [[ -z "$ROWS" || "$ROWS" == ERROR* ]] && ROWS=$(query_sqlite "$DB" "SELECT service, client, allowed FROM access ORDER BY service")
+        [[ -z "$ROWS" || "$ROWS" == ERROR* ]] && return
+        local N; N=$(printf '%s\n' "$ROWS" | grep -c .); TOTAL=$((TOTAL + N))
+        ok "$LBL — ${BOLD}$N $(L "permessi" "permissions")"
+        local TABLE; TABLE=$(_rows_to_table "$ROWS" "Service" "Client" "Auth")
+        BODY+=$(generic_card_html "$LBL" "$DB" "$N" "$TABLE" "⊘")
+    }
+    local SYS; SYS=$(ci_find_file "$(ci_find_dir "$WIN_ROOT" "Library/Application Support/com.apple.TCC")" "TCC.db")
+    [[ -n "$SYS" ]] && _tcc_card "$SYS" "System TCC"
+    while IFS= read -r HOME_DIR; do
+        local U; U=$(basename "$HOME_DIR")
+        local DB; DB=$(ci_find_file "$(ci_find_dir "$HOME_DIR" "Library/Application Support/com.apple.TCC")" "TCC.db")
+        [[ -n "$DB" ]] && _tcc_card "$DB" "$U TCC"
+    done < <(get_macos_user_homes)
+    separator
+    info "$(L "Permessi TCC:" "TCC permissions:") ${BOLD}$TOTAL"
+    [[ $TOTAL -eq 0 ]] && { warn "$(L "Nessun database TCC leggibile." "No readable TCC database.")"; return 0; }
+    ask_yn "Generare report HTML?" || return 0
+    local STATS; STATS=$(stat_box "$(L "Permessi" "Permissions")" "$TOTAL" "info")
+    finish_report "macos_tcc" "macOS TCC Privacy" "TCC" "TCC.db (cam/mic/disco)" "$STATS" "<div class='cards'>$BODY</div>"
+}
+
+# --- macOS 7 — KnowledgeC ---
+module_macos_knowledgec() {
+    section_header "macOS — KnowledgeC" "$BLUE"
+    check_target_root || return 1
+    local BODY="" TOTAL=0
+    while IFS= read -r HOME_DIR; do
+        local U; U=$(basename "$HOME_DIR")
+        local DB; DB=$(ci_find_file "$(ci_find_dir "$HOME_DIR" "Library/Application Support/Knowledge")" "knowledgeC.db")
+        [[ -z "$DB" ]] && continue
+        local ROWS; ROWS=$(query_sqlite "$DB" "SELECT datetime(ZCREATIONDATE+978307200,'unixepoch'), ZSTREAMNAME, ZVALUESTRING FROM ZOBJECT WHERE ZVALUESTRING IS NOT NULL ORDER BY ZCREATIONDATE DESC LIMIT 500")
+        [[ -z "$ROWS" || "$ROWS" == ERROR* ]] && continue
+        local N; N=$(printf '%s\n' "$ROWS" | grep -c .); TOTAL=$((TOTAL + N))
+        ok "$U — ${BOLD}$N $(L "eventi" "events")"
+        local TABLE; TABLE=$(_rows_to_table "$ROWS" "$(L "Data" "Date")" "Stream" "Value")
+        BODY+=$(generic_card_html "$U" "$DB" "$N" "$TABLE" "◴")
+    done < <(get_macos_user_homes)
+    separator
+    info "$(L "Eventi KnowledgeC:" "KnowledgeC events:") ${BOLD}$TOTAL"
+    [[ $TOTAL -eq 0 ]] && { warn "$(L "Nessun knowledgeC.db leggibile." "No readable knowledgeC.db.")"; return 0; }
+    ask_yn "Generare report HTML?" || return 0
+    local STATS; STATS=$(stat_box "$(L "Eventi" "Events")" "$TOTAL" "info")
+    finish_report "macos_knowledgec" "macOS KnowledgeC" "KC" "knowledgeC.db (app usage)" "$STATS" "<div class='cards'>$BODY</div>"
+}
+
+# --- macOS 8 — Browser History ---
+module_macos_browser() {
+    section_header "macOS — Browser History" "$CYAN"
+    check_target_root || return 1
+    local BODY="" TOTAL=0 USERS=0
+    while IFS= read -r HOME_DIR; do
+        local U; U=$(basename "$HOME_DIR"); local CARDS="" UCOUNT=0
+        # Safari
+        local SAF; SAF=$(ci_find_file "$(ci_find_dir "$HOME_DIR" "Library/Safari")" "History.db")
+        if [[ -n "$SAF" ]]; then
+            local ROWS; ROWS=$(query_sqlite "$SAF" "SELECT datetime(v.visit_time+978307200,'unixepoch'), i.url, v.title FROM history_visits v JOIN history_items i ON v.history_item=i.id ORDER BY v.visit_time DESC LIMIT 500")
+            if [[ -n "$ROWS" && "$ROWS" != ERROR* ]]; then
+                UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + 1)); ok "$U — Safari"
+                CARDS+=$(generic_card_html "Safari" "$SAF" "$(printf '%s\n' "$ROWS" | grep -c .) URL" "$(_rows_to_table "$ROWS" "$(L "Data" "Date")" "URL" "$(L "Titolo" "Title")")" "◐")
+            fi
+        fi
+        # Chrome/Brave/Edge
+        for CR in "Library/Application Support/Google/Chrome" "Library/Application Support/BraveSoftware/Brave-Browser" "Library/Application Support/Microsoft Edge"; do
+            local BASE; BASE=$(ci_find_dir "$HOME_DIR" "$CR"); [[ -z "$BASE" ]] && continue
+            while IFS= read -r HISTDB; do
+                local ROWS; ROWS=$(query_sqlite "$HISTDB" "SELECT datetime(last_visit_time/1000000-11644473600,'unixepoch'), url, title FROM urls ORDER BY last_visit_time DESC LIMIT 500")
+                [[ -z "$ROWS" || "$ROWS" == ERROR* ]] && continue
+                UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + 1)); ok "$U — $(basename "$(dirname "$HISTDB")") (Chromium)"
+                CARDS+=$(_browser_table_card "$HISTDB" "$ROWS")
+            done < <(find "$BASE" -maxdepth 2 -name "History" -type f 2>/dev/null)
+        done
+        # Firefox
+        local FB; FB=$(ci_find_dir "$HOME_DIR" "Library/Application Support/Firefox/Profiles")
+        if [[ -n "$FB" ]]; then
+            while IFS= read -r PLACES; do
+                local ROWS; ROWS=$(query_sqlite "$PLACES" "SELECT datetime(last_visit_date/1000000,'unixepoch'), url, title FROM moz_places WHERE last_visit_date IS NOT NULL ORDER BY last_visit_date DESC LIMIT 500")
+                [[ -z "$ROWS" || "$ROWS" == ERROR* ]] && continue
+                UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + 1)); ok "$U — Firefox"
+                CARDS+=$(_browser_table_card "$PLACES" "$ROWS")
+            done < <(find "$FB" -maxdepth 2 -name "places.sqlite" -type f 2>/dev/null)
+        fi
+        [[ $UCOUNT -eq 0 ]] && continue
+        USERS=$((USERS + 1)); BODY+=$(generic_card_html "$U" "$HOME_DIR" "$UCOUNT" "$CARDS" "◐")
+    done < <(get_macos_user_homes)
+    separator
+    info "$(L "Profili browser:" "Browser profiles:") ${BOLD}$TOTAL"
+    [[ $TOTAL -eq 0 ]] && { warn "$(L "Nessuna history browser trovata." "No browser history found.")"; return 0; }
+    ask_yn "Generare report HTML?" || return 0
+    local STATS; STATS="$(stat_box "$(L "Profili" "Profiles")" "$TOTAL")$(stat_box "$(L "Utenti" "Users")" "$USERS" "info")"
+    finish_report "macos_browser" "macOS Browser History" "WEB" "Safari · Chrome · Firefox" "$STATS" "<div class='cards'>$BODY</div>"
+}
+
+# --- macOS 9 — Shell & AI History ---
+module_macos_shell_ai_history() {
+    section_header "macOS — Shell & AI History" "$MAGENTA"
+    check_target_root || return 1
+    local FILES=(.zsh_history .bash_history .sh_history .python_history .psql_history .node_repl_history
+                 .claude .aider.chat.history.md .config/aichat .ollama/history)
+    local KW="password|secret|token|api_key|apikey|credential|ssh|curl|base64|security|keychain|sudo"
+    local BODY="" TOTAL=0 USERS=0
+    while IFS= read -r HOME_DIR; do
+        local U; U=$(basename "$HOME_DIR"); local CARDS="" UCOUNT=0
+        for HF in "${FILES[@]}"; do
+            local P="$HOME_DIR/$HF"
+            if [[ -f "$P" && -s "$P" ]]; then
+                UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + 1)); CARDS+=$(file_card_html "$P" "$KW" "\$")
+            elif [[ -d "$P" ]]; then
+                while IFS= read -r AF; do
+                    [[ -s "$AF" ]] || continue; UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + 1)); CARDS+=$(file_card_html "$AF" "$KW" "◈")
+                done < <(find "$P" -maxdepth 3 -type f \( -iname "*.json" -o -iname "*.jsonl" -o -iname "*history*" -o -iname "*.md" \) 2>/dev/null | head -20)
+            fi
+        done
+        [[ $UCOUNT -eq 0 ]] && continue
+        USERS=$((USERS + 1)); ok "$U — ${BOLD}$UCOUNT file"
+        BODY+=$(generic_card_html "$U" "$HOME_DIR" "$UCOUNT file" "$CARDS" "◢")
+    done < <(get_macos_user_homes)
+    separator
+    info "$(L "Artefatti history:" "History artifacts:") ${BOLD}$TOTAL"
+    [[ $TOTAL -eq 0 ]] && { warn "$(L "Nessuna history trovata." "No history found.")"; return 0; }
+    ask_yn "Generare report HTML?" || return 0
+    local STATS; STATS="$(stat_box "$(L "File" "Files")" "$TOTAL")$(stat_box "$(L "Utenti" "Users")" "$USERS" "info")"
+    finish_report "macos_shell_ai_history" "macOS Shell & AI History" "SH" ".zsh_history · .bash_history · AI CLI" "$STATS" "<div class='cards'>$BODY</div>"
+}
+
+# --- macOS 10 — Recent Items ---
+module_macos_recent() {
+    section_header "macOS — Recent Items" "$GREEN"
+    check_target_root || return 1
+    local BODY="" TOTAL=0 USERS=0
+    while IFS= read -r HOME_DIR; do
+        local U; U=$(basename "$HOME_DIR"); local CARDS="" UCOUNT=0
+        # SFL / SFL2 (shared file list — recent apps/docs/servers)
+        local SFLD; SFLD=$(ci_find_dir "$HOME_DIR" "Library/Application Support/com.apple.sharedfilelist")
+        if [[ -n "$SFLD" ]]; then
+            while IFS= read -r SF; do
+                [[ -s "$SF" ]] || continue
+                local STR; STR=$(strings -n 5 "$SF" 2>/dev/null | grep -iE '/Users/|/Volumes/|\.app|\.|smb://|afp://|ftp://' | sort -u | head -60)
+                [[ -z "$STR" ]] && continue
+                UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + 1))
+                local TMPF; TMPF=$(mktemp); printf '%s\n' "$STR" > "$TMPF"
+                CARDS+=$(generic_card_html "$(basename "$SF")" "$SF" "$(printf '%s\n' "$STR" | grep -c .) ref" "<pre class='hist-pre'>$(render_pre_block "$TMPF" "smb://|afp://|/Volumes")</pre>" "◇")
+                rm -f "$TMPF"
+            done < <(find "$SFLD" -maxdepth 2 -type f \( -iname "*.sfl" -o -iname "*.sfl2" -o -iname "*.sfl3" \) 2>/dev/null)
+        fi
+        # Trash
+        local TRASH; TRASH=$(ci_find_dir "$HOME_DIR" ".Trash")
+        if [[ -n "$TRASH" ]]; then
+            local TN; TN=$(find "$TRASH" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l)
+            if [[ "$TN" -gt 0 ]]; then
+                UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + TN))
+                local TLIST; TLIST=$(find "$TRASH" -mindepth 1 -maxdepth 1 -printf '%T+\t%p\n' 2>/dev/null | sort -r | head -200)
+                CARDS+=$(generic_card_html ".Trash" "$TRASH" "$TN" "$(_rows_to_table "$TLIST" "$(L "Modificato" "Modified")" "$(L "Percorso" "Path")")" "♺")
+            fi
+        fi
+        [[ $UCOUNT -eq 0 ]] && continue
+        USERS=$((USERS + 1)); ok "$U — ${BOLD}$UCOUNT $(L "sorgenti" "sources")"
+        BODY+=$(generic_card_html "$U" "$HOME_DIR" "$UCOUNT" "$CARDS" "◇")
+    done < <(get_macos_user_homes)
+    separator
+    info "$(L "Voci recenti:" "Recent items:") ${BOLD}$TOTAL"
+    [[ $TOTAL -eq 0 ]] && { warn "$(L "Nessuna voce recente trovata." "No recent item found.")"; return 0; }
+    ask_yn "Generare report HTML?" || return 0
+    local STATS; STATS="$(stat_box "$(L "Voci" "Items")" "$TOTAL")$(stat_box "$(L "Utenti" "Users")" "$USERS" "info")"
+    finish_report "macos_recent" "macOS Recent Items" "RCN" "SFL · .Trash · recent items" "$STATS" "<div class='cards'>$BODY</div>"
+}
+
+# ================================================================
+#  REGISTRO MODULI PER OS NON-WINDOWS (data-driven)
+#  Formato entry:  "funzione|Nome|VARIABILE_COLORE|descrizione"
+#  L'ordine determina la numerazione mostrata a menu.
+# ================================================================
+MODULES_LINUX=(
+    "module_linux_syslog|System Logs|GREEN|/var/log (syslog, auth, kern, secure...)"
+    "module_linux_journal|systemd Journal|GREEN|var/log/journal/*.journal"
+    "module_linux_logins|Login History|CYAN|wtmp / btmp / lastlog"
+    "module_linux_shell_history|Shell History|MAGENTA|bash/zsh/sh + python/mysql/psql"
+    "module_linux_ai_history|AI CLI History|MAGENTA|claude / aider / aichat / ollama"
+    "module_linux_browser|Browser History|CYAN|Firefox / Chrome / Chromium / Brave"
+    "module_linux_accounts|User Accounts|RED|passwd / shadow / group / sudoers"
+    "module_linux_persistence|Persistence|ORANGE|cron / systemd / autostart / rc"
+    "module_linux_ssh|SSH Artifacts|YELLOW|authorized_keys / known_hosts / sshd_config"
+    "module_linux_network|Network Config|CYAN|hosts / NetworkManager / iptables"
+    "module_linux_packages|Installed Packages|GREEN|dpkg / rpm / apt history / snap"
+    "module_linux_trash|Trash & Recent|GREEN|~/.local/share/Trash + recently-used"
+    "module_linux_timeline|Filesystem Timeline|YELLOW|MAC times aggregati (find/stat)"
+)
+
+MODULES_MACOS=(
+    "module_macos_logs|System Logs|GREEN|system.log / install.log / asl"
+    "module_macos_accounts|User Accounts|RED|dslocal users .plist (+ hash)"
+    "module_macos_persistence|Persistence|ORANGE|LaunchAgents / LaunchDaemons / cron"
+    "module_macos_loginitems|Login Items (BTM)|RED|backgrounditems.btm"
+    "module_macos_quarantine|Quarantine / Downloads|CYAN|QuarantineEventsV2 (URL+data)"
+    "module_macos_tcc|TCC Privacy|RED|TCC.db (permessi cam/mic/disco)"
+    "module_macos_knowledgec|KnowledgeC|BLUE|knowledgeC.db (uso app/attività)"
+    "module_macos_browser|Browser History|CYAN|Safari / Chrome / Firefox"
+    "module_macos_shell_ai_history|Shell & AI History|MAGENTA|zsh/bash + AI CLI"
+    "module_macos_recent|Recent Items|GREEN|SFL / .Trash / recent items"
+)
+
+# Restituisce il NOME dell'array registro per l'OS corrente (vuoto per windows/unknown)
+active_registry_name() {
+    case "$OS_TYPE" in
+        linux) echo "MODULES_LINUX" ;;
+        macos) echo "MODULES_MACOS" ;;
+        *)     echo "" ;;
+    esac
+}
+
+# Renderizza il menu a partire da un registro (equivalente dinamico di print_menu)
+render_menu_from_registry() {
+    local -n _REG="$1"
+    local _NOT_SET _WRITABLE _READONLY _NOT_CREATED _PARENT_RO _DIAG _RUN_ALL _QUIT _CHOICE_LABEL _REPORTS_LABEL
+    _NOT_SET="$(L "non impostata" "not set")"
+    _WRITABLE="$(L "scrivibile" "writable")"
+    _READONLY="$(L "SOLA LETTURA" "READ ONLY")"
+    _NOT_CREATED="$(L "OK (non ancora creata)" "OK (not yet created)")"
+    _PARENT_RO="$(L "PARENT NON SCRIVIBILE" "PARENT NOT WRITABLE")"
+    _DIAG="$(L "Diagnostica volumi montati" "Diagnose mounted volumes")"
+    _RUN_ALL="$(L "Esegui TUTTI i moduli" "Run ALL modules")"
+    _QUIT="$(L "Esci" "Quit")"
+    _CHOICE_LABEL="$(L "Scelta" "Choice")"
+    _REPORTS_LABEL="$(L "Report generati" "Generated reports")"
+    local _OSL; _OSL=$(os_label)
+    local _TITLE; _TITLE="$(L "SELEZIONA UN MODULO" "SELECT A MODULE")"
+
+    echo -e "  ${CYAN}${BOLD}╔══════════════════════════════════════════════════╗${RESET}"
+    printf  "  ${CYAN}${BOLD}║   F I U T O  —  %-8s —  %-18s║${RESET}\n" "$_OSL" "$_TITLE"
+    echo -e "  ${CYAN}${BOLD}╚══════════════════════════════════════════════════╝${RESET}"
+    echo ""
+    if [[ -n "$REPORT_BASE_DIR" ]]; then
+        local _RW_LABEL _RW_COLOR
+        if [[ -d "$REPORT_BASE_DIR" ]]; then
+            if [[ -w "$REPORT_BASE_DIR" ]]; then _RW_LABEL="$_WRITABLE"; _RW_COLOR="$GREEN"
+            else _RW_LABEL="$_READONLY"; _RW_COLOR="$RED"; fi
+        else
+            local _RD_PARENT; _RD_PARENT=$(dirname "$REPORT_BASE_DIR")
+            if [[ -w "$_RD_PARENT" ]]; then _RW_LABEL="$_NOT_CREATED"; _RW_COLOR="$GREEN"
+            else _RW_LABEL="$_PARENT_RO"; _RW_COLOR="$RED"; fi
+        fi
+        echo -e "  ${WHITE}[P]${RESET}  ${BOLD}Report dir:${RESET} ${DIM}${REPORT_BASE_DIR}${RESET}  ${_RW_COLOR}[${_RW_LABEL}]${RESET}"
+    else
+        echo -e "  ${WHITE}[P]${RESET}  ${BOLD}Report dir:${RESET} ${RED}$(L "non impostata — premi [P] per configurare" "not set — press [P] to configure")${RESET}"
+    fi
+    echo -e "  ${WHITE}[R]${RESET}  ${BOLD}$(L "Imposta root da analizzare" "Set analysis root")${RESET}  ${DIM}${WIN_ROOT:-($_NOT_SET)} [${_OSL}]${RESET}"
+    echo -e "  ${YELLOW}[D]${RESET}  ${BOLD}$(L "Debug mount attivi" "Debug active mounts")${RESET}  ${DIM}${_DIAG}${RESET}"
+    echo ""
+    local _i=1 _entry _f _name _color _desc
+    for _entry in "${_REG[@]}"; do
+        IFS='|' read -r _f _name _color _desc <<< "$_entry"
+        local _C="${!_color:-$RESET}"
+        printf "  ${_C}[%2d]${RESET} %-26s ${DIM}%s${RESET}\n" "$_i" "$_name" "$_desc"
+        _i=$((_i + 1))
+    done
+    echo ""
+    echo -e "  ${WHITE}${BOLD}[0]${RESET}  ${BOLD}${_RUN_ALL}${RESET}"
+    echo ""
+    if [[ ${#GENERATED_REPORTS[@]} -gt 0 ]]; then
+        echo -e "  ${DIM}── ${_REPORTS_LABEL} (${#GENERATED_REPORTS[@]}) ──────────────────────────${RESET}"
+        for _R in "${GENERATED_REPORTS[@]}"; do
+            echo -e "  ${CYAN}↳${RESET} ${DIM}${_R}${RESET}"
+        done
+        echo ""
+    fi
+    echo -e "  ${RED}[Q]  ${_QUIT}${RESET}"
+    echo ""
+    echo -ne "  ${YELLOW}${_CHOICE_LABEL}:${RESET} "
+}
+
+# Esegue il modulo n-esimo (1-based) di un registro
+dispatch_from_registry() {
+    local _RNAME="$1" _N="$2"
+    local -n _REG="$_RNAME"
+    if ! [[ "$_N" =~ ^[0-9]+$ ]] || (( _N < 1 || _N > ${#_REG[@]} )); then
+        err "$(L "Modulo sconosciuto:" "Unknown module:") $_N"
+        return 1
+    fi
+    local _entry="${_REG[$((_N - 1))]}"
+    local _f="${_entry%%|*}"
+    "$_f"
+}
+
+# Esegue TUTTI i moduli di un registro in modalità batch (equivalente di run_all_modules)
+run_all_from_registry() {
+    local _RNAME="$1"
+    local -n _REG="$_RNAME"
+    clear
+    print_banner
+    info "$(t batch_running)"
+    echo ""
+    if [[ -z "$REPORT_BASE_DIR" ]]; then
+        REPORT_BASE_DIR="${INVOCATION_DIR}/fiuto_reports_$(date +%Y%m%d_%H%M%S)"
+        LOG_FILE="${REPORT_BASE_DIR}/fiuto_session_$(date +%Y%m%d_%H%M%S).log"
+    fi
+    info "$(t batch_report_dir) ${BOLD}$REPORT_BASE_DIR${RESET}"
+    log_msg "$(t batch_started)$WIN_ROOT ==="
+    sleep 1
+    BATCH_MODE=true
+    SUMMARY_TABLE=()
+    echo ""
+    local _total=${#_REG[@]} _i=1 _entry _f _name _rest
+    for _entry in "${_REG[@]}"; do
+        IFS='|' read -r _f _name _rest <<< "$_entry"
+        run_batch_module "$_i" "$_f" "$_name" "$_total"
+        _i=$((_i + 1))
+    done
+    BATCH_MODE=false
+    echo ""
+    section_header "$(L "Riepilogo Scansione Globale" "Global Scan Summary")" "$GREEN"
+    local _hdr_mod _hdr_name _hdr_evid _hdr_file _lbl_found _lbl_none _lbl_skip
+    _hdr_mod="$(L "MOD" "MOD")"; _hdr_name="$(L "NOME MODULO" "MODULE NAME")"
+    _hdr_evid="$(L "EVIDENZE" "FINDINGS")"; _hdr_file="$(L "FILE GENERATI" "GENERATED FILES")"
+    _lbl_found="$(L "TROVATE" "FOUND")"; _lbl_none="$(L "NESSUNA" "NONE")"; _lbl_skip="$(L "SALTATO" "SKIPPED")"
+    printf "  ${BOLD}%-4s %-32s %-12s %s${RESET}\n" "$_hdr_mod" "$_hdr_name" "$_hdr_evid" "$_hdr_file"
+    echo "  ─────────────────────────────────────────────────────────────────────────────────────────"
+    for row in "${SUMMARY_TABLE[@]}"; do
+        IFS='|' read -r mnum mname msy mpath <<< "$row"
+        if [[ "$msy" == "SI" ]]; then
+            local rel_path="${mpath#$REPORT_BASE_DIR/}"
+            printf "  ${CYAN}%02d${RESET}   ${BOLD}%-32s${RESET} ${GREEN}%-12s${RESET} ${DIM}%s${RESET}\n" "$mnum" "$mname" "$_lbl_found" "$rel_path"
+        elif [[ "$msy" == "SKIP" ]]; then
+            printf "  ${CYAN}%02d${RESET}   %-32s ${YELLOW}%-12s${RESET} ${DIM}%s${RESET}\n" "$mnum" "$mname" "$_lbl_skip" "$mpath"
+        else
+            printf "  ${CYAN}%02d${RESET}   %-32s ${DIM}%-12s${RESET} ${DIM}-${RESET}\n" "$mnum" "$mname" "$_lbl_none"
+        fi
+    done
+    echo ""
+    ok "$(L "Report salvati integralmente in:" "All reports saved in:") ${BOLD}$REPORT_BASE_DIR"
+}
+
 print_menu() {
     local _MENU_TITLE _SELECT_MODULE _NOT_SET _WRITABLE _READONLY _NOT_CREATED _PARENT_RO
     local _REPORT_DIR_LABEL _WIN_ROOT_LABEL _DEBUG_LABEL _RUN_ALL _QUIT _CHOICE_LABEL
@@ -9935,12 +11471,20 @@ main() {
         print_banner
         [[ -z "$WIN_ROOT" ]] && { err "$(t specify_root_all)"; exit 1; }
         [[ -n "$ARG_IOC" ]] && load_ioc_file "$ARG_IOC"
-        run_all_modules
+        if [[ "$OS_TYPE" == "windows" ]]; then
+            run_all_modules
+        else
+            run_all_from_registry "$(active_registry_name)"
+        fi
         exit 0
     fi
     if [[ -n "$ARG_MODULE" ]]; then
         [[ -z "$WIN_ROOT" ]] && { err "$(t specify_root_module)"; exit 1; }
         [[ -n "$ARG_IOC" ]] && load_ioc_file "$ARG_IOC"
+        if [[ "$OS_TYPE" != "windows" ]]; then
+            dispatch_from_registry "$(active_registry_name)" "$ARG_MODULE"
+            exit 0
+        fi
         case "$ARG_MODULE" in
             1)  module_ps_history ;;
             2)  module_notepad_tabstate ;;
@@ -9990,8 +11534,13 @@ main() {
         [[ -n "$ARG_IOC" ]] && load_ioc_file "$ARG_IOC"
         local MOD_NUMS
         mapfile -t MOD_NUMS < <(expand_module_list "$ARG_MODULES")
+        local _rn; _rn=$(active_registry_name)
         for N in "${MOD_NUMS[@]}"; do
-            run_module_by_number "$N"
+            if [[ "$OS_TYPE" == "windows" ]]; then
+                run_module_by_number "$N"
+            else
+                dispatch_from_registry "$_rn" "$N"
+            fi
         done
         exit 0
     fi
@@ -10002,12 +11551,12 @@ main() {
     # Modalità interattiva — chiedi prima ROOT, poi REPORT dir
     if [[ -z "$WIN_ROOT" ]]; then
         print_banner
-        echo -e "  ${CYAN}[*]${RESET} $(L "Ricerca automatica di volumi Windows montati..." "Automatically searching for mounted Windows volumes...")"
+        echo -e "  ${CYAN}[*]${RESET} $(L "Ricerca automatica di volumi montati (Windows/Linux/macOS)..." "Automatically searching for mounted volumes (Windows/Linux/macOS)...")"
         if ! autodetect_win_root silent; then
             echo ""
             warn "$(L "Nessun volume Windows rilevato automaticamente." "No Windows volume detected automatically.")"
             echo ""
-            echo -ne "  ${YELLOW}[?]${RESET} $(L "Inserisci il path della root Windows (o INVIO per saltare):" "Enter Windows root path (or ENTER to skip):") "
+            echo -ne "  ${YELLOW}[?]${RESET} $(L "Inserisci il path della root da analizzare (o INVIO per saltare):" "Enter analysis root path (or ENTER to skip):") "
             local _MR; read -r _MR || true
             if [[ -n "$_MR" ]]; then
                 _MR=$(realpath -m "$_MR" 2>/dev/null || echo "$_MR")
@@ -10037,7 +11586,12 @@ main() {
     # Modalità interattiva
     while true; do
         print_banner
-        print_menu
+        local _RN; _RN=$(active_registry_name)
+        if [[ -n "$_RN" ]]; then
+            render_menu_from_registry "$_RN"
+        else
+            print_menu
+        fi
         read -r CHOICE
         echo ""
 
@@ -10045,46 +11599,11 @@ main() {
             P)  setup_report_dir || true; sleep 1 ;;
             R)  set_win_root; sleep 1 ;;
             D)  debug_mounts ;;
-            1)  module_ps_history; return_to_menu ;;
-            2)  module_notepad_tabstate; return_to_menu ;;
-            3)  module_ifeo; return_to_menu ;;
-            4)  module_bam; return_to_menu ;;
-            5)  module_run_keys; return_to_menu ;;
-            6)  module_prefetch; return_to_menu ;;
-            7)  module_scheduled_tasks; return_to_menu ;;
-            8)  module_usb; return_to_menu ;;
-            9)  module_lnk; return_to_menu ;;
-            10) module_rdp_cache; return_to_menu ;;
-            11) module_services; return_to_menu ;;
-            12) module_evtx; return_to_menu ;;
-            13) module_amcache; return_to_menu ;;
-            14) module_recycle_bin; return_to_menu ;;
-            15) module_wmi; return_to_menu ;;
-            16) module_srum; return_to_menu ;;
-            17) module_browser; return_to_menu ;;
-            18) module_userassist; return_to_menu ;;
-            19) module_shellbags; return_to_menu ;;
-            20) module_sam; return_to_menu ;;
-            21) module_mft; return_to_menu ;;
-            22) module_opensave; return_to_menu ;;
-            23) module_usn; return_to_menu ;;
-            24) module_ntds; return_to_menu ;;
-            25) module_hiberfil; return_to_menu ;;
-            26) module_wer_files; return_to_menu ;;
-            27) module_credential_manager; return_to_menu ;;
-            28) module_wlan; return_to_menu ;;
-            29) module_appx; return_to_menu ;;
-            30) module_browser_extra; return_to_menu ;;
-            31) module_clipboard; return_to_menu ;;
-            32) module_office_mru; return_to_menu ;;
-            33) module_defender_quarantine; return_to_menu ;;
-            34) module_ps_scriptblock; return_to_menu ;;
-            35) module_jumplists; return_to_menu ;;
-            36) module_network_artifacts; return_to_menu ;;
-            37) module_master_timeline; return_to_menu ;;
-            38) module_pad_offline; return_to_menu ;;
-            39) module_ai_chat; return_to_menu ;;
-            0)  run_all_modules
+            0)  if [[ "$OS_TYPE" == "windows" ]]; then
+                    run_all_modules
+                else
+                    run_all_from_registry "$(active_registry_name)"
+                fi
                 return_to_menu ;;
             Q)  echo ""
                 if [[ ${#GENERATED_REPORTS[@]} -gt 0 ]]; then
@@ -10111,7 +11630,20 @@ main() {
                     echo ""
                 fi
                 echo -e "  ${DIM}$(L "Uscita." "Exiting.")${RESET}"; echo ""; exit 0 ;;
-            *)  warn "$(L "Scelta non valida:" "Invalid choice:") '$CHOICE'"; sleep 1 ;;
+            *)  if [[ "$CHOICE" =~ ^[0-9]+$ ]]; then
+                    if [[ "$OS_TYPE" == "windows" ]]; then
+                        run_module_by_number "$CHOICE"; return_to_menu
+                    else
+                        local _rn; _rn=$(active_registry_name)
+                        if [[ -n "$_rn" ]]; then
+                            dispatch_from_registry "$_rn" "$CHOICE"; return_to_menu
+                        else
+                            warn "$(L "Nessun volume valido selezionato. Usa [R]." "No valid volume selected. Use [R].")"; sleep 1
+                        fi
+                    fi
+                else
+                    warn "$(L "Scelta non valida:" "Invalid choice:") '$CHOICE'"; sleep 1
+                fi ;;
         esac
     done
 }

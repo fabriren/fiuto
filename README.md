@@ -2,14 +2,24 @@
 
 ## 🇬🇧 English Version
 
-**FIUTO** (**F**orensic **I**nvestigation **U**tility **T**ool for **O**ffline) is a unified DFIR (Digital Forensics and Incident Response) toolkit for comprehensive offline Windows disk analysis. It automates the extraction and analysis of 39+ critical forensic artifacts, generating detailed HTML reports for rapid and effective investigations.
+**FIUTO** (**F**orensic **I**nvestigation **U**tility **T**ool for **O**ffline) is a unified DFIR (Digital Forensics and Incident Response) toolkit for comprehensive **offline disk analysis of Windows, Linux and macOS** volumes. It automatically **detects the operating system of each mounted volume** and proposes the relevant module set, generating detailed HTML reports for rapid and effective investigations.
+
+- **Windows** volumes → the 39 Windows artifact modules.
+- **Linux** volumes → 13 dedicated modules (system logs, journal, logins, shell/AI history, browsers, accounts, persistence, SSH, network, packages, trash, timeline).
+- **macOS** volumes → 10 dedicated modules (system logs, dslocal accounts, persistence, login items/BTM, quarantine, TCC, KnowledgeC, browsers, shell/AI history, recent items).
+
+Everything runs strictly **offline**, parsing the read-only mounted filesystem.
 
 ---
 
 ## 📋 Key Features
 
+### Automatic per-volume OS detection
+
+At startup FIUTO lists the mounted volumes with an OS badge (`[Windows]` / `[Linux]` / `[macOS]`) and, once a volume is selected, shows only the modules that apply to that operating system.
+
 ### Comprehensive Windows Artifact Coverage
-FIUTO collects and analyzes:
+On Windows volumes FIUTO collects and analyzes:
 - **Execution histories** (Prefetch, AmCache, ShimCache, BAM)
 - **Persistence artifacts** (Run Keys, Scheduled Tasks, Services, WMI)
 - **Navigation history** (Browser history, URL MRU, TypedPaths)
@@ -22,13 +32,44 @@ FIUTO collects and analyzes:
 - **AI assistant chat history** (ChatGPT, Copilot, Claude, Cursor, Gemini, Codex, Windsurf, Continue) — *new in v1.2*
 - **And much more...**
 
+### Linux Artifact Coverage — *new in v2.0*
+
+On Linux volumes FIUTO collects and analyzes:
+- **System logs** (`/var/log`: syslog, auth, kern, secure…) and **systemd journal** (`*.journal`)
+- **Login history** (`wtmp` / `btmp` / `lastlog` — successful and failed logins with source IP)
+- **Shell history** (bash/zsh/sh + python/mysql/psql) and **AI CLI history** (claude, aider, aichat, ollama…)
+- **Browser history** (Firefox `places.sqlite`, Chrome/Chromium/Brave/Edge — incl. snap/flatpak paths)
+- **User accounts** (`passwd`, `shadow`, `group`, `sudoers`, `sudoers.d`)
+- **Persistence** (cron, systemd units/timers, autostart, `rc.local`, shell init, `ld.so.preload`)
+- **SSH artifacts** (`authorized_keys`, `known_hosts`, `sshd_config`, private-key presence)
+- **Network config** (`hosts`, NetworkManager Wi-Fi PSK, netplan, iptables/nftables)
+- **Installed packages** (dpkg, rpm, apt history, snap — installation timeline)
+- **Trash & recent files** (`~/.local/share/Trash` with deletion timestamps, `recently-used.xbel`)
+- **Filesystem MAC-time timeline** of forensically sensitive areas
+
+### macOS Artifact Coverage — *new in v2.0*
+
+On macOS volumes FIUTO collects and analyzes:
+- **System logs** (`system.log`, `install.log`, ASL) — *unified `.tracev3` logs are out of scope*
+- **User accounts** (dslocal `*.plist` — UID, home, shell, password-hash presence)
+- **Persistence** (`LaunchAgents` / `LaunchDaemons` system & per-user, cron) — binary plists rendered readable
+- **Login Items / BTM** (`backgrounditems.btm`)
+- **Quarantine / downloads** (`QuarantineEventsV2` — download URL + timestamp)
+- **TCC privacy** (`TCC.db` — camera/mic/disk permissions)
+- **KnowledgeC** (`knowledgeC.db` — app usage / device activity)
+- **Browser history** (Safari `History.db`, Chrome, Firefox)
+- **Shell & AI history** (`.zsh_history`, `.bash_history`, AI CLI)
+- **Recent items** (`SFL`/`SFL2`, `~/.Trash`)
+
 ### Flexible Execution Modes
 ```bash
-./fiuto.sh                          # Interactive menu
-./fiuto.sh /mnt/windows             # Specify Windows volume root
-./fiuto.sh /mnt/windows --all       # Run all modules
-./fiuto.sh /mnt/windows --module 3  # Run specific module
+./fiuto.sh                          # Interactive menu (auto-detects mounted volumes + OS)
+./fiuto.sh /mnt/disk                # Specify a volume root (Windows / Linux / macOS)
+./fiuto.sh /mnt/disk --all          # Run all modules for the detected OS
+./fiuto.sh /mnt/disk --module 3     # Run a specific module (numbering depends on the OS)
+./fiuto.sh /mnt/disk --modules 1,4,6-8   # Run a list/range of modules
 ```
+The module numbers shown by `--module`/`--modules` always refer to the **menu of the detected OS**.
 
 ### Professional Output
 - Interactive and navigable HTML reports
@@ -43,7 +84,8 @@ FIUTO collects and analyzes:
 ### System Requirements
 - **Bash 4.0+**
 - **Python 3.9+** (with multi-version compatibility)
-- **Linux (or WSL) or macOS** (for mounting/analyzing offline Windows disks)
+- **Linux (or WSL) or macOS** (host for mounting/analyzing the offline target disks)
+- **Optional:** `journalctl` (Linux journal parsing), `rpm` CLI (offline RPM dump). `sqlite3` and `plistlib` ship with Python 3 — no extra install needed for Linux/macOS modules.
 
 ### Required Python Modules
 ```bash
@@ -79,14 +121,18 @@ The script uses internal bash helpers for:
    # python3 -m pip install --user regipy python-evtx
    ```
 
-4. **Mount the Windows disk (example)**
+4. **Mount the target disk read-only (examples)**
    ```bash
-   # On Linux with ntfs-3g
-   sudo mount -t ntfs-3g -o ro /dev/sda3 /mnt/windows
+   # Windows (NTFS) on Linux with ntfs-3g
+   sudo mount -t ntfs-3g -o ro /dev/sda3 /mnt/disk
 
-   # On macOS
-   sudo mount -t ntfs -o rdonly /dev/disk0s3 /mnt/windows
+   # Linux (ext4)
+   sudo mount -o ro /dev/sda2 /mnt/disk
+
+   # macOS (APFS/HFS+) — read-only
+   sudo mount -o ro /dev/sdb2 /mnt/disk
    ```
+   FIUTO auto-detects the OS of the mounted volume; no need to tell it which OS it is.
 
 ---
 
@@ -94,9 +140,9 @@ The script uses internal bash helpers for:
 
 ### Interactive Analysis
 ```bash
-./fiuto.sh /mnt/windows
+./fiuto.sh /mnt/disk
 ```
-The script will present a numbered menu with 39 available modules. Select the module number or type `--all` to run them all.
+The script detects the volume's OS and presents a numbered menu with the relevant modules (39 for Windows, 13 for Linux, 10 for macOS). Select the module number or type `--all` to run them all.
 
 ### Automated Batch Analysis
 ```bash
@@ -123,7 +169,7 @@ fiuto_reports/
 
 ---
 
-## 📊 The 39 Analysis Modules
+## 📊 The 39 Windows analysis modules
 
 | # | Module Name | Windows Artifact | Usage |
 |---|---|---|---|
@@ -166,6 +212,43 @@ fiuto_reports/
 | 37 | Master Timeline | (Aggregated) | Cross-artifact timeline |
 | 38 | PAD Offline | NTDS.dit | Advanced Active Directory |
 | 39 | AI Chat / Query History | LevelDB / JSON / SQLite | Recover AI assistant conversations (ChatGPT, Copilot, Claude…) |
+
+---
+
+## 🐧 The 13 Linux analysis modules
+
+| # | Module Name | Linux Artifact | Usage |
+|---|---|---|---|
+| 1 | System Logs | `/var/log/{syslog,messages,auth.log,secure,kern.log,…}` | System/auth events, failures, sudo |
+| 2 | systemd Journal | `/var/log/journal/*.journal` | Structured journal (via `journalctl` or `strings` fallback) |
+| 3 | Login History | `wtmp` / `btmp` / `lastlog` | Successful/failed logins with source IP |
+| 4 | Shell History | `.bash_history`, `.zsh_history`, `.python_history`, … | Executed commands and sensitive strings |
+| 5 | AI CLI History | `~/.claude`, aider, aichat, ollama, copilot | AI assistant CLI conversations |
+| 6 | Browser History | Firefox `places.sqlite`, Chrome/Chromium/Brave/Edge | Web navigation (incl. snap/flatpak paths) |
+| 7 | User Accounts | `passwd` / `shadow` / `group` / `sudoers` | Accounts, UID 0, empty/locked passwords |
+| 8 | Persistence | cron, systemd units/timers, autostart, `rc.local`, shell init | Backdoors and auto-start mechanisms |
+| 9 | SSH Artifacts | `authorized_keys`, `known_hosts`, `sshd_config` | Remote access trust and config |
+| 10 | Network Config | `hosts`, NetworkManager (Wi-Fi PSK), netplan, iptables/nftables | Network configuration and Wi-Fi keys |
+| 11 | Installed Packages | dpkg, rpm, apt history, snap | Installation timeline / suspicious packages |
+| 12 | Trash & Recent | `~/.local/share/Trash` (+`.trashinfo`), `recently-used.xbel` | Deleted files with deletion timestamp |
+| 13 | Filesystem Timeline | MAC times of sensitive areas (`find`/`stat`) | Cross-area chronological timeline |
+
+---
+
+## 🍎 The 10 macOS analysis modules
+
+| # | Module Name | macOS Artifact | Usage |
+|---|---|---|---|
+| 1 | System Logs | `system.log`, `install.log`, ASL | System/install events (*`.tracev3` out of scope*) |
+| 2 | User Accounts | dslocal `*.plist` | Accounts, UID, shell, password-hash presence |
+| 3 | Persistence | `LaunchAgents` / `LaunchDaemons` (system & per-user), cron | Persistence (binary plists rendered readable) |
+| 4 | Login Items (BTM) | `backgrounditems.btm` | Background/login items |
+| 5 | Quarantine / Downloads | `QuarantineEventsV2` | Download provenance (URL + timestamp) |
+| 6 | TCC Privacy | `TCC.db` | Camera/mic/disk privacy permissions |
+| 7 | KnowledgeC | `knowledgeC.db` | App usage / device activity |
+| 8 | Browser History | Safari `History.db`, Chrome, Firefox | Web navigation |
+| 9 | Shell & AI History | `.zsh_history`, `.bash_history`, AI CLI | Executed commands and AI conversations |
+| 10 | Recent Items | `SFL`/`SFL2`, `~/.Trash` | Recent apps/docs/servers and trash |
 
 ---
 
@@ -333,14 +416,24 @@ FIUTO is a tool to accelerate legitimate digital forensic analysis, intended for
 
 # 🇮🇹 Versione Italiana
 
-**FIUTO** (**F**orensic **I**nvestigation **U**tility **T**ool for **O**ffline) è un toolkit DFIR (Digital Forensics and Incident Response) unificato per l'analisi completa di dischi Windows offline. Automatizza l'estrazione e l'analisi di 39+ artefatti critici in ottica forense digitale, generando report HTML dettagliati per investigazioni rapide ed efficaci.
+**FIUTO** (**F**orensic **I**nvestigation **U**tility **T**ool for **O**ffline) è un toolkit DFIR (Digital Forensics and Incident Response) unificato per l'analisi offline di dischi **Windows, Linux e macOS**. **Rileva automaticamente il sistema operativo di ogni volume montato** e propone il set di moduli pertinente, generando report HTML dettagliati per investigazioni rapide ed efficaci.
+
+- Volumi **Windows** → i 39 moduli per artefatti Windows.
+- Volumi **Linux** → 13 moduli dedicati (log di sistema, journal, login, history shell/AI, browser, account, persistenza, SSH, rete, pacchetti, cestino, timeline).
+- Volumi **macOS** → 10 moduli dedicati (log, account dslocal, persistenza, login items/BTM, quarantine, TCC, KnowledgeC, browser, history shell/AI, recenti).
+
+Tutto rigorosamente **offline**, sul filesystem montato in sola lettura.
 
 ---
 
 ## 📋 Caratteristiche Principali
 
+### Rilevamento automatico dell'OS per volume
+
+All'avvio FIUTO elenca i volumi montati con un badge OS (`[Windows]` / `[Linux]` / `[macOS]`) e, una volta selezionato il volume, mostra solo i moduli applicabili a quel sistema operativo.
+
 ### Copertura Completa di Artefatti Windows
-FIUTO raccoglie e analizza:
+Sui volumi Windows FIUTO raccoglie e analizza:
 - **Cronologie di esecuzione** (Prefetch, AmCache, ShimCache, BAM)
 - **Artefatti di persistenza** (Run Keys, Scheduled Tasks, Services, WMI)
 - **Cronologia di navigazione** (Browser history, URL MRU, TypedPaths)
@@ -353,12 +446,20 @@ FIUTO raccoglie e analizza:
 - **Cronologia chat con assistenti AI** (ChatGPT, Copilot, Claude, Cursor, Gemini, Codex, Windsurf, Continue) — *novità v1.2*
 - **E molto altro...**
 
+### Copertura Artefatti Linux — *novità v2.0*
+
+Sui volumi Linux: log di sistema (`/var/log`) e **systemd journal**; **login** (`wtmp`/`btmp`/`lastlog`); **history shell** (bash/zsh/sh + python/mysql/psql) e **AI CLI**; **browser** (Firefox/Chrome/Chromium/Brave, anche snap/flatpak); **account** (`passwd`/`shadow`/`group`/`sudoers`); **persistenza** (cron, systemd, autostart, `rc.local`, init shell, `ld.so.preload`); **SSH** (`authorized_keys`, `known_hosts`, `sshd_config`); **rete** (`hosts`, PSK Wi-Fi NetworkManager, netplan, iptables/nftables); **pacchetti** (dpkg/rpm/apt history/snap); **cestino e recenti** (`Trash` con data cancellazione, `recently-used.xbel`); **timeline MAC-time**.
+
+### Copertura Artefatti macOS — *novità v2.0*
+
+Sui volumi macOS: **log** (`system.log`, `install.log`, ASL — i unified log `.tracev3` sono fuori scope); **account** dslocal (`*.plist`); **persistenza** (`LaunchAgents`/`LaunchDaemons` di sistema e per-utente, cron — plist binari resi leggibili); **Login Items/BTM**; **quarantine** (`QuarantineEventsV2`, URL+data download); **TCC** (permessi privacy); **KnowledgeC** (uso app); **browser** (Safari/Chrome/Firefox); **history shell & AI**; **recenti** (`SFL`/`SFL2`, `.Trash`).
+
 ### Modalità di Esecuzione Flessibili
 ```bash
-./fiuto.sh                          # Menu interattivo
-./fiuto.sh /mnt/windows             # Specifica la root del volume Windows
-./fiuto.sh /mnt/windows --all       # Esegui tutti i moduli
-./fiuto.sh /mnt/windows --module 3  # Esegui un modulo specifico
+./fiuto.sh                          # Menu interattivo (rileva volumi montati + OS)
+./fiuto.sh /mnt/disk                # Specifica la root di un volume (Windows/Linux/macOS)
+./fiuto.sh /mnt/disk --all          # Esegui tutti i moduli dell'OS rilevato
+./fiuto.sh /mnt/disk --module 3     # Esegui un modulo specifico (numerazione per OS)
 ```
 
 ### Output Professionale
@@ -410,14 +511,18 @@ Lo script utilizza internamente helper bash per:
    # python3 -m pip install --user regipy python-evtx
    ```
 
-4. **Monta il disco Windows (esempio)**
+4. **Monta il disco target in sola lettura (esempi)**
    ```bash
-   # Su Linux con ntfs-3g
-   sudo mount -t ntfs-3g -o ro /dev/sda3 /mnt/windows
+   # Windows (NTFS) su Linux con ntfs-3g
+   sudo mount -t ntfs-3g -o ro /dev/sda3 /mnt/disk
 
-   # Su macOS
-   sudo mount -t ntfs -o rdonly /dev/disk0s3 /mnt/windows
+   # Linux (ext4)
+   sudo mount -o ro /dev/sda2 /mnt/disk
+
+   # macOS (APFS/HFS+) in sola lettura
+   sudo mount -o ro /dev/sdb2 /mnt/disk
    ```
+   FIUTO rileva automaticamente l'OS del volume montato: non serve indicarglielo.
 
 ---
 
@@ -425,9 +530,9 @@ Lo script utilizza internamente helper bash per:
 
 ### Analisi Interattiva
 ```bash
-./fiuto.sh /mnt/windows
+./fiuto.sh /mnt/disk
 ```
-Lo script presenterà un menu numerato con i 39 moduli disponibili. Seleziona il numero del modulo o digita `--all` per eseguirli tutti.
+Lo script rileva l'OS del volume e presenta un menu numerato con i moduli pertinenti (39 per Windows, 13 per Linux, 10 per macOS). Seleziona il numero del modulo o digita `--all` per eseguirli tutti.
 
 ### Analisi Batch Automatica
 ```bash
@@ -454,7 +559,7 @@ fiuto_reports/
 
 ---
 
-## 📊 I 39 Moduli di Analisi
+## 📊 I 39 Moduli di Analisi Windows
 
 | # | Nome Modulo | Artefatto Windows | Utilizzo |
 |---|---|---|---|
@@ -497,6 +602,43 @@ fiuto_reports/
 | 37 | Master Timeline | (Aggregato) | Timeline cross-artefatto |
 | 38 | PAD Offline | NTDS.dit | Active Directory avanzato |
 | 39 | AI Chat / Query History | LevelDB / JSON / SQLite | Recupera conversazioni con assistenti AI (ChatGPT, Copilot, Claude…) |
+
+---
+
+## 🐧 I 13 Moduli di Analisi Linux
+
+| # | Nome Modulo | Artefatto Linux | Utilizzo |
+|---|---|---|---|
+| 1 | System Logs | `/var/log/{syslog,messages,auth.log,secure,kern.log,…}` | Eventi sistema/auth, errori, sudo |
+| 2 | systemd Journal | `/var/log/journal/*.journal` | Journal strutturato (via `journalctl` o fallback `strings`) |
+| 3 | Login History | `wtmp` / `btmp` / `lastlog` | Login riusciti/falliti con IP sorgente |
+| 4 | Shell History | `.bash_history`, `.zsh_history`, `.python_history`, … | Comandi eseguiti e stringhe sensibili |
+| 5 | AI CLI History | `~/.claude`, aider, aichat, ollama, copilot | Conversazioni CLI con assistenti AI |
+| 6 | Browser History | Firefox `places.sqlite`, Chrome/Chromium/Brave/Edge | Navigazione web (anche path snap/flatpak) |
+| 7 | User Accounts | `passwd` / `shadow` / `group` / `sudoers` | Account, UID 0, password vuote/bloccate |
+| 8 | Persistence | cron, unit/timer systemd, autostart, `rc.local`, init shell | Backdoor e meccanismi di avvio automatico |
+| 9 | SSH Artifacts | `authorized_keys`, `known_hosts`, `sshd_config` | Fiducia e configurazione accesso remoto |
+| 10 | Network Config | `hosts`, NetworkManager (PSK Wi-Fi), netplan, iptables/nftables | Configurazione di rete e chiavi Wi-Fi |
+| 11 | Installed Packages | dpkg, rpm, apt history, snap | Timeline installazioni / pacchetti sospetti |
+| 12 | Trash & Recent | `~/.local/share/Trash` (+`.trashinfo`), `recently-used.xbel` | File cancellati con data di cancellazione |
+| 13 | Filesystem Timeline | MAC times aree sensibili (`find`/`stat`) | Timeline cronologica cross-area |
+
+---
+
+## 🍎 I 10 Moduli di Analisi macOS
+
+| # | Nome Modulo | Artefatto macOS | Utilizzo |
+|---|---|---|---|
+| 1 | System Logs | `system.log`, `install.log`, ASL | Eventi sistema/installazioni (*`.tracev3` fuori scope*) |
+| 2 | User Accounts | dslocal `*.plist` | Account, UID, shell, presenza hash password |
+| 3 | Persistence | `LaunchAgents` / `LaunchDaemons` (sistema e per-utente), cron | Persistenza (plist binari resi leggibili) |
+| 4 | Login Items (BTM) | `backgrounditems.btm` | Elementi di background/login |
+| 5 | Quarantine / Downloads | `QuarantineEventsV2` | Provenienza download (URL + data) |
+| 6 | TCC Privacy | `TCC.db` | Permessi privacy camera/mic/disco |
+| 7 | KnowledgeC | `knowledgeC.db` | Uso app / attività dispositivo |
+| 8 | Browser History | Safari `History.db`, Chrome, Firefox | Navigazione web |
+| 9 | Shell & AI History | `.zsh_history`, `.bash_history`, AI CLI | Comandi eseguiti e conversazioni AI |
+| 10 | Recent Items | `SFL`/`SFL2`, `~/.Trash` | App/documenti/server recenti e cestino |
 
 ---
 
@@ -659,8 +801,11 @@ FIUTO è uno strumento per velocizzare le analisi forensi digitale legittimo, da
 - Danni diretti o indiretti derivanti dall'uso di fiuto
 
 ---
-**Changelog:**
 
+## 📝 Changelog
+
+**Date:** 2026-06-05 | **Version:** 2.0
+**Multi-OS support**: FIUTO now auto-detects each mounted volume's operating system and proposes the relevant module set — Windows (39 modules, unchanged), **Linux (13 new modules)** and **macOS (10 new modules)**, all strictly offline. Linux coverage: system logs, systemd journal, login history (wtmp/btmp/lastlog), shell & AI CLI history, browsers, accounts, persistence, SSH, network, packages, trash, filesystem timeline. macOS coverage: system logs, dslocal accounts, persistence (LaunchAgents/Daemons), Login Items/BTM, quarantine, TCC, KnowledgeC, browsers, shell & AI history, recent items. New OS-aware menu/dispatch with a data-driven module registry for the Linux/macOS sets.
 
 **Date:** 2026-06-05 | **Version:** 1.2
 New **Module 39 — AI Chat / Query History**: recovers AI assistant conversations (ChatGPT, Copilot, Claude, Cursor, Gemini, Codex, Windsurf, Continue) from offline disks. Includes a dependency-free pure-Python Snappy decompressor for ChatGPT LevelDB/IndexedDB (SSTable, WAL and external blob files), user/AI role attribution with product labelling, sensitive-string highlighting, IoC matching and Master Timeline integration.
