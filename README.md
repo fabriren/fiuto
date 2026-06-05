@@ -5,8 +5,8 @@
 **FIUTO** (**F**orensic **I**nvestigation **U**tility **T**ool for **O**ffline) is a unified DFIR (Digital Forensics and Incident Response) toolkit for comprehensive **offline disk analysis of Windows, Linux and macOS** volumes. It automatically **detects the operating system of each mounted volume** and proposes the relevant module set, generating detailed HTML reports for rapid and effective investigations.
 
 - **Windows** volumes → the 39 Windows artifact modules.
-- **Linux** volumes → 13 dedicated modules (system logs, journal, logins, shell/AI history, browsers, accounts, persistence, SSH, network, packages, trash, timeline).
-- **macOS** volumes → 10 dedicated modules (system logs, dslocal accounts, persistence, login items/BTM, quarantine, TCC, KnowledgeC, browsers, shell/AI history, recent items).
+- **Linux** volumes → 14 dedicated modules (system logs, journal, logins, shell/AI history, browsers, accounts, persistence, SSH, network, packages, trash, filesystem timeline, master timeline).
+- **macOS** volumes → 11 dedicated modules (system logs, dslocal accounts, persistence, login items/BTM, quarantine, TCC, KnowledgeC, browsers, shell/AI history, recent items, master timeline).
 
 Everything runs strictly **offline**, parsing the read-only mounted filesystem.
 
@@ -142,7 +142,7 @@ The script uses internal bash helpers for:
 ```bash
 ./fiuto.sh /mnt/disk
 ```
-The script detects the volume's OS and presents a numbered menu with the relevant modules (39 for Windows, 13 for Linux, 10 for macOS). Select the module number or type `--all` to run them all.
+The script detects the volume's OS and presents a numbered menu with the relevant modules (39 for Windows, 14 for Linux, 11 for macOS). Select the module number or type `--all` to run them all.
 
 ### Automated Batch Analysis
 ```bash
@@ -215,7 +215,7 @@ fiuto_reports/
 
 ---
 
-## 🐧 The 13 Linux analysis modules
+## 🐧 The 14 Linux analysis modules
 
 | # | Module Name | Linux Artifact | Usage |
 |---|---|---|---|
@@ -232,10 +232,11 @@ fiuto_reports/
 | 11 | Installed Packages | dpkg, rpm, apt history, snap | Installation timeline / suspicious packages |
 | 12 | Trash & Recent | `~/.local/share/Trash` (+`.trashinfo`), `recently-used.xbel` | Deleted files with deletion timestamp |
 | 13 | Filesystem Timeline | MAC times of sensitive areas (`find`/`stat`) | Cross-area chronological timeline |
+| 14 | Master Timeline | (Aggregated) | Cross-module chronological timeline of all collected evidence |
 
 ---
 
-## 🍎 The 10 macOS analysis modules
+## 🍎 The 11 macOS analysis modules
 
 | # | Module Name | macOS Artifact | Usage |
 |---|---|---|---|
@@ -249,6 +250,7 @@ fiuto_reports/
 | 8 | Browser History | Safari `History.db`, Chrome, Firefox | Web navigation |
 | 9 | Shell & AI History | `.zsh_history`, `.bash_history`, AI CLI | Executed commands and AI conversations |
 | 10 | Recent Items | `SFL`/`SFL2`, `~/.Trash` | Recent apps/docs/servers and trash |
+| 11 | Master Timeline | (Aggregated) | Cross-module chronological timeline of all collected evidence |
 
 ---
 
@@ -419,8 +421,8 @@ FIUTO is a tool to accelerate legitimate digital forensic analysis, intended for
 **FIUTO** (**F**orensic **I**nvestigation **U**tility **T**ool for **O**ffline) è un toolkit DFIR (Digital Forensics and Incident Response) unificato per l'analisi offline di dischi **Windows, Linux e macOS**. **Rileva automaticamente il sistema operativo di ogni volume montato** e propone il set di moduli pertinente, generando report HTML dettagliati per investigazioni rapide ed efficaci.
 
 - Volumi **Windows** → i 39 moduli per artefatti Windows.
-- Volumi **Linux** → 13 moduli dedicati (log di sistema, journal, login, history shell/AI, browser, account, persistenza, SSH, rete, pacchetti, cestino, timeline).
-- Volumi **macOS** → 10 moduli dedicati (log, account dslocal, persistenza, login items/BTM, quarantine, TCC, KnowledgeC, browser, history shell/AI, recenti).
+- Volumi **Linux** → 14 moduli dedicati (log di sistema, journal, login, history shell/AI, browser, account, persistenza, SSH, rete, pacchetti, cestino, timeline filesystem, master timeline).
+- Volumi **macOS** → 11 moduli dedicati (log, account dslocal, persistenza, login items/BTM, quarantine, TCC, KnowledgeC, browser, history shell/AI, recenti, master timeline).
 
 Tutto rigorosamente **offline**, sul filesystem montato in sola lettura.
 
@@ -532,7 +534,7 @@ Lo script utilizza internamente helper bash per:
 ```bash
 ./fiuto.sh /mnt/disk
 ```
-Lo script rileva l'OS del volume e presenta un menu numerato con i moduli pertinenti (39 per Windows, 13 per Linux, 10 per macOS). Seleziona il numero del modulo o digita `--all` per eseguirli tutti.
+Lo script rileva l'OS del volume e presenta un menu numerato con i moduli pertinenti (39 per Windows, 14 per Linux, 11 per macOS). Seleziona il numero del modulo o digita `--all` per eseguirli tutti.
 
 ### Analisi Batch Automatica
 ```bash
@@ -605,7 +607,7 @@ fiuto_reports/
 
 ---
 
-## 🐧 I 13 Moduli di Analisi Linux
+## 🐧 I 14 Moduli di Analisi Linux
 
 | # | Nome Modulo | Artefatto Linux | Utilizzo |
 |---|---|---|---|
@@ -622,10 +624,11 @@ fiuto_reports/
 | 11 | Installed Packages | dpkg, rpm, apt history, snap | Timeline installazioni / pacchetti sospetti |
 | 12 | Trash & Recent | `~/.local/share/Trash` (+`.trashinfo`), `recently-used.xbel` | File cancellati con data di cancellazione |
 | 13 | Filesystem Timeline | MAC times aree sensibili (`find`/`stat`) | Timeline cronologica cross-area |
+| 14 | Master Timeline | (Aggregato) | Timeline cronologica cross-modulo di tutte le evidenze raccolte |
 
 ---
 
-## 🍎 I 10 Moduli di Analisi macOS
+## 🍎 I 11 Moduli di Analisi macOS
 
 | # | Nome Modulo | Artefatto macOS | Utilizzo |
 |---|---|---|---|
@@ -639,6 +642,7 @@ fiuto_reports/
 | 8 | Browser History | Safari `History.db`, Chrome, Firefox | Navigazione web |
 | 9 | Shell & AI History | `.zsh_history`, `.bash_history`, AI CLI | Comandi eseguiti e conversazioni AI |
 | 10 | Recent Items | `SFL`/`SFL2`, `~/.Trash` | App/documenti/server recenti e cestino |
+| 11 | Master Timeline | (Aggregato) | Timeline cronologica cross-modulo di tutte le evidenze raccolte |
 
 ---
 
@@ -805,7 +809,7 @@ FIUTO è uno strumento per velocizzare le analisi forensi digitale legittimo, da
 ## 📝 Changelog
 
 **Date:** 2026-06-05 | **Version:** 2.0
-**Multi-OS support**: FIUTO now auto-detects each mounted volume's operating system and proposes the relevant module set — Windows (39 modules, unchanged), **Linux (13 new modules)** and **macOS (10 new modules)**, all strictly offline. Linux coverage: system logs, systemd journal, login history (wtmp/btmp/lastlog), shell & AI CLI history, browsers, accounts, persistence, SSH, network, packages, trash, filesystem timeline. macOS coverage: system logs, dslocal accounts, persistence (LaunchAgents/Daemons), Login Items/BTM, quarantine, TCC, KnowledgeC, browsers, shell & AI history, recent items. New OS-aware menu/dispatch with a data-driven module registry for the Linux/macOS sets.
+**Multi-OS support**: FIUTO now auto-detects each mounted volume's operating system and proposes the relevant module set — Windows (39 modules, unchanged), **Linux (14 new modules)** and **macOS (11 new modules)**, all strictly offline. Linux coverage: system logs, systemd journal, login history (wtmp/btmp/lastlog), shell & AI CLI history, browsers, accounts, persistence, SSH, network, packages, trash, filesystem timeline, cross-module master timeline. macOS coverage: system logs, dslocal accounts, persistence (LaunchAgents/Daemons), Login Items/BTM, quarantine, TCC, KnowledgeC, browsers, shell & AI history, recent items, cross-module master timeline. New OS-aware menu/dispatch with a data-driven module registry for the Linux/macOS sets, an aggregated **Full HTML dashboard** (GitHub-style tabs + central iframe) generated when running all modules, an in-report search bar, and a cross-module **Master Timeline** that collects every timestamped finding.
 
 **Date:** 2026-06-05 | **Version:** 1.2
 New **Module 39 — AI Chat / Query History**: recovers AI assistant conversations (ChatGPT, Copilot, Claude, Cursor, Gemini, Codex, Windsurf, Continue) from offline disks. Includes a dependency-free pure-Python Snappy decompressor for ChatGPT LevelDB/IndexedDB (SSTable, WAL and external blob files), user/AI role attribution with product labelling, sensitive-string highlighting, IoC matching and Master Timeline integration.
