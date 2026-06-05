@@ -1,5 +1,7 @@
 # FIUTO 🔍
 
+<!-- markdownlint-disable MD033 MD060 -->
+
 ## 🇬🇧 English Version
 
 **FIUTO** (**F**orensic **I**nvestigation **U**tility **T**ool for **O**ffline) is a unified DFIR (Digital Forensics and Incident Response) toolkit for comprehensive **offline disk analysis of Windows, Linux and macOS** volumes. It automatically **detects the operating system of each mounted volume** and proposes the relevant module set, generating detailed HTML reports for rapid and effective investigations.
@@ -120,11 +122,13 @@ The script uses internal bash helpers for:
    git clone https://github.com/fabriren/fiuto.git
    cd fiuto
    ```
+
 2. **Make the script executable**
 
    ```bash
    chmod +x fiuto.sh
    ```
+
 3. **Install Python dependencies**
 
    ```bash
@@ -132,6 +136,7 @@ The script uses internal bash helpers for:
    # On macOS with Homebrew:
    # python3 -m pip install --user regipy python-evtx
    ```
+
 4. **Mount the target disk read-only (examples)**
 
    ```bash
@@ -179,7 +184,7 @@ Runs only module 12 (Event Log in our example).
 
 Generated reports are located in:
 
-```
+```text
 fiuto_reports/
 ├── 001_PSReadLine_History.html
 ├── 002_IFEO.html
@@ -339,7 +344,7 @@ Each module generates an HTML report with:
 
 ### Example Report
 
-```
+```text
 ┌─ Report: Event Log (Module 12)
 │
 ├─ Timespan: 2025-03-15 08:30:00 UTC → 2025-04-14 17:42:00 UTC
@@ -395,7 +400,7 @@ chmod 755 fiuto_reports
 
 The script creates a detailed session log in:
 
-```
+```text
 fiuto_reports/session_YYYY-MM-DD_HH-MM-SS.log
 ```
 
@@ -459,7 +464,7 @@ FIUTO is a tool to accelerate legitimate digital forensic analysis, intended for
 
 ---
 
-# 🇮🇹 Versione Italiana
+## 🇮🇹 Versione Italiana
 
 **FIUTO** (**F**orensic **I**nvestigation **U**tility **T**ool for **O**ffline) è un toolkit DFIR (Digital Forensics and Incident Response) unificato per l'analisi offline di dischi **Windows, Linux e macOS**. **Rileva automaticamente il sistema operativo di ogni volume montato** e propone il set di moduli pertinente, generando report HTML dettagliati per investigazioni rapide ed efficaci.
 
@@ -552,11 +557,13 @@ Lo script utilizza internamente helper bash per:
    git clone https://github.com/fabriren/fiuto.git
    cd fiuto
    ```
+
 2. **Rendi eseguibile lo script**
 
    ```bash
    chmod +x fiuto.sh
    ```
+
 3. **Installa le dipendenze Python**
 
    ```bash
@@ -564,6 +571,7 @@ Lo script utilizza internamente helper bash per:
    # Su macOS con Homebrew:
    # python3 -m pip install --user regipy python-evtx
    ```
+
 4. **Monta il disco target in sola lettura (esempi)**
 
    ```bash
@@ -607,11 +615,11 @@ Esegue tutti i moduli sequenzialmente, genera un riepilogo finale e salva i repo
 
 Esegue solo il modulo 12 (Event Log nel nostro esempio).
 
-### Output
+### Output Generato
 
 I report generati si trovano in:
 
-```
+```text
 fiuto_reports/
 ├── 001_PSReadLine_History.html
 ├── 002_IFEO.html
@@ -713,19 +721,19 @@ fiuto_reports/
 
 Utilizza i moduli di persistenza (Run Keys, Services, WMI) per trovare backdoor, e i log di PowerShell per tracciare esecuzione di payload offuscati.
 
-### Incident Response
+### Incident Response (IR)
 
 Combina BAM, Prefetch e Event Logs per costruire una timeline precisa di cosa è stato eseguito e quando, aiutando a identificare il paziente zero.
 
-### Compliance & Audit
+### Conformità & Audit
 
 Estrai l'attività di rete (SRUM, DNS) e gli accessi RDP (RDP Cache, Event Logs) per dimostrare chi ha accesso a quali sistemi.
 
-### Ransomware Forensics
+### Forense Ransomware
 
 Analizza USN Journal, MFT Timeline, Recycle Bin e Browser Downloads per tracciare la diffusione e le origini dell'infezione.
 
-### Threat Hunting
+### Caccia alle Minacce (Threat Hunting)
 
 Usa la cronologia USB, i profili WLAN/VPN e la navigazione web per scoprire esfiltrazione di dati o comunicazioni con indirizzi IP sospetti.
 
@@ -771,7 +779,7 @@ Ogni modulo genera un report HTML con:
 
 ### Esempio Report
 
-```
+```text
 ┌─ Report: Event Log (Module 12)
 │
 ├─ Timespan: 2025-03-15 08:30:00 UTC → 2025-04-14 17:42:00 UTC
@@ -789,7 +797,7 @@ Ogni modulo genera un report HTML con:
 
 ---
 
-## 🐛 Troubleshooting
+## 🐛 Risoluzione dei Problemi
 
 ### Errore: "regipy module not found"
 
@@ -823,11 +831,11 @@ chmod 755 fiuto_reports
 
 ---
 
-## 📝 Logging
+## 📝 Log di Sessione
 
 Lo script crea un log dettagliato di ogni sessione in:
 
-```
+```text
 fiuto_reports/session_YYYY-MM-DD_HH-MM-SS.log
 ```
 
