@@ -1,0 +1,20 @@
+# ================================================================
+#  Whitelist: nel repo devono finire SOLO fiuto.sh e README.md.
+#  Tutto il resto è ignorato per evitare upload accidentali
+#  (report HTML di test, script esterni, copie di lavoro, ecc.).
+# ================================================================
+
+# Ignora tutto alla radice...
+/*
+
+# ...tranne queste eccezioni:
+!/.gitignore
+!/fiuto.sh
+!/README.md
+
+# Config GitHub: tieni SOLO il pulsante sponsor (FUNDING.yml).
+# Per escludere anche questo: rimuovi le 3 righe sotto ed esegui
+#   git rm -r --cached .github
+!/.github/
+/.github/*
+!/.github/FUNDING.yml
