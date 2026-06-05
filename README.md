@@ -2,7 +2,7 @@
 
 ## 🇬🇧 English Version
 
-**FIUTO** (**F**orensic **I**nvestigation **U**tility **T**ool for **O**ffline) is a unified DFIR (Digital Forensics and Incident Response) toolkit for comprehensive offline Windows disk analysis. It automates the extraction and analysis of 38+ critical forensic artifacts, generating detailed HTML reports for rapid and effective investigations.
+**FIUTO** (**F**orensic **I**nvestigation **U**tility **T**ool for **O**ffline) is a unified DFIR (Digital Forensics and Incident Response) toolkit for comprehensive offline Windows disk analysis. It automates the extraction and analysis of 39+ critical forensic artifacts, generating detailed HTML reports for rapid and effective investigations.
 
 ---
 
@@ -19,6 +19,7 @@ FIUTO collects and analyzes:
 - **Virtual memory** (Pagefile, Hibernation, SRUM)
 - **Removable devices** (USB history, connection timeline)
 - **Active Directory** (NTDS.dit, domain hashes, PAD offline analysis)
+- **AI assistant chat history** (ChatGPT, Copilot, Claude, Cursor, Gemini, Codex, Windsurf, Continue) — *new in v1.2*
 - **And much more...**
 
 ### Flexible Execution Modes
@@ -95,7 +96,7 @@ The script uses internal bash helpers for:
 ```bash
 ./fiuto.sh /mnt/windows
 ```
-The script will present a numbered menu with 38 available modules. Select the module number or type `--all` to run them all.
+The script will present a numbered menu with 39 available modules. Select the module number or type `--all` to run them all.
 
 ### Automated Batch Analysis
 ```bash
@@ -122,7 +123,7 @@ fiuto_reports/
 
 ---
 
-## 📊 The 38 Analysis Modules
+## 📊 The 39 Analysis Modules
 
 | # | Module Name | Windows Artifact | Usage |
 |---|---|---|---|
@@ -164,6 +165,36 @@ fiuto_reports/
 | 36 | Network Artifacts | Registry SYSTEM | DNS, interfaces, networks |
 | 37 | Master Timeline | (Aggregated) | Cross-artifact timeline |
 | 38 | PAD Offline | NTDS.dit | Advanced Active Directory |
+| 39 | AI Chat / Query History | LevelDB / JSON / SQLite | Recover AI assistant conversations (ChatGPT, Copilot, Claude…) |
+
+---
+
+## 🤖 Module 39 — AI Chat / Query History *(new in v1.2)*
+
+Module 39 recovers conversations held with **AI coding/chat assistants** left on the offline disk, across every user home. It reconstructs full threads — **both user prompts and AI responses** — in chronological order, preserving markdown, code blocks, emojis and accented characters.
+
+**Supported assistants & locations** (under `Users\<user>\`):
+
+| Assistant | Storage |
+|---|---|
+| **ChatGPT Desktop** (standalone + Microsoft Store) | LevelDB IndexedDB (`.ldb`/`.log`) + external blob files |
+| **GitHub Copilot** (VS Code / Insiders / VSCodium) | `chatSessions/*.json`, `state.vscdb` |
+| **Claude Code** | `~/.claude/history.jsonl`, `projects/**/*.jsonl` |
+| **Cursor** | `agent-transcripts/*.jsonl`, `state.vscdb`, `store.db` |
+| **Gemini CLI** | `~/.gemini/tmp/<hash>/chats/session-*.json` |
+| **OpenAI Codex** | `~/.codex/` (`history.jsonl`, `rollout-*.jsonl`, `state.sqlite`) |
+| **Windsurf** | `state.vscdb` (Cascade `.pb` inventoried) |
+| **Continue.dev** | `~/.continue/sessions/*.json` |
+
+**Key capabilities:**
+- **Multi-format parsing**: JSON/JSONL transcripts, SQLite (`state.vscdb`, `store.db`, `state.sqlite`).
+- **Deep ChatGPT recovery**: parses LevelDB SSTable blocks, write-ahead logs and external IndexedDB blob files, with a **pure-Python Snappy decompressor** (no external dependencies) handling both LevelDB block compression and Blink per-value compression.
+- **Clean transcripts**: removes V8 serialization noise (length tags, metadata records, end-of-object markers) and reassembles messages split by Unicode symbols/emojis.
+- **Role attribution**: distinguishes 👤 user prompts from 🤖 AI replies (content-based heuristic) and labels each AI bubble with the actual product name (e.g. *AI — ChatGPT*).
+- **Sensitive-string highlighting** (API keys, tokens, passwords) and **IoC matching** on the recovered text.
+- **Master Timeline integration**: messages with timestamps feed into Module 37's cross-artifact timeline.
+
+> ⚠️ Encrypted bundles (ChatGPT `conversations-v2-*`, Keychain/DPAPI-gated) and proprietary Cascade protobufs are **inventoried only** (path, size, SHA256), not decoded.
 
 ---
 
@@ -331,7 +362,7 @@ FIUTO is a tool to accelerate legitimate digital forensic analysis, intended for
 
 # 🇮🇹 Versione Italiana
 
-**FIUTO** (**F**orensic **I**nvestigation **U**tility **T**ool for **O**ffline) è un toolkit DFIR (Digital Forensics and Incident Response) unificato per l'analisi completa di dischi Windows offline. Automatizza l'estrazione e l'analisi di 38+ artefatti critici in ottica forense digitale, generando report HTML dettagliati per investigazioni rapide ed efficaci.
+**FIUTO** (**F**orensic **I**nvestigation **U**tility **T**ool for **O**ffline) è un toolkit DFIR (Digital Forensics and Incident Response) unificato per l'analisi completa di dischi Windows offline. Automatizza l'estrazione e l'analisi di 39+ artefatti critici in ottica forense digitale, generando report HTML dettagliati per investigazioni rapide ed efficaci.
 
 ---
 
@@ -348,6 +379,7 @@ FIUTO raccoglie e analizza:
 - **Memoria virtuale** (Pagefile, Hibernation, SRUM)
 - **Dispositivi rimovibili** (Cronologia USB, storia delle connessioni)
 - **Active Directory** (NTDS.dit, hash domain, PAD offline analysis)
+- **Cronologia chat con assistenti AI** (ChatGPT, Copilot, Claude, Cursor, Gemini, Codex, Windsurf, Continue) — *novità v1.2*
 - **E molto altro...**
 
 ### Modalità di Esecuzione Flessibili
@@ -424,7 +456,7 @@ Lo script utilizza internamente helper bash per:
 ```bash
 ./fiuto.sh /mnt/windows
 ```
-Lo script presenterà un menu numerato con i 38 moduli disponibili. Seleziona il numero del modulo o digita `--all` per eseguirli tutti.
+Lo script presenterà un menu numerato con i 39 moduli disponibili. Seleziona il numero del modulo o digita `--all` per eseguirli tutti.
 
 ### Analisi Batch Automatica
 ```bash
@@ -451,7 +483,7 @@ fiuto_reports/
 
 ---
 
-## 📊 I 38 Moduli di Analisi
+## 📊 I 39 Moduli di Analisi
 
 | # | Nome Modulo | Artefatto Windows | Utilizzo |
 |---|---|---|---|
@@ -493,6 +525,36 @@ fiuto_reports/
 | 36 | Network Artifacts | Registry SYSTEM | DNS, interfacce, reti |
 | 37 | Master Timeline | (Aggregato) | Timeline cross-artefatto |
 | 38 | PAD Offline | NTDS.dit | Active Directory avanzato |
+| 39 | AI Chat / Query History | LevelDB / JSON / SQLite | Recupera conversazioni con assistenti AI (ChatGPT, Copilot, Claude…) |
+
+---
+
+## 🤖 Modulo 39 — AI Chat / Query History *(novità v1.2)*
+
+Il modulo 39 recupera le conversazioni avute con **assistenti AI di chat/coding** lasciate sul disco offline, per ogni home utente. Ricostruisce i thread completi — **sia i prompt utente sia le risposte AI** — in ordine cronologico, preservando markdown, blocchi di codice, emoji e caratteri accentati.
+
+**Assistenti e percorsi supportati** (sotto `Users\<utente>\`):
+
+| Assistente | Storage |
+|---|---|
+| **ChatGPT Desktop** (standalone + Microsoft Store) | LevelDB IndexedDB (`.ldb`/`.log`) + file blob esterni |
+| **GitHub Copilot** (VS Code / Insiders / VSCodium) | `chatSessions/*.json`, `state.vscdb` |
+| **Claude Code** | `~/.claude/history.jsonl`, `projects/**/*.jsonl` |
+| **Cursor** | `agent-transcripts/*.jsonl`, `state.vscdb`, `store.db` |
+| **Gemini CLI** | `~/.gemini/tmp/<hash>/chats/session-*.json` |
+| **OpenAI Codex** | `~/.codex/` (`history.jsonl`, `rollout-*.jsonl`, `state.sqlite`) |
+| **Windsurf** | `state.vscdb` (protobuf Cascade `.pb` inventariati) |
+| **Continue.dev** | `~/.continue/sessions/*.json` |
+
+**Funzionalità principali:**
+- **Parsing multi-formato**: transcript JSON/JSONL, SQLite (`state.vscdb`, `store.db`, `state.sqlite`).
+- **Recupero profondo di ChatGPT**: analizza i blocchi SSTable LevelDB, i write-ahead log e i file blob esterni di IndexedDB, con un **decompressore Snappy in puro Python** (nessuna dipendenza esterna) che gestisce sia la compressione a livello di blocco LevelDB sia quella per-valore di Blink.
+- **Transcript puliti**: rimuove il rumore di serializzazione V8 (tag di lunghezza, record di metadati, marcatori di fine-oggetto) e ricuce i messaggi spezzati da simboli Unicode/emoji.
+- **Attribuzione del ruolo**: distingue 👤 i prompt utente dalle 🤖 risposte AI (euristica basata sul contenuto) ed etichetta ogni bolla AI con il nome reale del prodotto (es. *AI — ChatGPT*).
+- **Evidenziazione di stringhe sensibili** (API key, token, password) e **match IoC** sul testo recuperato.
+- **Integrazione Master Timeline**: i messaggi con timestamp confluiscono nella timeline cross-artefatto del Modulo 37.
+
+> ⚠️ I bundle cifrati (ChatGPT `conversations-v2-*`, protetti da Keychain/DPAPI) e i protobuf proprietari Cascade sono **solo inventariati** (path, dimensione, SHA256), non decodificati.
 
 ---
 
@@ -657,6 +719,9 @@ FIUTO è uno strumento per velocizzare le analisi forensi digitale legittimo, da
 ---
 **Changelog:**
 
+
+**Date:** 2026-06-05 | **Version:** 1.2
+New **Module 39 — AI Chat / Query History**: recovers AI assistant conversations (ChatGPT, Copilot, Claude, Cursor, Gemini, Codex, Windsurf, Continue) from offline disks. Includes a dependency-free pure-Python Snappy decompressor for ChatGPT LevelDB/IndexedDB (SSTable, WAL and external blob files), user/AI role attribution with product labelling, sensitive-string highlighting, IoC matching and Master Timeline integration.
 
 **Date:** 2026-04-18 | **Version:** 1.1 
 Bug fix.
