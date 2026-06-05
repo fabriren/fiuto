@@ -169,35 +169,6 @@ fiuto_reports/
 
 ---
 
-## 🤖 Module 39 — AI Chat / Query History *(new in v1.2)*
-
-Module 39 recovers conversations held with **AI coding/chat assistants** left on the offline disk, across every user home. It reconstructs full threads — **both user prompts and AI responses** — in chronological order, preserving markdown, code blocks, emojis and accented characters.
-
-**Supported assistants & locations** (under `Users\<user>\`):
-
-| Assistant | Storage |
-|---|---|
-| **ChatGPT Desktop** (standalone + Microsoft Store) | LevelDB IndexedDB (`.ldb`/`.log`) + external blob files |
-| **GitHub Copilot** (VS Code / Insiders / VSCodium) | `chatSessions/*.json`, `state.vscdb` |
-| **Claude Code** | `~/.claude/history.jsonl`, `projects/**/*.jsonl` |
-| **Cursor** | `agent-transcripts/*.jsonl`, `state.vscdb`, `store.db` |
-| **Gemini CLI** | `~/.gemini/tmp/<hash>/chats/session-*.json` |
-| **OpenAI Codex** | `~/.codex/` (`history.jsonl`, `rollout-*.jsonl`, `state.sqlite`) |
-| **Windsurf** | `state.vscdb` (Cascade `.pb` inventoried) |
-| **Continue.dev** | `~/.continue/sessions/*.json` |
-
-**Key capabilities:**
-- **Multi-format parsing**: JSON/JSONL transcripts, SQLite (`state.vscdb`, `store.db`, `state.sqlite`).
-- **Deep ChatGPT recovery**: parses LevelDB SSTable blocks, write-ahead logs and external IndexedDB blob files, with a **pure-Python Snappy decompressor** (no external dependencies) handling both LevelDB block compression and Blink per-value compression.
-- **Clean transcripts**: removes V8 serialization noise (length tags, metadata records, end-of-object markers) and reassembles messages split by Unicode symbols/emojis.
-- **Role attribution**: distinguishes 👤 user prompts from 🤖 AI replies (content-based heuristic) and labels each AI bubble with the actual product name (e.g. *AI — ChatGPT*).
-- **Sensitive-string highlighting** (API keys, tokens, passwords) and **IoC matching** on the recovered text.
-- **Master Timeline integration**: messages with timestamps feed into Module 37's cross-artifact timeline.
-
-> ⚠️ Encrypted bundles (ChatGPT `conversations-v2-*`, Keychain/DPAPI-gated) and proprietary Cascade protobufs are **inventoried only** (path, size, SHA256), not decoded.
-
----
-
 ## 🔍 Use Cases
 
 ### Malware Investigations
@@ -526,35 +497,6 @@ fiuto_reports/
 | 37 | Master Timeline | (Aggregato) | Timeline cross-artefatto |
 | 38 | PAD Offline | NTDS.dit | Active Directory avanzato |
 | 39 | AI Chat / Query History | LevelDB / JSON / SQLite | Recupera conversazioni con assistenti AI (ChatGPT, Copilot, Claude…) |
-
----
-
-## 🤖 Modulo 39 — AI Chat / Query History *(novità v1.2)*
-
-Il modulo 39 recupera le conversazioni avute con **assistenti AI di chat/coding** lasciate sul disco offline, per ogni home utente. Ricostruisce i thread completi — **sia i prompt utente sia le risposte AI** — in ordine cronologico, preservando markdown, blocchi di codice, emoji e caratteri accentati.
-
-**Assistenti e percorsi supportati** (sotto `Users\<utente>\`):
-
-| Assistente | Storage |
-|---|---|
-| **ChatGPT Desktop** (standalone + Microsoft Store) | LevelDB IndexedDB (`.ldb`/`.log`) + file blob esterni |
-| **GitHub Copilot** (VS Code / Insiders / VSCodium) | `chatSessions/*.json`, `state.vscdb` |
-| **Claude Code** | `~/.claude/history.jsonl`, `projects/**/*.jsonl` |
-| **Cursor** | `agent-transcripts/*.jsonl`, `state.vscdb`, `store.db` |
-| **Gemini CLI** | `~/.gemini/tmp/<hash>/chats/session-*.json` |
-| **OpenAI Codex** | `~/.codex/` (`history.jsonl`, `rollout-*.jsonl`, `state.sqlite`) |
-| **Windsurf** | `state.vscdb` (protobuf Cascade `.pb` inventariati) |
-| **Continue.dev** | `~/.continue/sessions/*.json` |
-
-**Funzionalità principali:**
-- **Parsing multi-formato**: transcript JSON/JSONL, SQLite (`state.vscdb`, `store.db`, `state.sqlite`).
-- **Recupero profondo di ChatGPT**: analizza i blocchi SSTable LevelDB, i write-ahead log e i file blob esterni di IndexedDB, con un **decompressore Snappy in puro Python** (nessuna dipendenza esterna) che gestisce sia la compressione a livello di blocco LevelDB sia quella per-valore di Blink.
-- **Transcript puliti**: rimuove il rumore di serializzazione V8 (tag di lunghezza, record di metadati, marcatori di fine-oggetto) e ricuce i messaggi spezzati da simboli Unicode/emoji.
-- **Attribuzione del ruolo**: distingue 👤 i prompt utente dalle 🤖 risposte AI (euristica basata sul contenuto) ed etichetta ogni bolla AI con il nome reale del prodotto (es. *AI — ChatGPT*).
-- **Evidenziazione di stringhe sensibili** (API key, token, password) e **match IoC** sul testo recuperato.
-- **Integrazione Master Timeline**: i messaggi con timestamp confluiscono nella timeline cross-artefatto del Modulo 37.
-
-> ⚠️ I bundle cifrati (ChatGPT `conversations-v2-*`, protetti da Keychain/DPAPI) e i protobuf proprietari Cascade sono **solo inventariati** (path, dimensione, SHA256), non decodificati.
 
 ---
 
