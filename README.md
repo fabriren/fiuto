@@ -82,6 +82,7 @@ The module numbers shown by `--module`/`--modules` always refer to the **menu of
 ### Professional Output
 
 - Interactive and navigable HTML reports
+- One-click CSV export of the complete data for every module
 - Aggregated chronological timelines
 - Detailed logs for audit and tracking
 - Batch summaries with execution metrics
@@ -103,6 +104,19 @@ The module numbers shown by `--module`/`--modules` always refer to the **menu of
 pip install regipy          # Offline registry hive parsing
 pip install python-evtx     # Reading .evtx files
 ```
+
+### Recommended for full Windows coverage
+
+These libraries unlock the full output of some Windows modules. They are **optional**: if missing, the affected module falls back to a partial parser instead of failing.
+
+```bash
+pip install impacket          # SAM / NTDS.dit / AD hashes (modules 20, 24, 38)
+pip install libesedb-python   # ESE database parsing — SRUM (module 16)
+pip install mft               # MFT timeline (module 21)
+pip install python-snappy     # ChatGPT LevelDB decompression (module 39) — or: pip install cramjam
+```
+
+> **Linux and macOS modules need no extra packages** — they rely only on the Python standard library (`sqlite3`, `plistlib`, …). Optionally, `journalctl` (for systemd journal) and the `rpm` CLI (for offline RPM dumps) improve coverage if present.
 
 ### Support Scripts
 
@@ -518,6 +532,7 @@ Sui volumi macOS: **log** (`system.log`, `install.log`, ASL — i unified log `.
 ### Output Professionale
 
 - Report HTML interattivi e navigabili
+- Esportazione CSV dei dati completi per ogni modulo con un click
 - Timeline cronologiche aggregate
 - Log dettagliati per audit e tracciamento
 - Riepilogati batch con metriche di esecuzione
@@ -538,6 +553,19 @@ Sui volumi macOS: **log** (`system.log`, `install.log`, ASL — i unified log `.
 pip install regipy          # Parsing degli hive di registro offline
 pip install python-evtx     # Lettura dei file .evtx
 ```
+
+### Consigliati per la copertura Windows completa
+
+Queste librerie abilitano l'output completo di alcuni moduli Windows. Sono **opzionali**: se mancano, il modulo interessato ripiega su un parser parziale invece di fallire.
+
+```bash
+pip install impacket          # Hash SAM / NTDS.dit / AD (moduli 20, 24, 38)
+pip install libesedb-python   # Parsing database ESE — SRUM (modulo 16)
+pip install mft               # MFT timeline (modulo 21)
+pip install python-snappy     # Decompressione LevelDB ChatGPT (modulo 39) — oppure: pip install cramjam
+```
+
+> **I moduli Linux e macOS non richiedono pacchetti aggiuntivi** — usano solo la libreria standard di Python (`sqlite3`, `plistlib`, …). Facoltativamente, `journalctl` (per il journal systemd) e la CLI `rpm` (per il dump RPM offline) migliorano la copertura se presenti.
 
 ### Script di Supporto
 
