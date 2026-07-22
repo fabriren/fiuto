@@ -308,7 +308,12 @@ separator() {
 }
 
 # Escape HTML — usare questa invece delle funzioni _esc_X locali nei moduli
+# (per contenuto testuale tra i tag: basta neutralizzare & < >)
 html_esc() { printf '%s' "$1" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g'; }
+
+# Escape HTML per valori dentro un ATTRIBUTO (title='...', data-*='...'):
+# oltre a & < > neutralizza anche gli apici, che altrimenti chiuderebbero l'attributo.
+html_attr() { printf '%s' "$1" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g; s/'"'"'/\&#39;/g'; }
 
 # Calcola SHA256 di un file (per chain of custody); ritorna stringa vuota se fallisce
 sha256_file() { sha256sum "$1" 2>/dev/null | awk '{print $1}' || true; }
@@ -1386,8 +1391,8 @@ PYEOF
               <div class='card-header'>
                 <div class='uicon' style='font-size:.7rem'>PS</div>
                 <div>
-                  <div class='uname' style='font-size:.85rem'>${FNAME}</div>
-                  <div class='upath'>${FPATH}</div>
+                  <div class='uname' style='font-size:.85rem'>$(html_esc "$FNAME")</div>
+                  <div class='upath'>$(html_esc "$FPATH")</div>
                 </div>
                 <div style='margin-left:auto;text-align:right;font-family:var(--mono);font-size:.65rem;color:var(--text-dim)'>
                   <div class='ok'>creato: ${FCTIME}</div>
@@ -1402,8 +1407,8 @@ PYEOF
           <div class='card-header'>
             <div class='uicon'>▣</div>
             <div class='user-info'>
-              <div class='uname'>${USER}</div>
-              <div class='upath'>${PSRL_PATH}</div>
+              <div class='uname'>$(html_esc "$USER")</div>
+              <div class='upath'>$(html_esc "$PSRL_PATH")</div>
             </div>
             <div class='badge'>${#FNAMES[@]} file</div>
           </div>
@@ -1534,13 +1539,13 @@ PYEOF
         done
         local ROW_CLASS=""
         $IS_SENS && ROW_CLASS="style='background:rgba(255,123,114,.07)'"
-        local DBG_HTML="${DBG:--}"
-        [[ -n "$DBG" ]] && DBG_HTML="<span class='bad'>${DBG}</span>"
+        local DBG_HTML="-"
+        [[ -n "$DBG" ]] && DBG_HTML="<span class='bad'>$(html_esc "$DBG")</span>"
         ROWS+="<tr ${ROW_CLASS}>
-          <td class='mono'>${EXE}$(${IS_SENS} && echo " <span class='badge warn'>⚠ sensibile</span>" || true)</td>
+          <td class='mono'>$(html_esc "$EXE")$(${IS_SENS} && echo " <span class='badge warn'>⚠ sensibile</span>" || true)</td>
           <td class='mono'>${DBG_HTML}</td>
-          <td class='mono mid'>${GFLAG:--}</td>
-          <td class='mono dim'>${VDLL:--}</td>
+          <td class='mono mid'>$([[ -n "$GFLAG" ]] && html_esc "$GFLAG" || echo "-")</td>
+          <td class='mono dim'>$([[ -n "$VDLL" ]] && html_esc "$VDLL" || echo "-")</td>
         </tr>"
     done
 
@@ -1694,7 +1699,7 @@ PYEOF
             if [[ -n "$PREV_SID" ]]; then
                 CARDS_HTML+="<div class='card'>
                   <div class='card-header'><div class='uicon'>▣</div>
-                    <div><div class='uname'>SID: ${PREV_SID}</div></div>
+                    <div><div class='uname'>SID: $(html_esc "$PREV_SID")</div></div>
                     <div class='badge'>${SID_EXEC_COUNT} eseguibili</div>
                   </div>
                   <table><thead><tr><th>Timestamp (UTC)</th><th>$(L "Eseguibile" "Executable")</th></tr></thead>
@@ -1703,18 +1708,19 @@ PYEOF
             PREV_SID="$SID"; SID_ROWS=""; SID_EXEC_COUNT=0
         fi
         SID_EXEC_COUNT=$((SID_EXEC_COUNT + 1))
-        local EXE_HTML="<span class='mono'>${EXEPATH}</span>"
+        local EXE_ESC; EXE_ESC=$(html_esc "$EXEPATH")
+        local EXE_HTML="<span class='mono'>${EXE_ESC}</span>"
         # Evidenzia percorsi sospetti
         if echo "$EXEPATH" | grep -qi "temp\|appdata\|public\|programdata\|downloads"; then
-            EXE_HTML="<span class='mono warn'>${EXEPATH}</span>"
+            EXE_HTML="<span class='mono warn'>${EXE_ESC}</span>"
         fi
-        SID_ROWS+="<tr><td class='mono ok' style='white-space:nowrap'>${TIMESTAMP}</td><td>${EXE_HTML}</td></tr>"
+        SID_ROWS+="<tr><td class='mono ok' style='white-space:nowrap'>$(html_esc "$TIMESTAMP")</td><td>${EXE_HTML}</td></tr>"
     done
     # Ultima card
     if [[ -n "$PREV_SID" ]]; then
         CARDS_HTML+="<div class='card'>
           <div class='card-header'><div class='uicon'>▣</div>
-            <div><div class='uname'>SID: ${PREV_SID}</div></div>
+            <div><div class='uname'>SID: $(html_esc "$PREV_SID")</div></div>
             <div class='badge'>${SID_EXEC_COUNT} eseguibili</div>
           </div>
           <table><thead><tr><th>Timestamp (UTC)</th><th>$(L "Eseguibile" "Executable")</th></tr></thead>
@@ -1855,7 +1861,7 @@ PYEOF
         for FE in "${FENTRIES[@]}"; do
             IFS=':' read -r FNAME FSIZE FMTIME <<< "$FE"
             ROWS+="<tr>
-              <td class='mono'>${FNAME}</td>
+              <td class='mono'>$(html_esc "$FNAME")</td>
               <td class='mono mid' style='white-space:nowrap'>${FSIZE} B</td>
               <td class='mono ok' style='white-space:nowrap'>${FMTIME}</td>
             </tr>"
@@ -1863,7 +1869,7 @@ PYEOF
         CARDS_HTML+="<div class='card'>
           <div class='card-header'>
             <div class='uicon'>RD</div>
-            <div><div class='uname'>${USER}</div><div class='upath'>${DIR}</div></div>
+            <div><div class='uname'>$(html_esc "$USER")</div><div class='upath'>$(html_esc "$DIR")</div></div>
             <div class='badge'>${#FENTRIES[@]} file</div>
           </div>
           <table><thead><tr><th>File</th><th>$(L "Dimensione" "Size")</th><th>$(L "Ultima modifica" "Last modified")</th></tr></thead>
@@ -2008,8 +2014,8 @@ PYEOF
         IFS='|' read -r HKEY VNAME VVAL <<< "$E"
         local CSS=""
         echo "$VVAL" | grep -qi "temp\|appdata\\\\local\|programdata\|public\|downloads\|powershell\|cmd.exe\|wscript\|cscript\|mshta\|regsvr32\|rundll32\|certutil\|bitsadmin" && CSS="class='bad'"
-        ROWS+="<tr><td class='mono dim'>${HKEY}</td><td class='mono'>${VNAME}</td>
-               <td class='mono' ${CSS}>${VVAL}</td></tr>"
+        ROWS+="<tr><td class='mono dim'>$(html_esc "$HKEY")</td><td class='mono'>$(html_esc "$VNAME")</td>
+               <td class='mono' ${CSS}>$(html_esc "$VVAL")</td></tr>"
     done
 
     {
@@ -2085,8 +2091,8 @@ module_prefetch() {
         IFS='|' read -r EXENAME FNAME FSIZE FMTIME <<< "$E"
         local CSS=""
         echo "$EXENAME" | grep -qi "powershell\|cmd\|wscript\|cscript\|mshta\|regsvr32\|rundll32\|certutil\|bitsadmin\|mimikatz\|procdump\|psexec\|wce\|fgdump" && CSS="class='warn'"
-        ROWS+="<tr><td class='mono' ${CSS}>${EXENAME}</td>
-               <td class='mono dim'>${FNAME}</td>
+        ROWS+="<tr><td class='mono' ${CSS}>$(html_esc "$EXENAME")</td>
+               <td class='mono dim'>$(html_esc "$FNAME")</td>
                <td class='mono ok' style='white-space:nowrap'>${FMTIME}</td>
                <td class='mono mid'>${FSIZE} B</td></tr>"
     done
@@ -2302,16 +2308,16 @@ PYEOF
                     scan)    TBADGE="<span style='color:var(--accent);font-size:.7rem'>● scan</span>" ;;
                 esac
                 local SPATH_HTML=""
-                [[ -n "$PPATH" ]] && SPATH_HTML="<div class='dim mono' style='font-size:.65rem;margin:.3rem 0'>📄 ${PPATH}</div>"
+                [[ -n "$PPATH" ]] && SPATH_HTML="<div class='dim mono' style='font-size:.65rem;margin:.3rem 0'>📄 $(html_esc "$PPATH")</div>"
                 if [[ -n "$PTEXT" ]]; then
-                    CONTENT_HTML="${TBADGE}${SPATH_HTML}<pre style='font-family:var(--mono);font-size:.75rem;white-space:pre-wrap;max-height:250px;overflow-y:auto;margin-top:.4rem;color:var(--text)'>${PTEXT}</pre>"
+                    CONTENT_HTML="${TBADGE}${SPATH_HTML}<pre style='font-family:var(--mono);font-size:.75rem;white-space:pre-wrap;max-height:250px;overflow-y:auto;margin-top:.4rem;color:var(--text)'>$(html_esc "$PTEXT")</pre>"
                 else
                     CONTENT_HTML="${TBADGE}<span class='dim' style='margin-left:.5rem;font-size:.7rem'>nessun testo leggibile</span>"
                 fi
             fi
             ROWS+="<tr>
               <td class='mono ok' style='white-space:nowrap;font-size:.7rem'>${FCTIME}</td>
-              <td class='mono' style='font-size:.75rem'>${FNAME}</td>
+              <td class='mono' style='font-size:.75rem'>$(html_esc "$FNAME")</td>
               <td class='mono mid' style='white-space:nowrap'>${FMTIME}</td>
               <td class='mono mid'>${FSIZE} B</td>
             </tr>
@@ -2320,7 +2326,7 @@ PYEOF
         CARDS_HTML+="<div class='card'>
           <div class='card-header'>
             <div class='uicon'>NT</div>
-            <div><div class='uname'>${USER}</div><div class='upath'>${PATH_FULL}</div></div>
+            <div><div class='uname'>$(html_esc "$USER")</div><div class='upath'>$(html_esc "$PATH_FULL")</div></div>
             <div class='badge'>${COUNT} tab</div>
           </div>
           <table><thead><tr><th>$(L "Creato" "Created")</th><th>GUID / File</th><th>$(L "Modificato" "Modified")</th><th>Dim.</th></tr></thead>
@@ -2592,9 +2598,9 @@ PYEOF
     for USB_E in "${USB_ROWS[@]}"; do
         IFS='§' read -r DTYPE SERIAL FNAME <<< "$USB_E"
         ROWS+="<tr>
-          <td class='mono'>${DTYPE}</td>
-          <td class='mono dim'>${SERIAL}</td>
-          <td class='mono'>${FNAME:--}</td>
+          <td class='mono'>$(html_esc "$DTYPE")</td>
+          <td class='mono dim'>$(html_esc "$SERIAL")</td>
+          <td class='mono'>$([[ -n "$FNAME" ]] && html_esc "$FNAME" || echo "-")</td>
         </tr>"
     done
 
@@ -2700,10 +2706,10 @@ PYEOF
     local ROWS=""
     for E in "${ALL_ENTRIES[@]}"; do
         IFS='|' read -r UNAME FNAME FMTIME TARGET <<< "$E"
-        ROWS+="<tr><td class='mono dim' style='white-space:nowrap'>${UNAME}</td>
+        ROWS+="<tr><td class='mono dim' style='white-space:nowrap'>$(html_esc "$UNAME")</td>
                <td class='mono ok' style='white-space:nowrap'>${FMTIME}</td>
-               <td class='mono'>${FNAME}</td>
-               <td class='mono mid' style='word-break:break-all;font-size:.72rem'>${TARGET:--}</td></tr>"
+               <td class='mono'>$(html_esc "$FNAME")</td>
+               <td class='mono mid' style='word-break:break-all;font-size:.72rem'>$([[ -n "$TARGET" ]] && html_esc "$TARGET" || echo "-")</td></tr>"
     done
 
     {
@@ -3525,7 +3531,7 @@ PYEOF
             SIZE_HR="${FSIZE} B"
         fi
         ROWS+="<tr ${ROW_STYLE}>
-          <td class='mono dim' style='font-size:.68rem;white-space:nowrap'>${SID}</td>
+          <td class='mono dim' style='font-size:.68rem;white-space:nowrap'>$(html_esc "$SID")</td>
           <td class='mono ${PATH_CSS}' style='word-break:break-all;font-size:.72rem'>$(html_esc "$ORIG_PATH")</td>
           <td class='mono ok' style='white-space:nowrap;font-size:.72rem'>${DEL_TIME:--}</td>
           <td class='mono mid' style='white-space:nowrap;font-size:.72rem'>${SIZE_HR}</td>
@@ -3672,7 +3678,7 @@ PYEOF
             VAL_CSS="mono fld bad"
         }
         ROWS+="<tr ${ROW_STYLE}>
-          <td class='mono' style='white-space:nowrap;vertical-align:top;padding-top:.45rem;color:var(--accent4)'>${WMI_TYPE}</td>
+          <td class='mono' style='white-space:nowrap;vertical-align:top;padding-top:.45rem;color:var(--accent4)'>$(html_esc "$WMI_TYPE")</td>
           <td style='padding:.35rem .9rem'><span class='${VAL_CSS}'>$(html_esc "$WMI_VAL")</span></td>
         </tr>"
     done
@@ -3975,7 +3981,7 @@ def chrome_time(t):
     except: return ''
 
 # Copia DB in tmp per evitare lock
-tmp = tempfile.mktemp(suffix='.db')
+_fd, tmp = tempfile.mkstemp(suffix='.db'); os.close(_fd)
 try:
     shutil.copy2(db_path, tmp)
     conn = sqlite3.connect(tmp)
@@ -4435,7 +4441,7 @@ PYEOF
         IFS='§' read -r U N C T <<< "$E"
         local SUSP_CSS=""
         echo "$N" | grep -qi "temp\|appdata\\\\local\|programdata\|public\|downloads\|\\\\temp\\\\" && SUSP_CSS="class='bad'"
-        UA_ROWS+="<tr><td class='mono dim' style='white-space:nowrap'>${U}</td>
+        UA_ROWS+="<tr><td class='mono dim' style='white-space:nowrap'>$(html_esc "$U")</td>
           <td class='mono' style='word-break:break-all;font-size:.72rem'><span ${SUSP_CSS}>$(html_esc "$N")</span></td>
           <td class='mono ok' style='white-space:nowrap;text-align:center'>${C}</td>
           <td class='mono mid' style='white-space:nowrap'>${T:--}</td></tr>"
@@ -4447,7 +4453,7 @@ PYEOF
         IFS='§' read -r U CMD <<< "$E"
         local SUSP_CSS=""
         echo "$CMD" | grep -qi "powershell\|cmd\|wscript\|mshta\|certutil\|bitsadmin\|-enc\|base64" && SUSP_CSS="class='bad'"
-        RUN_ROWS+="<tr><td class='mono dim' style='white-space:nowrap'>${U}</td>
+        RUN_ROWS+="<tr><td class='mono dim' style='white-space:nowrap'>$(html_esc "$U")</td>
           <td class='mono' style='word-break:break-all'><span ${SUSP_CSS}>$(html_esc "$CMD")</span></td></tr>"
     done
 
@@ -4455,8 +4461,8 @@ PYEOF
     local TP_ROWS=""
     for E in "${TP_ENTRIES[@]}"; do
         IFS='§' read -r U K V <<< "$E"
-        TP_ROWS+="<tr><td class='mono dim' style='white-space:nowrap'>${U}</td>
-          <td class='mono mid' style='white-space:nowrap'>${K}</td>
+        TP_ROWS+="<tr><td class='mono dim' style='white-space:nowrap'>$(html_esc "$U")</td>
+          <td class='mono mid' style='white-space:nowrap'>$(html_esc "$K")</td>
           <td class='mono' style='word-break:break-all'>$(html_esc "$V")</td></tr>"
     done
 
@@ -4464,7 +4470,7 @@ PYEOF
     local WW_ROWS=""
     for E in "${WW_ENTRIES[@]}"; do
         IFS='§' read -r U TERM <<< "$E"
-        WW_ROWS+="<tr><td class='mono dim' style='white-space:nowrap'>${U}</td>
+        WW_ROWS+="<tr><td class='mono dim' style='white-space:nowrap'>$(html_esc "$U")</td>
           <td class='mono' style='color:var(--accent)'>$(html_esc "$TERM")</td></tr>"
     done
 
@@ -4712,9 +4718,9 @@ PYEOF
             SUSP_CSS="bad"; ROW_STYLE="style='background:rgba(255,123,114,.07);border-left:3px solid var(--accent2)'"
         }
         ROWS+="<tr ${ROW_STYLE}>
-          <td class='mono dim' style='white-space:nowrap'>${U}</td>
+          <td class='mono dim' style='white-space:nowrap'>$(html_esc "$U")</td>
           <td class='mono ${SUSP_CSS}' style='word-break:break-all;font-size:.72rem'>$(html_esc "$P")</td>
-          <td class='mono dim' style='white-space:nowrap;font-size:.68rem'>${L}</td>
+          <td class='mono dim' style='white-space:nowrap;font-size:.68rem'>$(html_esc "$L")</td>
         </tr>"
     done
 
@@ -4889,10 +4895,10 @@ PYEOF
         [[ "$RID" == "500" ]]       && NOTES+="<span style='color:var(--accent4);font-size:.68rem'>Administrator</span>"
         [[ "$RID" == "501" ]]       && NOTES+="<span class='dim' style='font-size:.68rem'>Guest</span>"
         ROWS+="<tr ${ROW_STYLE}>
-          <td class='mono'>${UNAME}</td>
+          <td class='mono'>$(html_esc "$UNAME")</td>
           <td class='mono mid' style='white-space:nowrap'>${RID}</td>
-          <td class='mono dim' style='font-size:.65rem;word-break:break-all'>${LM}</td>
-          <td class='${NT_CSS}' style='font-size:.72rem;word-break:break-all'>${NT}</td>
+          <td class='mono dim' style='font-size:.65rem;word-break:break-all'>$(html_esc "$LM")</td>
+          <td class='${NT_CSS}' style='font-size:.72rem;word-break:break-all'>$(html_esc "$NT")</td>
           <td style='font-size:.72rem'>${NOTES}</td>
         </tr>"
     done
@@ -5345,8 +5351,8 @@ PYEOF
             ROW_STYLE="style='background:rgba(255,123,114,.07);border-left:3px solid var(--accent2)'"
         }
         OS_ROWS+="<tr ${ROW_STYLE}>
-          <td class='mono dim' style='white-space:nowrap'>${U}</td>
-          <td class='mono' style='white-space:nowrap;color:var(--accent4)'>.${EXT}</td>
+          <td class='mono dim' style='white-space:nowrap'>$(html_esc "$U")</td>
+          <td class='mono' style='white-space:nowrap;color:var(--accent4)'>.$(html_esc "$EXT")</td>
           <td class='mono ${SUSP_CSS}' style='word-break:break-all;font-size:.72rem'>$(html_esc "$P")</td>
         </tr>"
     done
@@ -5355,7 +5361,7 @@ PYEOF
     for E in "${LV_ENTRIES[@]}"; do
         IFS='§' read -r U APP P <<< "$E"
         LV_ROWS+="<tr>
-          <td class='mono dim' style='white-space:nowrap'>${U}</td>
+          <td class='mono dim' style='white-space:nowrap'>$(html_esc "$U")</td>
           <td class='mono' style='color:var(--accent4);white-space:nowrap'>$(html_esc "$APP")</td>
           <td class='mono mid' style='word-break:break-all;font-size:.72rem'>$(html_esc "$P")</td>
         </tr>"
@@ -5715,9 +5721,9 @@ PYEOF
         [[ "$IS_DISABLED" == "true" ]] && NOTES+="<span style='color:var(--text-dim);font-size:.68rem'>DISABLED</span>"
         [[ "$RID" == "500" ]]          && NOTES+="<span style='color:var(--accent2);font-size:.68rem'>Administrator</span>"
         ROWS+="<tr ${ROW_STYLE}>
-          <td class='mono'>${UNAME}</td>
+          <td class='mono'>$(html_esc "$UNAME")</td>
           <td class='mono mid' style='white-space:nowrap'>${RID}</td>
-          <td class='${NT_CSS}' style='font-size:.72rem;word-break:break-all'>${NT}</td>
+          <td class='${NT_CSS}' style='font-size:.72rem;word-break:break-all'>$(html_esc "$NT")</td>
           <td style='font-size:.72rem'>${NOTES}</td>
         </tr>"
     done
@@ -5850,12 +5856,12 @@ PYEOF
         while IFS=$'\t' read -r LBL VAL; do
             [[ -z "$LBL" ]] && continue
             local CSS="mono fld"; [[ "$LBL" == "CRED" || "$LBL" == "URL" ]] && CSS="mono fld bad"
-            STR_ROWS+="<tr><td class='mono' style='white-space:nowrap;color:var(--accent4)'>${LBL}</td>
+            STR_ROWS+="<tr><td class='mono' style='white-space:nowrap;color:var(--accent4)'>$(html_esc "$LBL")</td>
               <td><span class='${CSS}' style='font-size:.72rem'>$(html_esc "${VAL:0:200}")</span></td></tr>"
         done <<< "$DECODED"
         CARDS_HTML+="<div class='card'>
           <div class='card-header'><div class='uicon'>MEM</div>
-            <div><div class='uname'>${MNAME}</div><div class='upath'>${MFILE}</div></div>
+            <div><div class='uname'>$(html_esc "$MNAME")</div><div class='upath'>$(html_esc "$MFILE")</div></div>
             <div class='badge'>${MSIZE}</div>
           </div>
           <table><thead><tr><th style='width:14%'>$(L "Tipo" "Type")</th><th>$(L "Valore estratto" "Extracted value")</th></tr></thead>
@@ -5994,8 +6000,8 @@ PYEOF
           <div class='card-header'>
             <div class='uicon' style='background:linear-gradient(135deg,var(--accent2),#c0392b)'>!</div>
             <div>
-              <div class='uname'>${FDIR_NAME}</div>
-              <div class='upath'>$(L "Sorgente:" "Source:") ${OWNER} &nbsp;·&nbsp; $(L "Data:" "Date:") ${FMTIME}</div>
+              <div class='uname'>$(html_esc "$FDIR_NAME")</div>
+              <div class='upath'>$(L "Sorgente:" "Source:") $(html_esc "$OWNER") &nbsp;·&nbsp; $(L "Data:" "Date:") ${FMTIME}</div>
             </div>
             <div class='badge warn'>Report.wer</div>
           </div>
@@ -6101,10 +6107,10 @@ PYEOF
     for E in "${ALL_CREDS[@]}"; do
         IFS='§' read -r UNAME FNAME CPATH REL MKGUID FSIZE FMTIME <<< "$E"
         ROWS+="<tr>
-          <td class='mono dim' style='white-space:nowrap'>${UNAME}</td>
+          <td class='mono dim' style='white-space:nowrap'>$(html_esc "$UNAME")</td>
           <td class='mono' style='font-size:.72rem;word-break:break-all'>$(html_esc "$FNAME")</td>
           <td class='mono mid' style='font-size:.68rem;word-break:break-all'>$(html_esc "$REL")</td>
-          <td class='mono dim' style='font-size:.65rem;word-break:break-all'>${MKGUID:--}</td>
+          <td class='mono dim' style='font-size:.65rem;word-break:break-all'>$([[ -n "$MKGUID" ]] && html_esc "$MKGUID" || echo "-")</td>
           <td class='mono mid' style='white-space:nowrap'>${FSIZE} B</td>
           <td class='mono ok' style='white-space:nowrap;font-size:.72rem'>${FMTIME}</td>
         </tr>"
@@ -6235,10 +6241,10 @@ PYEOF
         local CSS=""; [[ "$TYPE" == "WLAN" && -n "$F4" ]] && CSS="style='background:rgba(255,123,114,.07)'"
         local KEYHTML=""; [[ "$TYPE" == "WLAN" && -n "$F4" ]] && KEYHTML="<span class='bad' style='font-size:.68rem'>KEY: $(html_esc "${F4:0:40}")</span>"
         ROWS+="<tr ${CSS}>
-          <td class='mono' style='color:var(--accent4);white-space:nowrap'>${TYPE}</td>
-          <td class='mono'>${NAME} ${KEYHTML}</td>
-          <td class='mono dim' style='white-space:nowrap'>${F2}</td>
-          <td class='mono mid' style='white-space:nowrap'>${F3}</td>
+          <td class='mono' style='color:var(--accent4);white-space:nowrap'>$(html_esc "$TYPE")</td>
+          <td class='mono'>$(html_esc "$NAME") ${KEYHTML}</td>
+          <td class='mono dim' style='white-space:nowrap'>$(html_esc "$F2")</td>
+          <td class='mono mid' style='white-space:nowrap'>$(html_esc "$F3")</td>
         </tr>"
     done
     {
@@ -6367,7 +6373,7 @@ PYEOF
         local RS=""; [[ "$IS_SUSP" == "true" ]] && RS="style='background:rgba(255,123,114,.07);border-left:3px solid var(--accent2)'"
         local NC="mono"; [[ "$IS_SUSP" == "true" ]] && NC="mono bad"
         ROWS+="<tr ${RS}>
-          <td class='mono dim' style='white-space:nowrap;font-size:.68rem'>${SCOPE}</td>
+          <td class='mono dim' style='white-space:nowrap;font-size:.68rem'>$(html_esc "$SCOPE")</td>
           <td class='${NC}' style='word-break:break-all;font-size:.72rem'>$(html_esc "${PKG_NAME:0:80}")</td>
           <td class='mono dim' style='word-break:break-all;font-size:.68rem'>$(html_esc "$PKG_PUB")</td>
           <td class='mono mid' style='word-break:break-all;font-size:.68rem'>$(html_esc "$PKG_PATH")</td>
@@ -6440,7 +6446,7 @@ module_browser_extra() {
                     DL_OUT=$("$PY3" - "$FF_DB" "firefox" "$BLABEL" "$USERNAME" << 'PYEOF' 2>/dev/null || true
 import sys, sqlite3, shutil, os, tempfile, datetime, html as H
 db_path, mode, browser, user = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
-tmp = tempfile.mktemp(suffix='.db')
+_fd, tmp = tempfile.mkstemp(suffix='.db'); os.close(_fd)
 try:
     shutil.copy2(db_path, tmp)
     conn = sqlite3.connect(tmp)
@@ -6493,7 +6499,7 @@ PYEOF
                 DL_OUT=$("$PY3" - "$DB_PATH" "chromium" "$BLABEL" "$USERNAME" << 'PYEOF' 2>/dev/null || true
 import sys, sqlite3, shutil, os, tempfile, datetime, html as H
 db_path, mode, browser, user = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
-tmp = tempfile.mktemp(suffix='.db')
+_fd, tmp = tempfile.mkstemp(suffix='.db'); os.close(_fd)
 try:
     shutil.copy2(db_path, tmp)
     conn = sqlite3.connect(tmp)
@@ -6545,7 +6551,7 @@ PYEOF
             LG_OUT=$("$PY3" - "$LDB_PATH" "$BLABEL" "$USERNAME" << 'PYEOF' 2>/dev/null || true
 import sys, sqlite3, shutil, os, tempfile, html as H
 db_path, browser, user = sys.argv[1], sys.argv[2], sys.argv[3]
-tmp = tempfile.mktemp(suffix='.db')
+_fd, tmp = tempfile.mkstemp(suffix='.db'); os.close(_fd)
 try:
     shutil.copy2(db_path, tmp)
     conn = sqlite3.connect(tmp)
@@ -6684,7 +6690,7 @@ PYEOF
         local RS="" TC="mono"
         [[ "$IS_SUSP" == "true" ]] && RS="style='background:rgba(255,123,114,.07);border-left:3px solid var(--accent2)'" && TC="mono bad"
         ROWS+="<tr ${RS}>
-          <td class='mono dim' style='white-space:nowrap'>${UNAME}</td>
+          <td class='mono dim' style='white-space:nowrap'>$(html_esc "$UNAME")</td>
           <td class='mono ok' style='white-space:nowrap;font-size:.72rem'>${FMTIME}</td>
           <td class='${TC}' style='word-break:break-all;font-size:.72rem'>$(html_esc "${CLIP_FIRST:0:300}")</td>
         </tr>"
@@ -6799,9 +6805,9 @@ PYEOF
         local RS="" NC="mono"
         [[ "$IS_SUSP" == "true" ]] && RS="style='background:rgba(255,123,114,.07);border-left:3px solid var(--accent2)'" && NC="mono bad"
         ROWS+="<tr ${RS}>
-          <td class='mono dim' style='white-space:nowrap'>${U}</td>
-          <td class='mono' style='color:var(--accent4);white-space:nowrap'>${APP}</td>
-          <td class='mono dim' style='white-space:nowrap'>${VER}</td>
+          <td class='mono dim' style='white-space:nowrap'>$(html_esc "$U")</td>
+          <td class='mono' style='color:var(--accent4);white-space:nowrap'>$(html_esc "$APP")</td>
+          <td class='mono dim' style='white-space:nowrap'>$(html_esc "$VER")</td>
           <td class='${NC}' style='word-break:break-all;font-size:.72rem'>$(html_esc "$FPATH")</td>
         </tr>"
     done
@@ -7081,9 +7087,10 @@ PYEOF
             | sed $'s/\x1f/\\n/g' \
             | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
         local PATH_ESC; PATH_ESC=$(html_esc "$FPATH")
+        local PATH_ATTR; PATH_ATTR=$(html_attr "$FPATH")
         ROWS+="<tr ${RS}>
           <td class='mono ok' style='white-space:nowrap;font-size:.68rem'>${TS}</td>
-          <td class='mono dim' style='white-space:nowrap;font-size:.65rem;max-width:220px;overflow:hidden;text-overflow:ellipsis' title='${PATH_ESC}'>${PATH_ESC}</td>
+          <td class='mono dim' style='white-space:nowrap;font-size:.65rem;max-width:220px;overflow:hidden;text-overflow:ellipsis' title='${PATH_ATTR}'>${PATH_ESC}</td>
           <td class='${TC}' style='word-break:break-all;font-size:.72rem;white-space:pre-wrap'>${SCRIPT_ESC}</td>
         </tr>"
     done
@@ -7166,10 +7173,10 @@ module_jumplists() {
         [[ "$IS_SUSP" == "true" ]] && RS="style='background:rgba(255,123,114,.07);border-left:3px solid var(--accent2)'" && TC="mono bad"
         local PATHS_DISP; PATHS_DISP=$(html_esc "${PATHS//|/<br>}")
         ROWS+="<tr ${RS}>
-          <td class='mono dim' style='white-space:nowrap'>${UNAME}</td>
-          <td class='mono' style='color:var(--accent4);white-space:nowrap'>${JT}</td>
+          <td class='mono dim' style='white-space:nowrap'>$(html_esc "$UNAME")</td>
+          <td class='mono' style='color:var(--accent4);white-space:nowrap'>$(html_esc "$JT")</td>
           <td class='mono ok' style='white-space:nowrap;font-size:.68rem'>${FMTIME}</td>
-          <td class='mono dim' style='font-size:.68rem'>${FNAME}</td>
+          <td class='mono dim' style='font-size:.68rem'>$(html_esc "$FNAME")</td>
           <td class='${TC}' style='word-break:break-all;font-size:.72rem'>${PATHS_DISP}</td>
         </tr>"
     done
@@ -7313,21 +7320,21 @@ PYEOF
         IFS='§' read -r NAME DESC CAT DFIRST DLAST <<< "$E"
         local CAT_COLOR="ok"
         [[ "$CAT" == "Public" ]] && CAT_COLOR="warn"
-        ROWS_P+="<tr><td class='mono'>${NAME}</td><td class='mono dim'>${DESC}</td>
-          <td class='mono ${CAT_COLOR}'>${CAT}</td>
+        ROWS_P+="<tr><td class='mono'>$(html_esc "$NAME")</td><td class='mono dim'>$(html_esc "$DESC")</td>
+          <td class='mono ${CAT_COLOR}'>$(html_esc "$CAT")</td>
           <td class='mono dim' style='font-size:.68rem'>${DFIRST}</td>
           <td class='mono ok'  style='font-size:.68rem'>${DLAST}</td></tr>"
     done
     for E in "${SIGNATURES[@]}"; do
         IFS='§' read -r NAME DNS_S MAC SSID <<< "$E"
-        ROWS_S+="<tr><td class='mono'>${NAME}</td><td class='mono dim'>${DNS_S}</td>
-          <td class='mono warn'>${MAC}</td><td class='mono'>${SSID}</td></tr>"
+        ROWS_S+="<tr><td class='mono'>$(html_esc "$NAME")</td><td class='mono dim'>$(html_esc "$DNS_S")</td>
+          <td class='mono warn'>$(html_esc "$MAC")</td><td class='mono'>$(html_esc "$SSID")</td></tr>"
     done
     for E in "${IFACES[@]}"; do
         IFS='§' read -r CS IFACE IP GW DNS_I DHCP <<< "$E"
-        ROWS_I+="<tr><td class='mono dim'>${CS}</td><td class='mono dim' style='font-size:.65rem'>${IFACE}</td>
-          <td class='mono ok'>${IP}</td><td class='mono'>${GW}</td>
-          <td class='mono dim'>${DNS_I}</td><td class='mono'>${DHCP}</td></tr>"
+        ROWS_I+="<tr><td class='mono dim'>$(html_esc "$CS")</td><td class='mono dim' style='font-size:.65rem'>$(html_esc "$IFACE")</td>
+          <td class='mono ok'>$(html_esc "$IP")</td><td class='mono'>$(html_esc "$GW")</td>
+          <td class='mono dim'>$(html_esc "$DNS_I")</td><td class='mono'>$(html_esc "$DHCP")</td></tr>"
     done
     {
         html_header "Network Artifacts"
@@ -9111,7 +9118,7 @@ def parse_json(path):
     return out
 
 def sqlite_rows(path, like_keys, tables):
-    tmp = tempfile.mktemp(suffix='.db'); out = []
+    _fd, tmp = tempfile.mkstemp(suffix='.db'); os.close(_fd); out = []
     try:
         shutil.copy2(path, tmp)
         con = sqlite3.connect(tmp)
@@ -9150,7 +9157,7 @@ def sqlite_rows(path, like_keys, tables):
     return out
 
 def sqlite_meta(path):
-    tmp = tempfile.mktemp(suffix='.db'); out = []
+    _fd, tmp = tempfile.mkstemp(suffix='.db'); os.close(_fd); out = []
     try:
         shutil.copy2(path, tmp)
         con = sqlite3.connect(tmp); cur = con.cursor()
