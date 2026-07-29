@@ -9,6 +9,22 @@
 #    ./fiuto.sh /mnt/disk --all        # esegui tutto
 #    ./fiuto.sh /mnt/disk --module 3   # modulo specifico
 # ================================================================
+#
+#  ATTENZIONE — QUESTO FILE E' GENERATO. NON MODIFICARLO A MANO.
+#
+#  Il sorgente sta in src/, diviso per sistema operativo:
+#    src/lib/                funzioni condivise (core, fs, report, registro...)
+#    src/modules/win/        moduli Windows
+#    src/modules/linux/      moduli Linux
+#    src/modules/macos/      moduli macOS
+#    src/modules/xplat/      moduli cross-OS
+#
+#  Dopo aver modificato un sorgente rigenera questo file con:
+#    ./build.sh
+#
+#  La CI verifica con ./build.sh --check che i due siano allineati: una
+#  modifica fatta qui e non nei sorgenti verrebbe persa al build successivo.
+# ================================================================
 
 set -uo pipefail
 
@@ -312,25 +328,6 @@ separator() {
     echo -e "${DIM}  ─────────────────────────────────────────────────────${RESET}"
 }
 
-# Escape HTML — usare questa invece delle funzioni _esc_X locali nei moduli
-# (per contenuto testuale tra i tag: basta neutralizzare & < >)
-html_esc() { printf '%s' "$1" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g'; }
-
-# Escape HTML per valori dentro un ATTRIBUTO (title='...', data-*='...'):
-# oltre a & < > neutralizza anche gli apici, che altrimenti chiuderebbero l'attributo.
-html_attr() { printf '%s' "$1" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g; s/'"'"'/\&#39;/g'; }
-
-# Calcola SHA256 di un file (per chain of custody); ritorna stringa vuota se fallisce
-sha256_file() { sha256sum "$1" 2>/dev/null | awk '{print $1}' || true; }
-
-# Scrive un messaggio nel log di sessione (se LOG_FILE è impostato)
-log_msg() {
-    [[ -n "$LOG_FILE" ]] || return 0
-    local _ld; _ld=$(dirname "$LOG_FILE")
-    [[ -d "$_ld" ]] || mkdir -p "$_ld" 2>/dev/null || return 0
-    printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >> "$LOG_FILE" 2>/dev/null || true
-}
-
 # Timeout portabile (macOS / Linux)
 portable_timeout() {
     local SECS="$1"
@@ -376,222 +373,10 @@ open_report_prompt() {
     [[ "${RESP,,}" != "n" ]] && xdg-open "$RPATH" 2>/dev/null &
 }
 
-# Carica un file IoC (una entry per riga, righe # ignorate)
-load_ioc_file() {
-    local IOCFILE="$1"
-    if [[ ! -f "$IOCFILE" ]]; then
-        warn "$(t ioc_not_found) $IOCFILE"
-        return 1
-    fi
-    while IFS= read -r LINE || [[ -n "$LINE" ]]; do
-        [[ -z "$LINE" || "$LINE" == \#* ]] && continue
-        IOC_LIST+=("$LINE")
-    done < "$IOCFILE"
-    ok "$(t ioc_loaded) ${#IOC_LIST[@]} from $IOCFILE"
-    log_msg "[IOC] Loaded ${#IOC_LIST[@]} IoCs from $IOCFILE"
-}
-
-# Controlla se una stringa contiene un IoC caricato; ritorna 0 se trovato
-check_ioc() {
-    local TEXT="${1,,}"
-    for IOC in "${IOC_LIST[@]}"; do
-        [[ "${TEXT}" == *"${IOC,,}"* ]] && return 0
-    done
-    return 1
-}
-
 # Info / warning / error
 info()    { echo -e "  ${CYAN}[i]${RESET} $*"; log_msg "[INFO] $*"; }
 ok()      { echo -e "  ${GREEN}[✓]${RESET} ${BOLD}$*${RESET}"; log_msg "[OK]   $*"; }
 warn()    { echo -e "  ${YELLOW}[!]${RESET} $*"; log_msg "[WARN] $*"; }
-ci_find_file() {
-    local BASE="$1"
-    local REL="$2"
-    if [[ -f "$BASE/$REL" ]]; then
-        echo "$BASE/$REL"
-        return
-    fi
-    local DIR; DIR=$(dirname "$REL")
-    local FILE; FILE=$(basename "$REL")
-    local DIR_PATH; DIR_PATH=$(ci_find_dir "$BASE" "$DIR")
-    [[ -z "$DIR_PATH" ]] && echo "" && return
-    find "$DIR_PATH" -maxdepth 1 -iname "$FILE" -type f 2>/dev/null | head -1
-}
-
-# ================================================================
-#  RECUPERO INFORMAZIONI MACCHINA
-# ================================================================
-
-gather_host_info() {
-    [[ -n "$WIN_ROOT" ]] || return 1
-
-    # Per i volumi non-Windows usa una raccolta info dedicata e termina qui.
-    if [[ "$OS_TYPE" == "linux" ]]; then
-        gather_host_info_linux
-        return 0
-    elif [[ "$OS_TYPE" == "macos" ]]; then
-        gather_host_info_macos
-        return 0
-    fi
-
-    local SYSTEM_HIVE; SYSTEM_HIVE=$(get_hive "SYSTEM")
-    local SOFTWARE_HIVE; SOFTWARE_HIVE=$(get_hive "SOFTWARE")
-    
-    if [[ -z "$SYSTEM_HIVE" && -z "$SOFTWARE_HIVE" ]]; then
-        warn "$(t hive_not_found)"
-    else
-        info "$(t retrieving_info)"
-        
-        local INFO_JSON
-        INFO_JSON=$("$PY3" - "$SYSTEM_HIVE" "$SOFTWARE_HIVE" << 'PYEOF' 2>/dev/null
-import sys, json
-try:
-    from regipy.registry import RegistryHive
-    system_path = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1] else None
-    software_path = sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] else None
-
-    info = {"hostname": "", "os": "", "ip": "", "domain": ""}
-
-    def get_key(hive, path):
-        """Prova il path diretto e con prefisso ROOT\\ (regipy >= 6.x)."""
-        for p in (path, 'ROOT\\' + path):
-            try:
-                return hive.get_key(p)
-            except Exception:
-                pass
-        return None
-
-    if system_path:
-        try:
-            sys_hive = RegistryHive(system_path)
-            # Hostname
-            try:
-                hk = get_key(sys_hive, 'ControlSet001\\Control\\ComputerName\\ComputerName')
-                if hk: info["hostname"] = hk.get_value('ComputerName') or ""
-            except: pass
-
-            # Network Info (IP / Domain)
-            try:
-                tk = get_key(sys_hive, 'ControlSet001\\Services\\Tcpip\\Parameters')
-                if tk:
-                    info["domain"] = tk.get_value('Domain') or tk.get_value('NV Domain') or ""
-
-                # IP (cerca il primo con un IP valido)
-                ik = get_key(sys_hive, 'ControlSet001\\Services\\Tcpip\\Parameters\\Interfaces')
-                if ik:
-                    for sub in ik.iter_subkeys():
-                        ip = sub.get_value('DhcpIPAddress') or sub.get_value('IPAddress')
-                        if ip and ip != '0.0.0.0':
-                            if isinstance(ip, list): ip = ip[0]
-                            info["ip"] = ip
-                            break
-            except: pass
-        except: pass
-
-    if software_path:
-        try:
-            soft_hive = RegistryHive(software_path)
-            try:
-                cvk = get_key(soft_hive, 'Microsoft\\Windows NT\\CurrentVersion')
-                if cvk:
-                    prod = cvk.get_value('ProductName') or ""
-                    ver = cvk.get_value('DisplayVersion') or cvk.get_value('ReleaseId') or ""
-                    build = cvk.get_value('CurrentBuild') or ""
-                    info["os"] = f"{prod} {ver} (Build {build})".strip()
-            except: pass
-        except: pass
-
-    print(json.dumps(info))
-except:
-    print("{}")
-PYEOF
-)
-        HOST_NAME=$(echo "$INFO_JSON" | "$PY3" -c "import sys,json; print(json.load(sys.stdin).get('hostname',''))" 2>/dev/null)
-        OS_VER=$(echo "$INFO_JSON" | "$PY3" -c "import sys,json; print(json.load(sys.stdin).get('os',''))" 2>/dev/null)
-        IP_ADDR=$(echo "$INFO_JSON" | "$PY3" -c "import sys,json; print(json.load(sys.stdin).get('ip',''))" 2>/dev/null)
-        DOMAIN_NAME=$(echo "$INFO_JSON" | "$PY3" -c "import sys,json; print(json.load(sys.stdin).get('domain',''))" 2>/dev/null)
-    fi
-
-    # Fallback Hostname
-    if [[ -z "$HOST_NAME" ]]; then
-        local UNABLE_MSG="$([ "$LANG" = "it" ] && echo "Impossibile rilevare il nome macchina automaticamente." || echo "Unable to detect machine name automatically.")"
-        warn "$UNABLE_MSG"
-        local _SUGGESTED_NAME; _SUGGESTED_NAME=$(basename "$WIN_ROOT")
-        echo -ne "  ${YELLOW}[?]${RESET} $(t hostname_prompt) [${BOLD}${_SUGGESTED_NAME}${RESET}]: "
-        read -r HOST_NAME
-        [[ -z "$HOST_NAME" ]] && HOST_NAME="$_SUGGESTED_NAME"
-    fi
-
-    print_host_info_table
-}
-
-# Raccolta info host per volumi Linux (hostname + distro da /etc)
-gather_host_info_linux() {
-    info "$(t retrieving_info)"
-    local ETC; ETC=$(ci_find_dir "$WIN_ROOT" "etc")
-    if [[ -n "$ETC" ]]; then
-        local HN; HN=$(ci_find_file "$ETC" "hostname")
-        [[ -n "$HN" && -f "$HN" ]] && HOST_NAME=$(head -1 "$HN" 2>/dev/null | tr -d '[:space:]')
-        local OSR; OSR=$(ci_find_file "$ETC" "os-release")
-        if [[ -n "$OSR" && -f "$OSR" ]]; then
-            OS_VER=$(grep -E '^PRETTY_NAME=' "$OSR" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"')
-        fi
-    fi
-    [[ -z "$OS_VER" ]] && OS_VER="Linux"
-    DOMAIN_NAME=""; IP_ADDR=""
-    if [[ -z "$HOST_NAME" ]]; then
-        local _SUGGESTED_NAME; _SUGGESTED_NAME=$(basename "$WIN_ROOT")
-        echo -ne "  ${YELLOW}[?]${RESET} $(t hostname_prompt) [${BOLD}${_SUGGESTED_NAME}${RESET}]: "
-        read -r HOST_NAME
-        [[ -z "$HOST_NAME" ]] && HOST_NAME="$_SUGGESTED_NAME"
-    fi
-    print_host_info_table
-}
-
-# Raccolta info host per volumi macOS (da SystemVersion.plist)
-gather_host_info_macos() {
-    info "$(t retrieving_info)"
-    local SV
-    SV=$(ci_find_file "$(ci_find_dir "$WIN_ROOT" "System/Library/CoreServices")" "SystemVersion.plist")
-    if [[ -n "$SV" && -f "$SV" ]]; then
-        local PLIST_TXT; PLIST_TXT=$(read_plist "$SV" 2>/dev/null)
-        local PROD VER BUILD
-        PROD=$(echo "$PLIST_TXT"  | grep -i 'ProductName:'        | head -1 | sed "s/.*: '\\?//; s/'\\?$//")
-        VER=$(echo "$PLIST_TXT"   | grep -i 'ProductVersion:'     | head -1 | sed "s/.*: '\\?//; s/'\\?$//")
-        BUILD=$(echo "$PLIST_TXT" | grep -i 'ProductBuildVersion:'| head -1 | sed "s/.*: '\\?//; s/'\\?$//")
-        OS_VER=$(echo "${PROD} ${VER} (${BUILD})" | sed 's/  */ /g; s/ ()//')
-    fi
-    [[ -z "$OS_VER" ]] && OS_VER="macOS"
-    # hostname: prova preferences.plist di SystemConfiguration
-    local PREF
-    PREF=$(ci_find_file "$(ci_find_dir "$WIN_ROOT" "Library/Preferences/SystemConfiguration")" "preferences.plist")
-    if [[ -n "$PREF" && -f "$PREF" ]]; then
-        HOST_NAME=$(read_plist "$PREF" 2>/dev/null | grep -iE 'HostName:|LocalHostName:|ComputerName:' | head -1 | sed "s/.*: '\\?//; s/'\\?$//")
-    fi
-    DOMAIN_NAME=""; IP_ADDR=""
-    if [[ -z "$HOST_NAME" ]]; then
-        local _SUGGESTED_NAME; _SUGGESTED_NAME=$(basename "$WIN_ROOT")
-        echo -ne "  ${YELLOW}[?]${RESET} $(t hostname_prompt) [${BOLD}${_SUGGESTED_NAME}${RESET}]: "
-        read -r HOST_NAME
-        [[ -z "$HOST_NAME" ]] && HOST_NAME="$_SUGGESTED_NAME"
-    fi
-    print_host_info_table
-}
-
-print_host_info_table() {
-    local TITLE="$([ "$LANG" = "it" ] && echo "INFORMAZIONI MACCHINA TARGET" || echo "TARGET MACHINE INFORMATION")"
-    echo -e "  ${CYAN}${BOLD}┌────────────────────────────────────────────────────────────────────────────┐${RESET}"
-    local _T=${#TITLE} _LEFT=$(( (76 - ${#TITLE}) / 2 )) _RIGHT
-    _RIGHT=$(( 76 - ${#TITLE} - _LEFT ))
-    printf "  ${CYAN}${BOLD}│%*s%*s│${RESET}\n" $(( _LEFT + _T )) "$TITLE" $_RIGHT ""
-    echo -e "  ${CYAN}${BOLD}├────────────────────────────────────────────────────────────────────────────┤${RESET}"
-    printf "  ${CYAN}${BOLD}│${RESET}  %-18s : ${WHITE}${BOLD}%-52s${RESET} ${CYAN}${BOLD}│${RESET}\n" "$(t hostname)" "${HOST_NAME:-N/A}"
-    printf "  ${CYAN}${BOLD}│${RESET}  %-18s : %-52s ${CYAN}${BOLD}│${RESET}\n" "$(t os)" "${OS_VER:-N/A}"
-    printf "  ${CYAN}${BOLD}│${RESET}  %-18s : %-52s ${CYAN}${BOLD}│${RESET}\n" "$(t ip)" "${IP_ADDR:-N/A}"
-    printf "  ${CYAN}${BOLD}│${RESET}  %-18s : %-52s ${CYAN}${BOLD}│${RESET}\n" "$(t domain)" "${DOMAIN_NAME:-N/A}"
-    echo -e "  ${CYAN}${BOLD}└────────────────────────────────────────────────────────────────────────────┘${RESET}"
-    echo ""
-}
 
 err()     { echo -e "  ${RED}[✗]${RESET} $*"; log_msg "[ERR]  $*"; }
 dim_msg() { echo -e "  ${DIM}[-] $*${RESET}"; log_msg "[DIM]  $*"; }
@@ -624,6 +409,62 @@ pause_key() {
     else
         read -r 2>/dev/null || true
     fi
+}
+
+# Escape HTML — usare questa invece delle funzioni _esc_X locali nei moduli
+# (per contenuto testuale tra i tag: basta neutralizzare & < >)
+html_esc() { printf '%s' "$1" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g'; }
+
+# Escape HTML per valori dentro un ATTRIBUTO (title='...', data-*='...'):
+# oltre a & < > neutralizza anche gli apici, che altrimenti chiuderebbero l'attributo.
+html_attr() { printf '%s' "$1" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g; s/'"'"'/\&#39;/g'; }
+
+# Calcola SHA256 di un file (per chain of custody); ritorna stringa vuota se fallisce
+sha256_file() { sha256sum "$1" 2>/dev/null | awk '{print $1}' || true; }
+
+# Scrive un messaggio nel log di sessione (se LOG_FILE è impostato)
+log_msg() {
+    [[ -n "$LOG_FILE" ]] || return 0
+    local _ld; _ld=$(dirname "$LOG_FILE")
+    [[ -d "$_ld" ]] || mkdir -p "$_ld" 2>/dev/null || return 0
+    printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >> "$LOG_FILE" 2>/dev/null || true
+}
+
+# Carica un file IoC (una entry per riga, righe # ignorate)
+load_ioc_file() {
+    local IOCFILE="$1"
+    if [[ ! -f "$IOCFILE" ]]; then
+        warn "$(t ioc_not_found) $IOCFILE"
+        return 1
+    fi
+    while IFS= read -r LINE || [[ -n "$LINE" ]]; do
+        [[ -z "$LINE" || "$LINE" == \#* ]] && continue
+        IOC_LIST+=("$LINE")
+    done < "$IOCFILE"
+    ok "$(t ioc_loaded) ${#IOC_LIST[@]} from $IOCFILE"
+    log_msg "[IOC] Loaded ${#IOC_LIST[@]} IoCs from $IOCFILE"
+}
+
+# Controlla se una stringa contiene un IoC caricato; ritorna 0 se trovato
+check_ioc() {
+    local TEXT="${1,,}"
+    for IOC in "${IOC_LIST[@]}"; do
+        [[ "${TEXT}" == *"${IOC,,}"* ]] && return 0
+    done
+    return 1
+}
+ci_find_file() {
+    local BASE="$1"
+    local REL="$2"
+    if [[ -f "$BASE/$REL" ]]; then
+        echo "$BASE/$REL"
+        return
+    fi
+    local DIR; DIR=$(dirname "$REL")
+    local FILE; FILE=$(basename "$REL")
+    local DIR_PATH; DIR_PATH=$(ci_find_dir "$BASE" "$DIR")
+    [[ -z "$DIR_PATH" ]] && echo "" && return
+    find "$DIR_PATH" -maxdepth 1 -iname "$FILE" -type f 2>/dev/null | head -1
 }
 
 # Risolve un percorso case-insensitive su filesystem montato NTFS
@@ -885,167 +726,179 @@ PYEOF
     rm -f "$TMP" "${TMP}-wal" "${TMP}-shm"
 }
 
-# Prepara la directory report e restituisce il path del file HTML.
-# La directory base viene creata SOLO qui, al primo report effettivo,
-# per evitare directory vuote quando l'utente non genera alcun report.
-prepare_report_dir() {
-    local MODULE_NAME="$1"
-    [[ -n "$REPORT_BASE_DIR" && ! -d "$REPORT_BASE_DIR" ]] && mkdir -p "$REPORT_BASE_DIR"
-    local DIR="${REPORT_BASE_DIR}/${MODULE_NAME}_$(date +%Y%m%d_%H%M%S)"
-    mkdir -p "$DIR"
-    echo "${DIR}/report.html"
-}
+# ================================================================
+#  RECUPERO INFORMAZIONI MACCHINA
+# ================================================================
 
-# Registra il report nel riepilogo di sessione.
-# Chiamata DOPO la scrittura effettiva del file, fuori da qualsiasi subshell.
-#
-# E' anche il punto di aggancio dell'export JSONL: ogni modulo passa di qui
-# dopo aver scritto il proprio HTML, quindi l'export copre automaticamente
-# tutti i moduli — inclusi quelli Windows, che generano l'HTML per conto
-# proprio senza passare da finish_report.
-register_report() {
-    [[ -n "${1:-}" && -f "$1" ]] || return 0
-    GENERATED_REPORTS+=("$1")
-    [[ "$EXPORT_JSONL" == "true" ]] && export_report_jsonl "$1"
-    return 0
-}
+gather_host_info() {
+    [[ -n "$WIN_ROOT" ]] || return 1
 
-# ----------------------------------------------------------------
-#  Export JSONL (schema Timesketch / plaso)
-#
-#  I report HTML sono ottimi per l'analista e inutilizzabili per una
-#  pipeline: non si correlano con altre sorgenti e non si caricano in un
-#  SIEM. Qui gli stessi eventi vengono riemessi in JSON Lines con i campi
-#  attesi da Timesketch (datetime, timestamp_desc, message), cosi' il
-#  risultato di FIUTO entra direttamente in una super-timeline.
-#
-#  L'estrazione lavora sull'HTML gia' prodotto invece che sui dati grezzi
-#  dei singoli moduli: e' l'unico punto in cui il formato e' omogeneo per
-#  tutti e 64+ i moduli, e non richiede di toccarli uno per uno.
-# ----------------------------------------------------------------
-export_report_jsonl() {
-    local HTML="$1"
-    local DIR; DIR=$(dirname "$HTML")
-    local SLUG; SLUG=$(basename "$DIR" | sed -E 's/_[0-9]{8}_[0-9]{6}$//')
-    local OUT="${DIR}/report.jsonl"
-
-    "$PY3" - "$HTML" "$SLUG" "${WIN_ROOT:-}" "${HOST_NAME:-}" "${OS_TYPE:-}" > "$OUT" << 'PYEOF' 2>/dev/null
-import sys, re, json, html as H, datetime
-
-html_path, slug = sys.argv[1], sys.argv[2]
-volume  = sys.argv[3] if len(sys.argv) > 3 else ''
-host    = sys.argv[4] if len(sys.argv) > 4 else ''
-os_type = sys.argv[5] if len(sys.argv) > 5 else ''
-
-MONTHS = {'Jan':'01','Feb':'02','Mar':'03','Apr':'04','May':'05','Jun':'06',
-          'Jul':'07','Aug':'08','Sep':'09','Oct':'10','Nov':'11','Dec':'12'}
-TS_ISO = re.compile(r'\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}')
-TS_SYS = re.compile(r'\b(' + '|'.join(MONTHS) + r')\s+(\d{1,2})\s+(\d{2}:\d{2}:\d{2})')
-TD     = re.compile(r'<td[^>]*>(.*?)</td>', re.DOTALL | re.I)
-PRE    = re.compile(r'<pre[^>]*>(.*?)</pre>', re.DOTALL | re.I)
-TAG    = re.compile(r'<[^>]+>')
-
-def strip(s):
-    return TAG.sub('', H.unescape(s)).strip()
-
-# I log syslog non portano l'anno: si usa quello del file HTML (l'analisi e'
-# contestuale all'acquisizione). Approssimazione esplicita, non silenziosa.
-year = str(datetime.date.today().year)
-year_assumed = False
-
-def norm_iso(raw):
-    return raw.replace('T', ' ')[:19].replace(' ', 'T')
-
-def from_sys(m):
-    global year_assumed
-    year_assumed = True
-    return f"{year}-{MONTHS[m.group(1)]}-{int(m.group(2)):02d}T{m.group(3)}"
-
-try:
-    content = open(html_path, encoding='utf-8', errors='replace').read()
-except Exception:
-    sys.exit(0)
-
-seen = set()
-out  = []
-
-def emit(dt, message, assumed):
-    message = ' '.join(message.split())[:2000]
-    if not message:
-        return
-    key = (dt, message[:120])
-    if key in seen:
-        return
-    seen.add(key)
-    rec = {
-        # Campi richiesti da Timesketch
-        "datetime": dt,
-        "timestamp_desc": f"FIUTO {slug}",
-        "message": message,
-        # Contesto aggiuntivo
-        "data_type": f"fiuto:{slug}",
-        "module": slug,
-        "source_volume": volume,
-        "hostname": host,
-        "os": os_type,
-    }
-    if assumed:
-        # L'anno non era nel dato di origine: va dichiarato, non nascosto.
-        rec["year_inferred"] = True
-    out.append(rec)
-
-# 1) Righe di tabella in cui una cella contiene un timestamp
-for tr in re.finditer(r'<tr[^>]*>(.*?)</tr>', content, re.DOTALL | re.I):
-    cells = [strip(m.group(1)) for m in TD.finditer(tr.group(1))]
-    if not cells:
-        continue
-    dt = None
-    for c in cells:
-        m = TS_ISO.search(c)
-        if m:
-            dt = norm_iso(m.group(0))
-            break
-    if not dt:
-        continue
-    msg = ' | '.join(c for c in cells
-                     if c and not TS_ISO.fullmatch(c.strip()) and not re.fullmatch(r'\d+', c.strip()))
-    emit(dt, msg, False)
-
-# 2) Blocchi <pre> (log, history, config): una riga per evento
-for pm in PRE.finditer(content):
-    block = H.unescape(TAG.sub('', pm.group(1)))
-    for raw in block.split('\n'):
-        txt = re.sub(r'^\s*\d+\s+', '', raw).strip()   # via il numero di riga
-        if not txt:
-            continue
-        assumed = False
-        m = TS_ISO.search(txt)
-        if m:
-            dt = norm_iso(m.group(0))
-        else:
-            m = TS_SYS.search(txt)
-            if not m:
-                continue
-            dt = from_sys(m)
-            assumed = True
-        emit(dt, txt, assumed)
-
-for rec in sorted(out, key=lambda r: r["datetime"]):
-    print(json.dumps(rec, ensure_ascii=False))
-PYEOF
-
-    local N=0
-    [[ -s "$OUT" ]] && N=$(wc -l < "$OUT")
-    if [[ "$N" -eq 0 ]]; then
-        rm -f "$OUT"
+    # Per i volumi non-Windows usa una raccolta info dedicata e termina qui.
+    if [[ "$OS_TYPE" == "linux" ]]; then
+        gather_host_info_linux
+        return 0
+    elif [[ "$OS_TYPE" == "macos" ]]; then
+        gather_host_info_macos
         return 0
     fi
 
-    # Timeline unica di sessione: e' il file da caricare in Timesketch.
-    local COMBINED="${REPORT_BASE_DIR}/fiuto_timeline.jsonl"
-    cat "$OUT" >> "$COMBINED" 2>/dev/null || true
-    ok "$(L "Export JSONL:" "JSONL export:") ${BOLD}${N}$(L " eventi" " events")${RESET} → $(basename "$OUT")"
-    log_msg "[JSONL] $OUT — $N eventi"
+    local SYSTEM_HIVE; SYSTEM_HIVE=$(get_hive "SYSTEM")
+    local SOFTWARE_HIVE; SOFTWARE_HIVE=$(get_hive "SOFTWARE")
+    
+    if [[ -z "$SYSTEM_HIVE" && -z "$SOFTWARE_HIVE" ]]; then
+        warn "$(t hive_not_found)"
+    else
+        info "$(t retrieving_info)"
+        
+        local INFO_JSON
+        INFO_JSON=$("$PY3" - "$SYSTEM_HIVE" "$SOFTWARE_HIVE" << 'PYEOF' 2>/dev/null
+import sys, json
+try:
+    from regipy.registry import RegistryHive
+    system_path = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1] else None
+    software_path = sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] else None
+
+    info = {"hostname": "", "os": "", "ip": "", "domain": ""}
+
+    def get_key(hive, path):
+        """Prova il path diretto e con prefisso ROOT\\ (regipy >= 6.x)."""
+        for p in (path, 'ROOT\\' + path):
+            try:
+                return hive.get_key(p)
+            except Exception:
+                pass
+        return None
+
+    if system_path:
+        try:
+            sys_hive = RegistryHive(system_path)
+            # Hostname
+            try:
+                hk = get_key(sys_hive, 'ControlSet001\\Control\\ComputerName\\ComputerName')
+                if hk: info["hostname"] = hk.get_value('ComputerName') or ""
+            except: pass
+
+            # Network Info (IP / Domain)
+            try:
+                tk = get_key(sys_hive, 'ControlSet001\\Services\\Tcpip\\Parameters')
+                if tk:
+                    info["domain"] = tk.get_value('Domain') or tk.get_value('NV Domain') or ""
+
+                # IP (cerca il primo con un IP valido)
+                ik = get_key(sys_hive, 'ControlSet001\\Services\\Tcpip\\Parameters\\Interfaces')
+                if ik:
+                    for sub in ik.iter_subkeys():
+                        ip = sub.get_value('DhcpIPAddress') or sub.get_value('IPAddress')
+                        if ip and ip != '0.0.0.0':
+                            if isinstance(ip, list): ip = ip[0]
+                            info["ip"] = ip
+                            break
+            except: pass
+        except: pass
+
+    if software_path:
+        try:
+            soft_hive = RegistryHive(software_path)
+            try:
+                cvk = get_key(soft_hive, 'Microsoft\\Windows NT\\CurrentVersion')
+                if cvk:
+                    prod = cvk.get_value('ProductName') or ""
+                    ver = cvk.get_value('DisplayVersion') or cvk.get_value('ReleaseId') or ""
+                    build = cvk.get_value('CurrentBuild') or ""
+                    info["os"] = f"{prod} {ver} (Build {build})".strip()
+            except: pass
+        except: pass
+
+    print(json.dumps(info))
+except:
+    print("{}")
+PYEOF
+)
+        HOST_NAME=$(echo "$INFO_JSON" | "$PY3" -c "import sys,json; print(json.load(sys.stdin).get('hostname',''))" 2>/dev/null)
+        OS_VER=$(echo "$INFO_JSON" | "$PY3" -c "import sys,json; print(json.load(sys.stdin).get('os',''))" 2>/dev/null)
+        IP_ADDR=$(echo "$INFO_JSON" | "$PY3" -c "import sys,json; print(json.load(sys.stdin).get('ip',''))" 2>/dev/null)
+        DOMAIN_NAME=$(echo "$INFO_JSON" | "$PY3" -c "import sys,json; print(json.load(sys.stdin).get('domain',''))" 2>/dev/null)
+    fi
+
+    # Fallback Hostname
+    if [[ -z "$HOST_NAME" ]]; then
+        local UNABLE_MSG="$([ "$LANG" = "it" ] && echo "Impossibile rilevare il nome macchina automaticamente." || echo "Unable to detect machine name automatically.")"
+        warn "$UNABLE_MSG"
+        local _SUGGESTED_NAME; _SUGGESTED_NAME=$(basename "$WIN_ROOT")
+        echo -ne "  ${YELLOW}[?]${RESET} $(t hostname_prompt) [${BOLD}${_SUGGESTED_NAME}${RESET}]: "
+        read -r HOST_NAME
+        [[ -z "$HOST_NAME" ]] && HOST_NAME="$_SUGGESTED_NAME"
+    fi
+
+    print_host_info_table
+}
+
+# Raccolta info host per volumi Linux (hostname + distro da /etc)
+gather_host_info_linux() {
+    info "$(t retrieving_info)"
+    local ETC; ETC=$(ci_find_dir "$WIN_ROOT" "etc")
+    if [[ -n "$ETC" ]]; then
+        local HN; HN=$(ci_find_file "$ETC" "hostname")
+        [[ -n "$HN" && -f "$HN" ]] && HOST_NAME=$(head -1 "$HN" 2>/dev/null | tr -d '[:space:]')
+        local OSR; OSR=$(ci_find_file "$ETC" "os-release")
+        if [[ -n "$OSR" && -f "$OSR" ]]; then
+            OS_VER=$(grep -E '^PRETTY_NAME=' "$OSR" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"')
+        fi
+    fi
+    [[ -z "$OS_VER" ]] && OS_VER="Linux"
+    DOMAIN_NAME=""; IP_ADDR=""
+    if [[ -z "$HOST_NAME" ]]; then
+        local _SUGGESTED_NAME; _SUGGESTED_NAME=$(basename "$WIN_ROOT")
+        echo -ne "  ${YELLOW}[?]${RESET} $(t hostname_prompt) [${BOLD}${_SUGGESTED_NAME}${RESET}]: "
+        read -r HOST_NAME
+        [[ -z "$HOST_NAME" ]] && HOST_NAME="$_SUGGESTED_NAME"
+    fi
+    print_host_info_table
+}
+
+# Raccolta info host per volumi macOS (da SystemVersion.plist)
+gather_host_info_macos() {
+    info "$(t retrieving_info)"
+    local SV
+    SV=$(ci_find_file "$(ci_find_dir "$WIN_ROOT" "System/Library/CoreServices")" "SystemVersion.plist")
+    if [[ -n "$SV" && -f "$SV" ]]; then
+        local PLIST_TXT; PLIST_TXT=$(read_plist "$SV" 2>/dev/null)
+        local PROD VER BUILD
+        PROD=$(echo "$PLIST_TXT"  | grep -i 'ProductName:'        | head -1 | sed "s/.*: '\\?//; s/'\\?$//")
+        VER=$(echo "$PLIST_TXT"   | grep -i 'ProductVersion:'     | head -1 | sed "s/.*: '\\?//; s/'\\?$//")
+        BUILD=$(echo "$PLIST_TXT" | grep -i 'ProductBuildVersion:'| head -1 | sed "s/.*: '\\?//; s/'\\?$//")
+        OS_VER=$(echo "${PROD} ${VER} (${BUILD})" | sed 's/  */ /g; s/ ()//')
+    fi
+    [[ -z "$OS_VER" ]] && OS_VER="macOS"
+    # hostname: prova preferences.plist di SystemConfiguration
+    local PREF
+    PREF=$(ci_find_file "$(ci_find_dir "$WIN_ROOT" "Library/Preferences/SystemConfiguration")" "preferences.plist")
+    if [[ -n "$PREF" && -f "$PREF" ]]; then
+        HOST_NAME=$(read_plist "$PREF" 2>/dev/null | grep -iE 'HostName:|LocalHostName:|ComputerName:' | head -1 | sed "s/.*: '\\?//; s/'\\?$//")
+    fi
+    DOMAIN_NAME=""; IP_ADDR=""
+    if [[ -z "$HOST_NAME" ]]; then
+        local _SUGGESTED_NAME; _SUGGESTED_NAME=$(basename "$WIN_ROOT")
+        echo -ne "  ${YELLOW}[?]${RESET} $(t hostname_prompt) [${BOLD}${_SUGGESTED_NAME}${RESET}]: "
+        read -r HOST_NAME
+        [[ -z "$HOST_NAME" ]] && HOST_NAME="$_SUGGESTED_NAME"
+    fi
+    print_host_info_table
+}
+
+print_host_info_table() {
+    local TITLE="$([ "$LANG" = "it" ] && echo "INFORMAZIONI MACCHINA TARGET" || echo "TARGET MACHINE INFORMATION")"
+    echo -e "  ${CYAN}${BOLD}┌────────────────────────────────────────────────────────────────────────────┐${RESET}"
+    local _T=${#TITLE} _LEFT=$(( (76 - ${#TITLE}) / 2 )) _RIGHT
+    _RIGHT=$(( 76 - ${#TITLE} - _LEFT ))
+    printf "  ${CYAN}${BOLD}│%*s%*s│${RESET}\n" $(( _LEFT + _T )) "$TITLE" $_RIGHT ""
+    echo -e "  ${CYAN}${BOLD}├────────────────────────────────────────────────────────────────────────────┤${RESET}"
+    printf "  ${CYAN}${BOLD}│${RESET}  %-18s : ${WHITE}${BOLD}%-52s${RESET} ${CYAN}${BOLD}│${RESET}\n" "$(t hostname)" "${HOST_NAME:-N/A}"
+    printf "  ${CYAN}${BOLD}│${RESET}  %-18s : %-52s ${CYAN}${BOLD}│${RESET}\n" "$(t os)" "${OS_VER:-N/A}"
+    printf "  ${CYAN}${BOLD}│${RESET}  %-18s : %-52s ${CYAN}${BOLD}│${RESET}\n" "$(t ip)" "${IP_ADDR:-N/A}"
+    printf "  ${CYAN}${BOLD}│${RESET}  %-18s : %-52s ${CYAN}${BOLD}│${RESET}\n" "$(t domain)" "${DOMAIN_NAME:-N/A}"
+    echo -e "  ${CYAN}${BOLD}└────────────────────────────────────────────────────────────────────────────┘${RESET}"
+    echo ""
 }
 
 # Controlla se regipy è disponibile tramite il Python rilevato all'avvio ($PY3)
@@ -1244,6 +1097,31 @@ try:
 except Exception as e:
     print(f"ERROR: {e}", file=sys.stderr)
 PYEOF
+}
+
+# Prepara la directory report e restituisce il path del file HTML.
+# La directory base viene creata SOLO qui, al primo report effettivo,
+# per evitare directory vuote quando l'utente non genera alcun report.
+prepare_report_dir() {
+    local MODULE_NAME="$1"
+    [[ -n "$REPORT_BASE_DIR" && ! -d "$REPORT_BASE_DIR" ]] && mkdir -p "$REPORT_BASE_DIR"
+    local DIR="${REPORT_BASE_DIR}/${MODULE_NAME}_$(date +%Y%m%d_%H%M%S)"
+    mkdir -p "$DIR"
+    echo "${DIR}/report.html"
+}
+
+# Registra il report nel riepilogo di sessione.
+# Chiamata DOPO la scrittura effettiva del file, fuori da qualsiasi subshell.
+#
+# E' anche il punto di aggancio dell'export JSONL: ogni modulo passa di qui
+# dopo aver scritto il proprio HTML, quindi l'export copre automaticamente
+# tutti i moduli — inclusi quelli Windows, che generano l'HTML per conto
+# proprio senza passare da finish_report.
+register_report() {
+    [[ -n "${1:-}" && -f "$1" ]] || return 0
+    GENERATED_REPORTS+=("$1")
+    [[ "$EXPORT_JSONL" == "true" ]] && export_report_jsonl "$1"
+    return 0
 }
 
 # HTML boilerplate header comune a tutti i report
@@ -1525,6 +1403,1166 @@ JSEOF
 }
 
 # ================================================================
+#  MENU PRINCIPALE
+# ================================================================
+# ================================================================
+#  HELPER CONDIVISI PER I MODULI LINUX / macOS
+# ================================================================
+
+# Blocco <style> per i <pre> con numeri di riga ed evidenziazione (riuso dal modulo PS)
+pre_style_block() {
+    cat << 'EOF'
+<style>
+  .hist-pre{font-family:var(--mono);font-size:.75rem;line-height:1.7;padding:.8rem 1rem;
+    overflow-x:auto;max-height:520px;overflow-y:auto;}
+  .hist-pre::-webkit-scrollbar{width:5px;height:5px}
+  .hist-pre::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+  .line{display:block;color:var(--text);white-space:pre;padding:.05rem .5rem;border-radius:2px}
+  .line:hover{background:rgba(88,166,255,.05)}
+  .line.sensitive{color:var(--accent2);background:rgba(255,123,114,.07);
+    border-left:2px solid rgba(255,123,114,.5);padding-left:calc(.5rem - 2px)}
+  .lnum{color:var(--text-dim);user-select:none;margin-right:1rem;font-size:.7rem}
+  .grp{margin-bottom:1.5rem}
+</style>
+EOF
+}
+
+# Genera il contenuto di un <pre> (numeri di riga + escape HTML + evidenziazione IoC).
+# $1 = file, $2 = keyword separate da '|' (case-insensitive) per marcare le righe sensibili.
+render_pre_block() {
+    local FILE="$1" KW="$2" MODE="${3:-}"
+    "$PY3" - "$FILE" "$KW" "$MODE" << 'PYEOF'
+import sys, html, re, datetime
+path, kw = sys.argv[1], sys.argv[2].lower()
+mode = sys.argv[3] if len(sys.argv) > 3 else ''
+keys = [k for k in kw.split('|') if k]
+
+# Decodifica i timestamp UNIX nelle history di shell in formato leggibile.
+# zsh extended_history:  ": <epoch>:<elapsed>;<comando>"
+# bash con HISTTIMEFORMAT: una riga "#<epoch>" prima del comando
+_ZSH = re.compile(r'^: (\d{9,12}):(\d+);(.*)$', re.S)
+_BASH = re.compile(r'^#(\d{9,12})$')
+def fmt(ep):
+    try:
+        return datetime.datetime.utcfromtimestamp(int(ep)).strftime('%Y-%m-%d %H:%M:%S')
+    except Exception:
+        return ep
+def decode_histts(line):
+    m = _ZSH.match(line)
+    if m:
+        return f"[{fmt(m.group(1))}]  {m.group(3)}"
+    m = _BASH.match(line)
+    if m:
+        return f"[{fmt(m.group(1))}]"
+    return line
+
+try:
+    with open(path, 'rb') as f:
+        raw = f.read()
+    text = raw.decode('utf-8', 'replace').replace('\r\n', '\n').replace('\r', '\n')
+    out = []
+    for i, line in enumerate(text.split('\n'), 1):
+        if mode == 'histts':
+            line = decode_histts(line)
+        esc = html.escape(line)
+        css = 'line sensitive' if any(k in line.lower() for k in keys) else 'line'
+        out.append(f'<span class="{css}"><span class="lnum">{i:5d}</span> {esc}</span>')
+    print('\n'.join(out))
+except Exception as e:
+    print(f'<span class="line bad">{html.escape(str(e))}</span>')
+PYEOF
+}
+
+# Stampa a console le righe di un file con evidenziazione IoC (rosso sulle corrispondenze).
+# $1 = file, $2 = regex grep (-iE), $3 = max righe (default 200)
+print_file_lines() {
+    local FILE="$1" KW="$2" MAX="${3:-200}"
+    [[ -f "$FILE" ]] || return
+    local LN=0
+    while IFS= read -r LINE || [[ -n "$LINE" ]]; do
+        LN=$((LN + 1))
+        if [[ $LN -gt $MAX ]]; then
+            echo -e "      ${DIM}... ($(L "troncato a" "truncated at") $MAX $(L "righe" "lines"))${RESET}"
+            break
+        fi
+        if [[ -n "$KW" ]] && printf '%s' "$LINE" | grep -qiE "$KW"; then
+            printf "      ${RED}%5d  %s${RESET}\n" "$LN" "$LINE"
+        else
+            printf "      ${DIM}%5d${RESET}  %s\n" "$LN" "$LINE"
+        fi
+    done < "$FILE"
+}
+
+# Card HTML per un singolo file di testo (header con metadati + <pre> evidenziato).
+# $1 = file, $2 = keyword IoC, $3 = icona (default ≣)
+file_card_html() {
+    local F="$1" KW="$2" ICON="${3:-≣}" MODE="${4:-}"
+    local SZ MT BODY
+    SZ=$(stat -c %s "$F" 2>/dev/null || echo "?")
+    MT=$(stat -c %y "$F" 2>/dev/null | cut -d. -f1 || echo "?")
+    BODY=$(render_pre_block "$F" "$KW" "$MODE")
+    printf "<div class='card' style='margin-bottom:.8rem'><div class='card-header'><div class='uicon' style='font-size:.7rem'>%s</div><div><div class='uname' style='font-size:.85rem'>%s</div><div class='upath'>%s</div></div><div style='margin-left:auto;text-align:right;font-family:var(--mono);font-size:.65rem;color:var(--text-dim)'><div class='mid'>%s</div><div>%s B</div></div></div><div class='hist-content'><pre class='hist-pre'>%s</pre></div></div>" \
+        "$ICON" "$(html_esc "$(basename "$F")")" "$(html_esc "$F")" "$MT" "$SZ" "$BODY"
+}
+
+# Card HTML generica con corpo arbitrario (tabella/pre già formattati).
+# $1 = titolo, $2 = sottopath, $3 = badge, $4 = corpo HTML, $5 = icona
+generic_card_html() {
+    printf "<div class='card'><div class='card-header'><div class='uicon'>%s</div><div class='user-info'><div class='uname'>%s</div><div class='upath'>%s</div></div><div class='badge'>%s</div></div><div style='padding:1rem 1.5rem'>%s</div></div>" \
+        "${5:-▣}" "$(html_esc "$1")" "$(html_esc "$2")" "$3" "$4"
+}
+
+# Scrive il report HTML finale e lo registra.
+# $1 slug · $2 titolo · $3 icona · $4 sottotitolo · $5 stats_html · $6 body_html
+finish_report() {
+    local REPORT_HTML; REPORT_HTML=$(prepare_report_dir "$1")
+    local SCAN; SCAN=$(date "+%d/%m/%Y %H:%M:%S")
+    {
+        html_header "$2"
+        html_page_header "$3" "$2" "$4" "$SCAN" "$WIN_ROOT"
+        [[ -n "$5" ]] && printf "<div class='statsbar'>%s</div>\n" "$5"
+        echo "<main>"
+        pre_style_block
+        printf '%s\n' "$6"
+        echo "</main>"
+        html_footer "$SCAN" "$WIN_ROOT"
+    } > "$REPORT_HTML"
+    register_report "$REPORT_HTML"
+    ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
+    open_report_prompt "$REPORT_HTML"
+}
+
+# Helper per una stat della statsbar
+stat_box() { printf "<div class='stat %s'><div class='label'>%s</div><div class='value'>%s</div></div>" "${3:-}" "$1" "$2"; }
+
+# ================================================================
+#  MODULI macOS
+# ================================================================
+
+# Renderizza una tabella HTML da righe tab-separated. $1=righe, $2.. = intestazioni
+_rows_to_table() {
+    local ROWS="$1"; shift
+    local _RTMP; _RTMP=$(mktemp); printf '%s\n' "$ROWS" > "$_RTMP"
+    printf '%s\n' "$@" > "${_RTMP}.h"
+    "$PY3" - "$_RTMP" "${_RTMP}.h" << 'PYEOF'
+import sys, html
+heads=[h.rstrip('\n') for h in open(sys.argv[2])]
+print("<table><tr>"+''.join(f'<th>{html.escape(h)}</th>' for h in heads)+"</tr>")
+for line in open(sys.argv[1], errors='replace'):
+    if not line.strip(): continue
+    cells=line.rstrip('\n').split('\t')
+    tds=''.join(f"<td class='mono'>{html.escape(c)}</td>" for c in cells)
+    print(f"<tr>{tds}</tr>")
+print("</table>")
+PYEOF
+    rm -f "$_RTMP" "${_RTMP}.h"
+}
+
+# ----------------------------------------------------------------
+#  Export JSONL (schema Timesketch / plaso)
+#
+#  I report HTML sono ottimi per l'analista e inutilizzabili per una
+#  pipeline: non si correlano con altre sorgenti e non si caricano in un
+#  SIEM. Qui gli stessi eventi vengono riemessi in JSON Lines con i campi
+#  attesi da Timesketch (datetime, timestamp_desc, message), cosi' il
+#  risultato di FIUTO entra direttamente in una super-timeline.
+#
+#  L'estrazione lavora sull'HTML gia' prodotto invece che sui dati grezzi
+#  dei singoli moduli: e' l'unico punto in cui il formato e' omogeneo per
+#  tutti e 64+ i moduli, e non richiede di toccarli uno per uno.
+# ----------------------------------------------------------------
+export_report_jsonl() {
+    local HTML="$1"
+    local DIR; DIR=$(dirname "$HTML")
+    local SLUG; SLUG=$(basename "$DIR" | sed -E 's/_[0-9]{8}_[0-9]{6}$//')
+    local OUT="${DIR}/report.jsonl"
+
+    "$PY3" - "$HTML" "$SLUG" "${WIN_ROOT:-}" "${HOST_NAME:-}" "${OS_TYPE:-}" > "$OUT" << 'PYEOF' 2>/dev/null
+import sys, re, json, html as H, datetime
+
+html_path, slug = sys.argv[1], sys.argv[2]
+volume  = sys.argv[3] if len(sys.argv) > 3 else ''
+host    = sys.argv[4] if len(sys.argv) > 4 else ''
+os_type = sys.argv[5] if len(sys.argv) > 5 else ''
+
+MONTHS = {'Jan':'01','Feb':'02','Mar':'03','Apr':'04','May':'05','Jun':'06',
+          'Jul':'07','Aug':'08','Sep':'09','Oct':'10','Nov':'11','Dec':'12'}
+TS_ISO = re.compile(r'\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}')
+TS_SYS = re.compile(r'\b(' + '|'.join(MONTHS) + r')\s+(\d{1,2})\s+(\d{2}:\d{2}:\d{2})')
+TD     = re.compile(r'<td[^>]*>(.*?)</td>', re.DOTALL | re.I)
+PRE    = re.compile(r'<pre[^>]*>(.*?)</pre>', re.DOTALL | re.I)
+TAG    = re.compile(r'<[^>]+>')
+
+def strip(s):
+    return TAG.sub('', H.unescape(s)).strip()
+
+# I log syslog non portano l'anno: si usa quello del file HTML (l'analisi e'
+# contestuale all'acquisizione). Approssimazione esplicita, non silenziosa.
+year = str(datetime.date.today().year)
+year_assumed = False
+
+def norm_iso(raw):
+    return raw.replace('T', ' ')[:19].replace(' ', 'T')
+
+def from_sys(m):
+    global year_assumed
+    year_assumed = True
+    return f"{year}-{MONTHS[m.group(1)]}-{int(m.group(2)):02d}T{m.group(3)}"
+
+try:
+    content = open(html_path, encoding='utf-8', errors='replace').read()
+except Exception:
+    sys.exit(0)
+
+seen = set()
+out  = []
+
+def emit(dt, message, assumed):
+    message = ' '.join(message.split())[:2000]
+    if not message:
+        return
+    key = (dt, message[:120])
+    if key in seen:
+        return
+    seen.add(key)
+    rec = {
+        # Campi richiesti da Timesketch
+        "datetime": dt,
+        "timestamp_desc": f"FIUTO {slug}",
+        "message": message,
+        # Contesto aggiuntivo
+        "data_type": f"fiuto:{slug}",
+        "module": slug,
+        "source_volume": volume,
+        "hostname": host,
+        "os": os_type,
+    }
+    if assumed:
+        # L'anno non era nel dato di origine: va dichiarato, non nascosto.
+        rec["year_inferred"] = True
+    out.append(rec)
+
+# 1) Righe di tabella in cui una cella contiene un timestamp
+for tr in re.finditer(r'<tr[^>]*>(.*?)</tr>', content, re.DOTALL | re.I):
+    cells = [strip(m.group(1)) for m in TD.finditer(tr.group(1))]
+    if not cells:
+        continue
+    dt = None
+    for c in cells:
+        m = TS_ISO.search(c)
+        if m:
+            dt = norm_iso(m.group(0))
+            break
+    if not dt:
+        continue
+    msg = ' | '.join(c for c in cells
+                     if c and not TS_ISO.fullmatch(c.strip()) and not re.fullmatch(r'\d+', c.strip()))
+    emit(dt, msg, False)
+
+# 2) Blocchi <pre> (log, history, config): una riga per evento
+for pm in PRE.finditer(content):
+    block = H.unescape(TAG.sub('', pm.group(1)))
+    for raw in block.split('\n'):
+        txt = re.sub(r'^\s*\d+\s+', '', raw).strip()   # via il numero di riga
+        if not txt:
+            continue
+        assumed = False
+        m = TS_ISO.search(txt)
+        if m:
+            dt = norm_iso(m.group(0))
+        else:
+            m = TS_SYS.search(txt)
+            if not m:
+                continue
+            dt = from_sys(m)
+            assumed = True
+        emit(dt, txt, assumed)
+
+for rec in sorted(out, key=lambda r: r["datetime"]):
+    print(json.dumps(rec, ensure_ascii=False))
+PYEOF
+
+    local N=0
+    [[ -s "$OUT" ]] && N=$(wc -l < "$OUT")
+    if [[ "$N" -eq 0 ]]; then
+        rm -f "$OUT"
+        return 0
+    fi
+
+    # Timeline unica di sessione: e' il file da caricare in Timesketch.
+    local COMBINED="${REPORT_BASE_DIR}/fiuto_timeline.jsonl"
+    cat "$OUT" >> "$COMBINED" 2>/dev/null || true
+    ok "$(L "Export JSONL:" "JSONL export:") ${BOLD}${N}$(L " eventi" " events")${RESET} → $(basename "$OUT")"
+    log_msg "[JSONL] $OUT — $N eventi"
+}
+
+# ================================================================
+#  AUTODETECT ROOT WINDOWS
+# ================================================================
+
+debug_mounts() {
+    echo ""
+    section_header "$(L "DEBUG — Mount attivi su questo sistema" "DEBUG — Active Mounts on This System")" "$YELLOW"
+    echo -e "  ${DIM}── /proc/mounts (non di sistema) ───────────────────${RESET}"
+    echo ""
+    local SKIP_FS='tmpfs|sysfs|proc|devtmpfs|cgroup2?|fusectl|tracefs|securityfs|pstore|bpf|hugetlbfs|mqueue|debugfs|configfs|overlay|squashfs|nsfs|efivarfs|autofs|ramfs|rpc_pipefs'
+    local SKIP_MNT='^/(proc|sys|dev|run|snap)(/|$)'
+    while IFS=' ' read -r RAW_DEV RAW_MNT FSTYPE _; do
+        local DEV MNT
+        DEV=$(printf '%b' "$RAW_DEV")
+        MNT=$(printf '%b' "$RAW_MNT")
+        [[ "$MNT" =~ $SKIP_MNT || "$MNT" == "/" || "$MNT" == /tmp/* ]] && continue
+        if [[ "$FSTYPE" =~ ^($SKIP_FS)$ ]]; then
+            printf "  ${DIM}  %-38s %-30s %s${RESET}\n" "$DEV" "$MNT" "$FSTYPE"
+        else
+            printf "  ${CYAN}→ %-38s ${GREEN}%-30s${RESET} ${YELLOW}%s${RESET}\n" "$DEV" "$MNT" "$FSTYPE"
+        fi
+    done < /proc/mounts
+    echo ""
+    local ARROW_LABEL="$([ "$LANG" = "it" ] && echo "candidati" || echo "candidates")"
+    local GRAY_LABEL="$([ "$LANG" = "it" ] && echo "esclusi" || echo "excluded")"
+    echo -e "  ${DIM}(${CYAN}→${DIM} = ${ARROW_LABEL}; grigio = ${GRAY_LABEL})${RESET}"
+    echo ""
+    echo -ne "  ${YELLOW}$(t press_key)${RESET}"
+    pause_key
+}
+
+_find_windows_mounts() {
+    local -a CANDIDATES=()
+    while IFS=' ' read -r RAW_DEV RAW_MNT FSTYPE _REST; do
+        local MNT
+        MNT=$(printf '%b' "$RAW_MNT")
+        [[ -z "$MNT" || "$MNT" == "/" ]] && continue
+        [[ "$MNT" == /proc* || "$MNT" == /sys* || "$MNT" == /dev* ]] && continue
+        [[ "$MNT" == /snap/* || "$MNT" == /run/* || "$MNT" == /tmp/* ]] && continue
+        [[ "$RAW_DEV" == *.AppImage ]] && continue
+        [[ "$FSTYPE" == "fuse.ewfmount" || "$FSTYPE" == "fuse.xmount" ]] && continue
+        # Marcatori Windows
+        if [[ -d "$MNT/Users" || -d "$MNT/Windows" ||
+              -d "$MNT/users" || -d "$MNT/windows" ]]; then
+            CANDIDATES+=("$MNT"); continue
+        fi
+        # Marcatori macOS
+        if [[ -d "$MNT/System/Library/CoreServices" || -d "$MNT/private/var/db/dslocal" ]]; then
+            CANDIDATES+=("$MNT"); continue
+        fi
+        # Marcatori Linux
+        if [[ -f "$MNT/etc/os-release" || -f "$MNT/etc/passwd" ]]; then
+            CANDIDATES+=("$MNT"); continue
+        fi
+        if find "$MNT" -maxdepth 1 -type d \( -iname "Users" -o -iname "Windows" \) \
+               2>/dev/null | grep -q .; then
+            CANDIDATES+=("$MNT")
+        fi
+    done < /proc/mounts
+    local -A SEEN=()
+    for MNT in "${CANDIDATES[@]}"; do
+        [[ -n "${SEEN[$MNT]+x}" ]] && continue
+        SEEN["$MNT"]=1; echo "$MNT"
+    done
+}
+
+# Conta gli utenti reali su un volume, in base al suo OS (per il menu di selezione)
+_count_volume_users() {
+    local MNT="$1" VOS="$2"
+    case "$VOS" in
+        windows|macos)
+            local UD
+            UD=$(find "$MNT" -maxdepth 1 -type d -iname "Users" 2>/dev/null | head -1)
+            [[ -z "$UD" ]] && { echo 0; return; }
+            find "$UD" -maxdepth 1 -mindepth 1 -type d 2>/dev/null \
+                | grep -ciEv '/(Public|Default|Default User|All Users|Shared|Guest|\.localized)$' || echo 0 ;;
+        linux)
+            local HD C=0
+            HD=$(find "$MNT" -maxdepth 1 -type d -iname "home" 2>/dev/null | head -1)
+            [[ -n "$HD" ]] && C=$(find "$HD" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | wc -l)
+            [[ -d "$MNT/root" ]] && C=$((C + 1))
+            echo "$C" ;;
+        *) echo 0 ;;
+    esac
+}
+
+autodetect_win_root() {
+    local SILENT="${1:-}"
+    local -a FOUND=()
+    mapfile -t FOUND < <(_find_windows_mounts)
+    if [[ ${#FOUND[@]} -eq 0 ]]; then
+        [[ "$SILENT" != "silent" ]] && warn "$(L "Nessun volume analizzabile rilevato tra i filesystem montati." "No analysable volume detected among mounted filesystems.")"
+        return 1
+    fi
+
+    # Per ogni volume trovato, aggiungi Windows.old se presente e valido
+    local -a EXTRA_PATHS=() EXTRA_BASES=()
+    for MNT in "${FOUND[@]}"; do
+        local WOLD
+        WOLD=$(find "$MNT" -maxdepth 1 -type d -iname "Windows.old" 2>/dev/null | head -1)
+        if [[ -n "$WOLD" ]]; then
+            # Verifica che Windows.old contenga una struttura Windows
+            if find "$WOLD" -maxdepth 1 -type d \( -iname "Users" -o -iname "Windows" \) \
+                    2>/dev/null | grep -q .; then
+                EXTRA_PATHS+=("$WOLD")
+                EXTRA_BASES+=("$MNT")
+            fi
+        fi
+    done
+
+    # Costruisci la lista finale: volumi base + Windows.old
+    local -a ALL_PATHS=("${FOUND[@]}" "${EXTRA_PATHS[@]}")
+
+    echo ""
+    echo -e "  ${CYAN}${BOLD}$(L "Volumi rilevati:" "Detected volumes:")${RESET}"
+    echo ""
+    local IDX=1
+    for MNT in "${FOUND[@]}"; do
+        local LABEL; LABEL=$(basename "$MNT")
+        local VOS; VOS=$(detect_os_type "$MNT")
+        local BADGE_COLOR
+        case "$VOS" in
+            windows) BADGE_COLOR="$BLUE" ;;
+            linux)   BADGE_COLOR="$YELLOW" ;;
+            macos)   BADGE_COLOR="$WHITE" ;;
+            *)       BADGE_COLOR="$DIM" ;;
+        esac
+        local USER_COUNT
+        USER_COUNT=$(_count_volume_users "$MNT" "$VOS")
+        echo -e "  ${GREEN}[${IDX}]${RESET}  ${BOLD}${MNT}${RESET} ${MAGENTA}(${LABEL})${RESET}  ${BADGE_COLOR}[$(os_label "$VOS")]${RESET}  ${CYAN}${USER_COUNT} $(L "utenti" "users")${RESET}"
+        IDX=$((IDX + 1))
+    done
+    # Mostra le opzioni Windows.old con indicatore visivo
+    for i in "${!EXTRA_PATHS[@]}"; do
+        local WOLD="${EXTRA_PATHS[$i]}"
+        local BASE="${EXTRA_BASES[$i]}"
+        local USERS_DIR
+        USERS_DIR=$(find "$WOLD" -maxdepth 1 -type d -iname "Users" 2>/dev/null | head -1)
+        local USER_COUNT=0
+        [[ -n "$USERS_DIR" ]] && \
+            USER_COUNT=$(find "$USERS_DIR" -maxdepth 1 -mindepth 1 -type d 2>/dev/null \
+                | grep -ciEv '/(Public|Default|Default User|All Users)$' || true)
+        echo -e "  ${YELLOW}[${IDX}]${RESET}  ${BOLD}${WOLD}${RESET}  ${YELLOW}★ Windows.old${RESET} ${DIM}($(L "da" "from") ${BASE})${RESET}  ${CYAN}${USER_COUNT} $(L "utenti" "users")${RESET}"
+        IDX=$((IDX + 1))
+    done
+    echo ""
+
+    local CHOICE
+    if [[ ${#ALL_PATHS[@]} -eq 1 ]]; then
+        echo -ne "  ${YELLOW}[?]${RESET} $(L "Usare" "Use") ${BOLD}${ALL_PATHS[0]}${RESET} $(L "come root da analizzare? [S/n]:" "as analysis root? [Y/n]:") "
+        read -r CHOICE || true
+        [[ "${CHOICE,,}" == "n" ]] && return 1
+        _apply_win_root "${ALL_PATHS[0]}"; return 0
+    fi
+    echo -ne "  ${YELLOW}[?]${RESET} $(L "Seleziona numero, inserisci path manuale, o [N] per saltare:" "Select number, enter manual path, or [N] to skip:") "
+    read -r CHOICE || true
+    case "${CHOICE,,}" in
+        n|"") return 1 ;;
+        [0-9]*)
+            local SEL=$((CHOICE - 1))
+            if [[ $SEL -ge 0 && $SEL -lt ${#ALL_PATHS[@]} ]]; then
+                _apply_win_root "${ALL_PATHS[$SEL]}"; return 0
+            else
+                err "$(L "Selezione non valida" "Invalid selection")"; return 1
+            fi ;;
+        *)
+            local MP; MP=$(realpath -m "$CHOICE" 2>/dev/null || echo "$CHOICE")
+            [[ ! -d "$MP" ]] && err "$(L "Directory non trovata:" "Directory not found:") $MP" && return 1
+            _apply_win_root "$MP"; return 0 ;;
+    esac
+}
+
+# Imposta WIN_ROOT e innesca la raccolta informazioni
+_apply_win_root() {
+    local ROOT="$1"
+    WIN_ROOT="$ROOT"
+    OS_TYPE=$(detect_os_type "$ROOT")
+    ok "$(L "Root impostata:" "Root set:") ${BOLD}$WIN_ROOT${RESET}  ${CYAN}[$(os_label)]${RESET}"
+
+    # Recupera info macchina (hostname, OS, IP, dominio)
+    gather_host_info
+    # Resetta REPORT_BASE_DIR per ricalcolarla con il nuovo hostname
+    REPORT_BASE_DIR=""
+    setup_report_dir || true
+}
+
+# ================================================================
+#  IMPOSTAZIONE MANUALE ROOT WINDOWS  (voce R del menu)
+# ================================================================
+set_win_root() {
+    echo ""
+    # Prima prova autodetect
+    echo -e "  ${CYAN}[*]${RESET} $(L "Ricerca volumi montati (Windows/Linux/macOS)..." "Searching mounted volumes (Windows/Linux/macOS)...")"
+    if autodetect_win_root; then
+        return 0
+    fi
+    # Fallback: input manuale
+    echo ""
+    echo -ne "  ${YELLOW}[?]${RESET} $(L "Inserisci il path della root da analizzare (es. /mnt/disk):" "Enter analysis root path (e.g. /mnt/disk):") "
+    read -r INPUT_ROOT
+    [[ -z "$INPUT_ROOT" ]] && return 1
+    INPUT_ROOT=$(realpath -m "$INPUT_ROOT" 2>/dev/null || echo "$INPUT_ROOT")
+    if [[ ! -d "$INPUT_ROOT" ]]; then
+        err "$(L "Directory non trovata:" "Directory not found:") $INPUT_ROOT"
+        return 1
+    fi
+    _apply_win_root "$INPUT_ROOT"
+}
+
+# ================================================================
+#  SETUP DIRECTORY REPORT
+# ================================================================
+# Chiesta interattivamente la prima volta (REPORT_BASE_DIR vuota).
+# Propone una directory di default, verifica i permessi di scrittura
+# e aggiorna REPORT_BASE_DIR.
+setup_report_dir() {
+    local TS; TS=$(date +%Y%m%d_%H%M)
+    local SUGGESTED_DEFAULT="${INVOCATION_DIR}/${HOST_NAME:-CASE}_fiuto_${TS}"
+    echo ""
+    echo -e "  ${CYAN}${BOLD}╔══════════════════════════════════════════════════════╗${RESET}"
+    echo -e "  ${CYAN}${BOLD}║  $(L "Configurazione cartella di output dei report" "Report output directory setup               ")        ║ ${RESET}"
+    echo -e "  ${CYAN}${BOLD}╚══════════════════════════════════════════════════════╝${RESET}"
+    echo ""
+    local _PARENT_OK=false
+    if [[ -d "$SUGGESTED_DEFAULT" ]]; then
+        [[ -w "$SUGGESTED_DEFAULT" ]] && _PARENT_OK=true
+    elif [[ -w "$(dirname "$SUGGESTED_DEFAULT")" ]]; then
+        _PARENT_OK=true
+    fi
+    if $_PARENT_OK; then
+        echo -e "  ${GREEN}[✓]${RESET} $(L "Directory suggerita:" "Suggested directory:") ${BOLD}${SUGGESTED_DEFAULT}${RESET}  ${GREEN}[$(L "scrivibile" "writable")]${RESET}"
+    else
+        echo -e "  ${RED}[!]${RESET} $(L "Directory suggerita:" "Suggested directory:") ${BOLD}${SUGGESTED_DEFAULT}${RESET}  ${RED}[$(L "non scrivibile o parent protetto" "not writable or protected parent")]${RESET}"
+    fi
+    echo ""
+    echo -e "  ${DIM}$(L "I report di ogni modulo verranno salvati in sottocartelle con data/ora." "Each module report will be saved in subfolders with date/time.")${RESET}"
+    echo -e "  ${DIM}$(L "Puoi inserire un percorso diverso oppure premere INVIO per usare quello suggerito." "You can enter a different path or press ENTER to use the suggested one.")${RESET}"
+    echo ""
+    echo -ne "  ${YELLOW}[?]${RESET} $(L "Cartella report" "Report directory") [${BOLD}${SUGGESTED_DEFAULT}${RESET}]: "
+    local _INPUT
+    read -r _INPUT
+    local _CHOSEN
+    if [[ -z "$_INPUT" ]]; then
+        _CHOSEN="$SUGGESTED_DEFAULT"
+    else
+        _CHOSEN=$(realpath -m "$_INPUT" 2>/dev/null || echo "$_INPUT")
+    fi
+    local _RW_OK=false _RW_MSG=""
+    if [[ -d "$_CHOSEN" ]]; then
+        if [[ -w "$_CHOSEN" ]]; then
+            _RW_OK=true
+            _RW_MSG="${GREEN}[$(L "scrivibile" "writable")]${RESET}"
+        else
+            _RW_MSG="${RED}[$(L "SOLA LETTURA — i report NON potranno essere salvati!" "READ ONLY — reports CANNOT be saved!")]${RESET}"
+        fi
+    else
+        local _P; _P=$(dirname "$_CHOSEN")
+        if [[ -w "$_P" ]]; then
+            _RW_OK=true
+            _RW_MSG="${GREEN}[$(L "verrà creata — parent scrivibile" "will be created — parent writable")]${RESET}"
+        else
+            _RW_MSG="${RED}[$(L "parent '${_P}' NON scrivibile — i report NON potranno essere salvati!" "parent '${_P}' NOT writable — reports CANNOT be saved!")]${RESET}"
+        fi
+    fi
+    echo ""
+    echo -e "  ${CYAN}[→]${RESET} $(L "Cartella scelta:" "Selected directory:") ${BOLD}${_CHOSEN}${RESET}  ${_RW_MSG}"
+    echo ""
+    if ! $_RW_OK; then
+        warn "$(L "Attenzione: la directory selezionata non è scrivibile." "Warning: the selected directory is not writable.")"
+        echo -ne "  ${YELLOW}[?]${RESET} $(L "Vuoi comunque usarla? [s/N]:" "Use it anyway? [y/N]:") "
+        local _CONF; read -r _CONF
+        local _YES_KEY="$(L "s" "y")"
+        [[ "${_CONF,,}" != "$_YES_KEY" ]] && { warn "$(L "Setup annullato. Ripeti con [P] dal menu." "Setup cancelled. Repeat with [P] from menu.")"; return 1; }
+    fi
+    REPORT_BASE_DIR="$_CHOSEN"
+    LOG_FILE="${REPORT_BASE_DIR}/fiuto_session_$(date +%Y%m%d_%H%M%S).log"
+    log_msg "=== Log sessione inizializzato ==="
+    ok "$(L "Log sessione:" "Session log:") ${BOLD}$LOG_FILE"
+    ok "$(L "Report dir impostata:" "Report directory set:") ${BOLD}$REPORT_BASE_DIR"
+    sleep 1
+}
+
+# Esegue un modulo in modalità batch e registra il risultato in SUMMARY_TABLE.
+# Durante l'esecuzione mostra il suggerimento ESC; premendo ESC il modulo viene
+# interrotto e si passa al successivo.
+run_batch_module() {
+    local mod_num="$1"
+    local mod_func="$2"
+    local mod_name="$3"
+    local total_mods="${4:-38}"
+    local _ESC_HINT; _ESC_HINT="$(L "[ESC: salta modulo]" "[ESC: skip module]")"
+
+    echo -ne "  ${CYAN}[*]${RESET} [${mod_num}/${total_mods}] $(L "Esecuzione modulo" "Running module") $mod_num ($mod_name)...  ${DIM}${_ESC_HINT}${RESET}\r"
+    log_msg "[BATCH] Modulo $mod_num: $mod_name"
+
+    # I report generati dal subshell vengono scritti su un file temp
+    # perché gli array bash non si propagano al processo padre.
+    local _REP_TMP; _REP_TMP=$(mktemp)
+
+    (
+        # Override locale: scrive il path nel file temp invece dell'array
+        register_report() { [[ -n "${1:-}" && -f "$1" ]] && echo "$1" >> "$_REP_TMP"; }
+        $mod_func >/dev/null 2>&1
+    ) &
+    local MOD_PID=$!
+
+    # Monitoraggio tasto ESC (solo se /dev/tty è disponibile)
+    local SKIPPED=0
+    local _OLD_STTY=""
+    if [[ -c /dev/tty ]]; then
+        _OLD_STTY=$(stty -g </dev/tty 2>/dev/null) || true
+        stty -echo -icanon min 0 time 0 </dev/tty 2>/dev/null || true
+        while kill -0 "$MOD_PID" 2>/dev/null; do
+            local KEY=""
+            IFS= read -r -s -t 0.2 -N 1 KEY </dev/tty 2>/dev/null || true
+            if [[ "$KEY" == $'\033' ]]; then
+                kill "$MOD_PID" 2>/dev/null
+                SKIPPED=1
+                break
+            fi
+        done
+        [[ -n "$_OLD_STTY" ]] && stty "$_OLD_STTY" </dev/tty 2>/dev/null || true
+    fi
+
+    wait "$MOD_PID" 2>/dev/null
+
+    if [[ $SKIPPED -eq 1 ]]; then
+        printf '\r\033[K'
+        echo -e "  ${YELLOW}[⏭]${RESET} [${mod_num}/${total_mods}] $mod_name — $(L "annullato (ESC)" "cancelled (ESC)")"
+        SUMMARY_TABLE+=("$mod_num|$mod_name|SKIP|$(L "annullato" "cancelled")")
+        rm -f "$_REP_TMP"
+        return
+    fi
+
+    # Importa i report generati nel subshell
+    if [[ -s "$_REP_TMP" ]]; then
+        while IFS= read -r _rep; do
+            [[ -n "$_rep" && -f "$_rep" ]] && GENERATED_REPORTS+=("$_rep")
+        done < "$_REP_TMP"
+        local rep_path="${GENERATED_REPORTS[-1]}"
+        printf '\r\033[K'
+        echo -e "  ${GREEN}[✓]${RESET} [${mod_num}/${total_mods}] $mod_name — report: ${DIM}${rep_path}${RESET}"
+        SUMMARY_TABLE+=("$mod_num|$mod_name|SI|$rep_path")
+    else
+        printf '\r\033[K'
+        echo -e "  ${DIM}[i] [${mod_num}/${total_mods}] $mod_name — $(L "nessun risultato" "no results")${RESET}"
+        SUMMARY_TABLE+=("$mod_num|$mod_name|NO|-")
+    fi
+    rm -f "$_REP_TMP"
+}
+
+# ================================================================
+#  DASHBOARD "FULL" — indice navigabile con tab + iframe centrale.
+#  Generata al termine di "esegui TUTTI i moduli" (Windows/Linux/macOS).
+#  Costruita interamente da SUMMARY_TABLE (righe "num|nome|SI/NONE/SKIP|path").
+# ================================================================
+generate_full_dashboard() {
+    [[ -z "$REPORT_BASE_DIR" ]] && return 0
+    [[ ${#SUMMARY_TABLE[@]} -eq 0 ]] && return 0
+    local OSL; OSL=$(os_label)
+    local SCAN; SCAN=$(date "+%d/%m/%Y %H:%M:%S")
+    local DASH="${REPORT_BASE_DIR}/index.html"
+    local TABS="" COUNT_OK=0 COUNT_TOTAL=0
+
+    for row in "${SUMMARY_TABLE[@]}"; do
+        IFS='|' read -r mnum mname msy mpath <<< "$row"
+        [[ -z "$mnum" ]] && continue
+        COUNT_TOTAL=$((COUNT_TOTAL + 1))
+        local NUM2; NUM2=$(printf '%02d' "$mnum" 2>/dev/null || echo "$mnum")
+        local NAME_ESC; NAME_ESC=$(html_esc "$mname")
+        if [[ "$msy" == "SI" ]]; then
+            COUNT_OK=$((COUNT_OK + 1))
+            local rel="${mpath#$REPORT_BASE_DIR/}"
+            TABS+="<button class='tab' data-src='$(html_esc "$rel")'><span class='tn'>${NUM2}</span><span class='tl'>${NAME_ESC}</span><span class='dot ok'></span></button>"
+        else
+            local CLS="none" LBL
+            [[ "$msy" == "SKIP" ]] && { CLS="skip"; LBL="skip"; } || LBL="—"
+            TABS+="<button class='tab disabled' disabled title='$([ "$msy" = "SKIP" ] && echo "$(L "saltato" "skipped")" || echo "$(L "nessuna evidenza" "no findings")")'><span class='tn'>${NUM2}</span><span class='tl'>${NAME_ESC}</span><span class='dot ${CLS}'></span></button>"
+        fi
+    done
+
+    local HOST_DISP="${HOST_NAME:-N/A}"
+    # Icona "naso di cane che fiuta" (SVG inline, bianco su sfondo blu)
+    local NOSE_SVG='<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M19 11c2-2 5-2 7 0" fill="none" stroke="#dbeafe" stroke-width="2.4" stroke-linecap="round" opacity=".85"/><path d="M38 11c2-2 5-2 7 0" fill="none" stroke="#dbeafe" stroke-width="2.4" stroke-linecap="round" opacity=".85"/><path fill="#fff" d="M32 50C17 39 10 32 10 25c0-6 6-9 12-7 4 1 7 4 10 7 3-3 6-6 10-7 6-2 12 1 12 7 0 7-7 14-22 25Z"/><ellipse cx="23" cy="28" rx="3" ry="4.3" fill="#1f6feb"/><ellipse cx="41" cy="28" rx="3" ry="4.3" fill="#1f6feb"/><path d="M32 33v10" stroke="#1f6feb" stroke-width="2.6" stroke-linecap="round"/></svg>'
+    {
+        cat << HTMLEOF
+<!DOCTYPE html>
+<html lang="$(L "it" "en")">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FIUTO — Full Report (${OSL})</title>
+<style>
+  :root{ --bg:#080b0f; --bg2:#0d1117; --bg3:#131920; --bg4:#1a2332; --border:#1e2d3d;
+    --accent:#58a6ff; --accent2:#ff7b72; --accent3:#3fb950; --accent4:#f0883e;
+    --text:#c9d1d9; --text-dim:#3d5166; --text-mid:#6e8898;
+    --mono:'Fira Code',ui-monospace,monospace; --sans:'DM Sans',system-ui,sans-serif; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{background:var(--bg);color:var(--text);font-family:var(--sans);display:flex;flex-direction:column;height:100vh;overflow:hidden}
+  header{background:var(--bg2);border-bottom:1px solid var(--border);padding:1rem 1.6rem;display:flex;align-items:center;gap:1.4rem;flex-shrink:0}
+  .hicon{width:2.6rem;height:2.6rem;background:linear-gradient(135deg,var(--accent),#1f6feb);display:flex;align-items:center;justify-content:center;flex-shrink:0;clip-path:polygon(0 15%,15% 0,85% 0,100% 15%,100% 85%,85% 100%,15% 100%,0 85%)}
+  .hicon svg{width:62%;height:62%}
+  .htxt h1{font-size:1.1rem;color:#fff;font-weight:700}
+  .htxt .sub{font-size:.66rem;color:var(--text-dim);font-family:var(--mono);margin-top:.2rem}
+  .hstats{margin-left:auto;display:flex;gap:1.6rem;font-family:var(--mono)}
+  .hstats .s .v{font-size:1.3rem;font-weight:800}
+  .hstats .s .l{font-size:.55rem;text-transform:uppercase;letter-spacing:.12em;color:var(--text-dim)}
+  .s.ok .v{color:var(--accent3)} .s.tot .v{color:var(--accent)}
+  #tabs{display:flex;flex-wrap:wrap;gap:.15rem .2rem;background:var(--bg2);border-bottom:1px solid var(--border);padding:.4rem .8rem;flex-shrink:0;max-height:45vh;overflow-y:auto;align-content:flex-start}
+  #tabs::-webkit-scrollbar{width:6px}
+  #tabs::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+  .tab{display:flex;align-items:center;gap:.4rem;white-space:nowrap;background:var(--bg3);border:1px solid var(--border);border-radius:5px;color:var(--text-mid);font-family:var(--mono);font-size:.72rem;padding:.4rem .6rem;cursor:pointer;transition:.15s}
+  .tab:hover:not(.disabled){color:var(--text);border-color:var(--accent);background:rgba(88,166,255,.08)}
+  .tab .tn{color:var(--text-dim);font-size:.64rem}
+  .tab.active{color:#fff;border-color:var(--accent4);background:rgba(240,136,62,.12)}
+  .tab.active .tn{color:var(--accent4)}
+  .tab.disabled{opacity:.4;cursor:not-allowed}
+  .dot{width:.45rem;height:.45rem;border-radius:50%;flex-shrink:0}
+  .dot.ok{background:var(--accent3)} .dot.none{background:var(--border)} .dot.skip{background:var(--accent4)}
+  main{flex:1;position:relative;background:var(--bg)}
+  iframe{width:100%;height:100%;border:0;background:var(--bg);display:none}
+  iframe.show{display:block}
+  #placeholder{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem;text-align:center;padding:2rem}
+  #placeholder .big{font-family:var(--mono);font-size:1.1rem;color:var(--text-mid)}
+  #placeholder .small{font-size:.8rem;color:var(--text-dim);max-width:34rem;line-height:1.6}
+  #placeholder .logo{width:4rem;height:4rem;background:linear-gradient(135deg,var(--accent),#1f6feb);display:flex;align-items:center;justify-content:center;clip-path:polygon(0 15%,15% 0,85% 0,100% 15%,100% 85%,85% 100%,15% 100%,0 85%)}
+  #placeholder .logo svg{width:62%;height:62%}
+</style>
+</head>
+<body>
+<header>
+  <div class="hicon">${NOSE_SVG}</div>
+  <div class="htxt">
+    <h1>FIUTO — Full Report</h1>
+    <div class="sub">${OSL} · ${HOST_DISP} · ${SCAN}</div>
+  </div>
+  <div class="hstats">
+    <div class="s ok"><div class="v">${COUNT_OK}</div><div class="l">$(L "con evidenze" "with findings")</div></div>
+    <div class="s tot"><div class="v">${COUNT_TOTAL}</div><div class="l">$(L "moduli" "modules")</div></div>
+  </div>
+</header>
+<nav id="tabs">${TABS}</nav>
+<main>
+  <iframe id="viewer" title="report"></iframe>
+  <div id="placeholder">
+    <div class="logo">${NOSE_SVG}</div>
+    <div class="big">$(L "Seleziona un modulo dalle tab in alto" "Select a module from the tabs above")</div>
+    <div class="small">$(L "Il report verrà caricato qui al centro. Puoi passare da un modulo all'altro senza aprire file separati." "The report will load here in the center. Switch between modules without opening separate files.")</div>
+  </div>
+</main>
+<script>
+(function(){
+  var tabs=document.querySelectorAll('.tab:not(.disabled)'),
+      viewer=document.getElementById('viewer'),
+      ph=document.getElementById('placeholder');
+  tabs.forEach(function(t){
+    t.addEventListener('click',function(){
+      document.querySelectorAll('.tab').forEach(function(x){x.classList.remove('active');});
+      t.classList.add('active');
+      var src=t.getAttribute('data-src');
+      if(src){ viewer.src=src; viewer.classList.add('show'); ph.style.display='none'; }
+    });
+  });
+})();
+</script>
+</body></html>
+HTMLEOF
+    } > "$DASH"
+
+    register_report "$DASH"
+    echo ""
+    ok "$(L "Dashboard FULL generata:" "FULL dashboard generated:") ${BOLD}$DASH"
+    open_report_prompt "$DASH"
+}
+
+run_all_modules() {
+    clear
+    print_banner
+    info "$(t batch_running)"
+    echo ""
+    if [[ -z "$REPORT_BASE_DIR" ]]; then
+        REPORT_BASE_DIR="${INVOCATION_DIR}/fiuto_reports_$(date +%Y%m%d_%H%M%S)"
+        LOG_FILE="${REPORT_BASE_DIR}/fiuto_session_$(date +%Y%m%d_%H%M%S).log"
+    fi
+    info "$(t batch_report_dir) ${BOLD}$REPORT_BASE_DIR${RESET}"
+    log_msg "$(t batch_started)$WIN_ROOT ==="
+    sleep 1
+
+    BATCH_MODE=true
+    SUMMARY_TABLE=()
+
+    echo ""
+    run_batch_module 1 module_ps_history "PowerShell History" 39
+    run_batch_module 2 module_notepad_tabstate "Notepad TabState" 39
+    run_batch_module 3 module_ifeo "IFEO" 39
+    run_batch_module 4 module_bam "BAM" 39
+    run_batch_module 5 module_run_keys "Run Keys" 39
+    run_batch_module 6 module_prefetch "Prefetch" 39
+    run_batch_module 7 module_scheduled_tasks "Scheduled Tasks" 39
+    run_batch_module 8 module_usb "USB Devices" 39
+    run_batch_module 9 module_lnk "LNK Files" 39
+    run_batch_module 10 module_rdp_cache "RDP Cache" 39
+    run_batch_module 11 module_services "Services" 39
+    run_batch_module 12 module_evtx "EVTX" 39
+    run_batch_module 13 module_amcache "Amcache" 39
+    run_batch_module 14 module_recycle_bin "Recycle Bin" 39
+    run_batch_module 15 module_wmi "WMI" 39
+    run_batch_module 16 module_srum "SRUM" 39
+    run_batch_module 17 module_browser "Browser History" 39
+    run_batch_module 18 module_userassist "UserAssist" 39
+    run_batch_module 19 module_shellbags "Shellbags" 39
+    run_batch_module 20 module_sam "SAM" 39
+    run_batch_module 21 module_mft "MFT" 39
+    run_batch_module 22 module_opensave "Open/Save MRU" 39
+    run_batch_module 23 module_usn "USN Journal" 39
+    run_batch_module 24 module_ntds "NTDS.dit" 39
+    run_batch_module 25 module_hiberfil "Hibernation / Pagefile" 39
+    run_batch_module 26 module_wer_files "WER Files" 39
+    run_batch_module 27 module_credential_manager "Credential Manager" 39
+    run_batch_module 28 module_wlan "WLAN Profiles" 39
+    run_batch_module 29 module_appx "AppX / UWP" 39
+    run_batch_module 30 module_browser_extra "Browser Logins/Downloads" 39
+    run_batch_module 31 module_clipboard "Clipboard History" 39
+    run_batch_module 32 module_office_mru "Office MRU" 39
+    run_batch_module 33 module_defender_quarantine "Defender Quarantine" 39
+    run_batch_module 34 module_ps_scriptblock "PS ScriptBlock Log" 39
+    run_batch_module 35 module_jumplists "JumpLists" 39
+    run_batch_module 36 module_network_artifacts "Network Artifacts" 39
+    run_batch_module 37 module_master_timeline "Master Timeline" 39
+    # Modulo 38: eseguito solo se il disco è un Domain Controller (ntds.dit presente)
+    local _ntds_check
+    _ntds_check=$(find "$WIN_ROOT" -maxdepth 8 -iname "ntds.dit" -type f 2>/dev/null | head -1)
+    if [[ -n "$_ntds_check" ]]; then
+        run_batch_module 38 module_pad_offline "PAD Offline AD" 39
+    else
+        echo -e "  ${DIM}[i] [38/39] PAD Offline AD — $(L "saltato (non è un Domain Controller)" "skipped (not a Domain Controller)")${RESET}"
+        SUMMARY_TABLE+=("38|PAD Offline AD|SKIP|$(L "non è un DC" "not a DC")")
+    fi
+    run_batch_module 39 module_ai_chat "AI Chat History" 39
+
+    BATCH_MODE=false
+
+    echo ""
+    section_header "$(L "Riepilogo Scansione Globale" "Global Scan Summary")" "$GREEN"
+    local _hdr_mod;    _hdr_mod="$(L    "MOD" "MOD")"
+    local _hdr_name;   _hdr_name="$(L  "NOME MODULO" "MODULE NAME")"
+    local _hdr_evid;   _hdr_evid="$(L  "EVIDENZE" "FINDINGS")"
+    local _hdr_file;   _hdr_file="$(L  "FILE GENERATI" "GENERATED FILES")"
+    local _lbl_found;  _lbl_found="$(L "TROVATE" "FOUND")"
+    local _lbl_none;   _lbl_none="$(L  "NESSUNA" "NONE")"
+    local _lbl_skip;   _lbl_skip="$(L  "SALTATO" "SKIPPED")"
+    printf "  ${BOLD}%-4s %-32s %-12s %s${RESET}\n" "$_hdr_mod" "$_hdr_name" "$_hdr_evid" "$_hdr_file"
+    echo "  ─────────────────────────────────────────────────────────────────────────────────────────"
+    for row in "${SUMMARY_TABLE[@]}"; do
+        IFS='|' read -r mnum mname msy mpath <<< "$row"
+        if [[ "$msy" == "SI" ]]; then
+            local rel_path="${mpath#$REPORT_BASE_DIR/}"
+            printf "  ${CYAN}%02d${RESET}   ${BOLD}%-32s${RESET} ${GREEN}%-12s${RESET} ${DIM}%s${RESET}\n" "$mnum" "$mname" "$_lbl_found" "$rel_path"
+        elif [[ "$msy" == "SKIP" ]]; then
+            printf "  ${CYAN}%02d${RESET}   %-32s ${YELLOW}%-12s${RESET} ${DIM}%s${RESET}\n" "$mnum" "$mname" "$_lbl_skip" "$mpath"
+        else
+            printf "  ${CYAN}%02d${RESET}   %-32s ${DIM}%-12s${RESET} ${DIM}-${RESET}\n" "$mnum" "$mname" "$_lbl_none"
+        fi
+    done
+    echo ""
+    ok "$(L "Report salvati integralmente in:" "All reports saved in:") ${BOLD}$REPORT_BASE_DIR"
+    generate_full_dashboard
+}
+active_registry_name() {
+    case "$OS_TYPE" in
+        linux) echo "MODULES_LINUX" ;;
+        macos) echo "MODULES_MACOS" ;;
+        *)     echo "" ;;
+    esac
+}
+
+# Renderizza il menu a partire da un registro (equivalente dinamico di print_menu)
+render_menu_from_registry() {
+    local -n _REG="$1"
+    local _NOT_SET _WRITABLE _READONLY _NOT_CREATED _PARENT_RO _DIAG _RUN_ALL _QUIT _CHOICE_LABEL _REPORTS_LABEL
+    _NOT_SET="$(L "non impostata" "not set")"
+    _WRITABLE="$(L "scrivibile" "writable")"
+    _READONLY="$(L "SOLA LETTURA" "READ ONLY")"
+    _NOT_CREATED="$(L "OK (non ancora creata)" "OK (not yet created)")"
+    _PARENT_RO="$(L "PARENT NON SCRIVIBILE" "PARENT NOT WRITABLE")"
+    _DIAG="$(L "Diagnostica volumi montati" "Diagnose mounted volumes")"
+    _RUN_ALL="$(L "Esegui TUTTI i moduli" "Run ALL modules")"
+    _QUIT="$(L "Esci" "Quit")"
+    _CHOICE_LABEL="$(L "Scelta" "Choice")"
+    _REPORTS_LABEL="$(L "Report generati" "Generated reports")"
+    local _OSL; _OSL=$(os_label)
+    local _TITLE; _TITLE="$(L "SELEZIONA UN MODULO" "SELECT A MODULE")"
+
+    echo -e "  ${CYAN}${BOLD}╔══════════════════════════════════════════════════╗${RESET}"
+    printf  "  ${CYAN}${BOLD}║   F I U T O  —  %-8s —  %-18s║${RESET}\n" "$_OSL" "$_TITLE"
+    echo -e "  ${CYAN}${BOLD}╚══════════════════════════════════════════════════╝${RESET}"
+    echo ""
+    if [[ -n "$REPORT_BASE_DIR" ]]; then
+        local _RW_LABEL _RW_COLOR
+        if [[ -d "$REPORT_BASE_DIR" ]]; then
+            if [[ -w "$REPORT_BASE_DIR" ]]; then _RW_LABEL="$_WRITABLE"; _RW_COLOR="$GREEN"
+            else _RW_LABEL="$_READONLY"; _RW_COLOR="$RED"; fi
+        else
+            local _RD_PARENT; _RD_PARENT=$(dirname "$REPORT_BASE_DIR")
+            if [[ -w "$_RD_PARENT" ]]; then _RW_LABEL="$_NOT_CREATED"; _RW_COLOR="$GREEN"
+            else _RW_LABEL="$_PARENT_RO"; _RW_COLOR="$RED"; fi
+        fi
+        echo -e "  ${WHITE}[P]${RESET}  ${BOLD}Report dir:${RESET} ${DIM}${REPORT_BASE_DIR}${RESET}  ${_RW_COLOR}[${_RW_LABEL}]${RESET}"
+    else
+        echo -e "  ${WHITE}[P]${RESET}  ${BOLD}Report dir:${RESET} ${RED}$(L "non impostata — premi [P] per configurare" "not set — press [P] to configure")${RESET}"
+    fi
+    echo -e "  ${WHITE}[R]${RESET}  ${BOLD}$(L "Imposta root da analizzare" "Set analysis root")${RESET}  ${DIM}${WIN_ROOT:-($_NOT_SET)} [${_OSL}]${RESET}"
+    echo -e "  ${YELLOW}[D]${RESET}  ${BOLD}$(L "Debug mount attivi" "Debug active mounts")${RESET}  ${DIM}${_DIAG}${RESET}"
+    echo ""
+    local _i=1 _entry _f _name _color _desc
+    for _entry in "${_REG[@]}"; do
+        IFS='|' read -r _f _name _color _desc <<< "$_entry"
+        local _C="${!_color:-$RESET}"
+        printf "  ${_C}[%2d]${RESET} %-26s ${DIM}%s${RESET}\n" "$_i" "$_name" "$_desc"
+        _i=$((_i + 1))
+    done
+    echo ""
+    echo -e "  ${WHITE}${BOLD}[0]${RESET}  ${BOLD}${_RUN_ALL}${RESET}"
+    echo ""
+    if [[ ${#GENERATED_REPORTS[@]} -gt 0 ]]; then
+        echo -e "  ${DIM}── ${_REPORTS_LABEL} (${#GENERATED_REPORTS[@]}) ──────────────────────────${RESET}"
+        for _R in "${GENERATED_REPORTS[@]}"; do
+            echo -e "  ${CYAN}↳${RESET} ${DIM}${_R}${RESET}"
+        done
+        echo ""
+    fi
+    echo -e "  ${RED}[Q]  ${_QUIT}${RESET}"
+    echo ""
+    echo -ne "  ${YELLOW}${_CHOICE_LABEL}:${RESET} "
+}
+
+# Esegue il modulo n-esimo (1-based) di un registro
+dispatch_from_registry() {
+    local _RNAME="$1" _N="$2"
+    local -n _REG="$_RNAME"
+    if ! [[ "$_N" =~ ^[0-9]+$ ]] || (( _N < 1 || _N > ${#_REG[@]} )); then
+        err "$(L "Modulo sconosciuto:" "Unknown module:") $_N"
+        return 1
+    fi
+    local _entry="${_REG[$((_N - 1))]}"
+    local _f="${_entry%%|*}"
+    "$_f"
+}
+
+# Esegue TUTTI i moduli di un registro in modalità batch (equivalente di run_all_modules)
+run_all_from_registry() {
+    local _RNAME="$1"
+    local -n _REG="$_RNAME"
+    clear
+    print_banner
+    info "$(t batch_running)"
+    echo ""
+    if [[ -z "$REPORT_BASE_DIR" ]]; then
+        REPORT_BASE_DIR="${INVOCATION_DIR}/fiuto_reports_$(date +%Y%m%d_%H%M%S)"
+        LOG_FILE="${REPORT_BASE_DIR}/fiuto_session_$(date +%Y%m%d_%H%M%S).log"
+    fi
+    info "$(t batch_report_dir) ${BOLD}$REPORT_BASE_DIR${RESET}"
+    log_msg "$(t batch_started)$WIN_ROOT ==="
+    sleep 1
+    BATCH_MODE=true
+    SUMMARY_TABLE=()
+    echo ""
+    local _total=${#_REG[@]} _i=1 _entry _f _name _rest
+    for _entry in "${_REG[@]}"; do
+        IFS='|' read -r _f _name _rest <<< "$_entry"
+        run_batch_module "$_i" "$_f" "$_name" "$_total"
+        _i=$((_i + 1))
+    done
+    BATCH_MODE=false
+    echo ""
+    section_header "$(L "Riepilogo Scansione Globale" "Global Scan Summary")" "$GREEN"
+    local _hdr_mod _hdr_name _hdr_evid _hdr_file _lbl_found _lbl_none _lbl_skip
+    _hdr_mod="$(L "MOD" "MOD")"; _hdr_name="$(L "NOME MODULO" "MODULE NAME")"
+    _hdr_evid="$(L "EVIDENZE" "FINDINGS")"; _hdr_file="$(L "FILE GENERATI" "GENERATED FILES")"
+    _lbl_found="$(L "TROVATE" "FOUND")"; _lbl_none="$(L "NESSUNA" "NONE")"; _lbl_skip="$(L "SALTATO" "SKIPPED")"
+    printf "  ${BOLD}%-4s %-32s %-12s %s${RESET}\n" "$_hdr_mod" "$_hdr_name" "$_hdr_evid" "$_hdr_file"
+    echo "  ─────────────────────────────────────────────────────────────────────────────────────────"
+    for row in "${SUMMARY_TABLE[@]}"; do
+        IFS='|' read -r mnum mname msy mpath <<< "$row"
+        if [[ "$msy" == "SI" ]]; then
+            local rel_path="${mpath#$REPORT_BASE_DIR/}"
+            printf "  ${CYAN}%02d${RESET}   ${BOLD}%-32s${RESET} ${GREEN}%-12s${RESET} ${DIM}%s${RESET}\n" "$mnum" "$mname" "$_lbl_found" "$rel_path"
+        elif [[ "$msy" == "SKIP" ]]; then
+            printf "  ${CYAN}%02d${RESET}   %-32s ${YELLOW}%-12s${RESET} ${DIM}%s${RESET}\n" "$mnum" "$mname" "$_lbl_skip" "$mpath"
+        else
+            printf "  ${CYAN}%02d${RESET}   %-32s ${DIM}%-12s${RESET} ${DIM}-${RESET}\n" "$mnum" "$mname" "$_lbl_none"
+        fi
+    done
+    echo ""
+    ok "$(L "Report salvati integralmente in:" "All reports saved in:") ${BOLD}$REPORT_BASE_DIR"
+    generate_full_dashboard
+}
+
+print_menu() {
+    local _MENU_TITLE _SELECT_MODULE _NOT_SET _WRITABLE _READONLY _NOT_CREATED _PARENT_RO
+    local _REPORT_DIR_LABEL _WIN_ROOT_LABEL _DEBUG_LABEL _RUN_ALL _QUIT _CHOICE_LABEL
+    local _REPORTS_LABEL
+    _MENU_TITLE="$(L "SELEZIONA UN MODULO" "SELECT A MODULE    ")"
+    _SELECT_MODULE="$(L "Seleziona" "Select")"
+    _NOT_SET="$(L "non impostata" "not set")"
+    _WRITABLE="$(L "scrivibile" "writable")"
+    _READONLY="$(L "SOLA LETTURA" "READ ONLY")"
+    _NOT_CREATED="$(L "OK (non ancora creata)" "OK (not yet created)")"
+    _PARENT_RO="$(L "PARENT NON SCRIVIBILE" "PARENT NOT WRITABLE")"
+    _REPORT_DIR_LABEL="$(L "Imposta dir report" "Set report dir")"
+    _WIN_ROOT_LABEL="$(L "Imposta root Windows" "Set Windows root    ")"
+    _DEBUG_LABEL="$(L "Debug mount attivi " "Debug active mounts")"
+    _DIAG="$(L "Diagnostica volumi montati" "Diagnose mounted volumes")"
+    _RUN_ALL="$(L "Esegui TUTTI i moduli" "Run ALL modules")"
+    _QUIT="$(L "Esci" "Quit")"
+    _CHOICE_LABEL="$(L "Scelta" "Choice")"
+    _REPORTS_LABEL="$(L "Report generati" "Generated reports")"
+
+    echo -e "  ${CYAN}${BOLD}╔══════════════════════════════════════════════════╗${RESET}"
+    echo -e "  ${CYAN}${BOLD}║           F I U T O  —  ${_MENU_TITLE}      ║ ${RESET}"
+    echo -e "  ${CYAN}${BOLD}╚══════════════════════════════════════════════════╝${RESET}"
+    echo ""
+    if [[ -n "$REPORT_BASE_DIR" ]]; then
+        local _RW_LABEL _RW_COLOR
+        if [[ -d "$REPORT_BASE_DIR" ]]; then
+            if [[ -w "$REPORT_BASE_DIR" ]]; then
+                _RW_LABEL="$_WRITABLE"; _RW_COLOR="$GREEN"
+            else
+                _RW_LABEL="$_READONLY"; _RW_COLOR="$RED"
+            fi
+        else
+            local _RD_PARENT; _RD_PARENT=$(dirname "$REPORT_BASE_DIR")
+            if [[ -w "$_RD_PARENT" ]]; then
+                _RW_LABEL="$_NOT_CREATED"; _RW_COLOR="$GREEN"
+            else
+                _RW_LABEL="$_PARENT_RO"; _RW_COLOR="$RED"
+            fi
+        fi
+        echo -e "  ${WHITE}[P]${RESET}  ${BOLD}Report dir:${RESET} ${DIM}${REPORT_BASE_DIR}${RESET}  ${_RW_COLOR}[${_RW_LABEL}]${RESET}"
+    else
+        local _CONF_MSG="$(L "non impostata — premi [P] per configurare" "not set — press [P] to configure")"
+        echo -e "  ${WHITE}[P]${RESET}  ${BOLD}Report dir:${RESET} ${RED}${_CONF_MSG}${RESET}"
+    fi
+    echo -e "  ${WHITE}[R]${RESET}  ${BOLD}${_WIN_ROOT_LABEL}${RESET}          ${DIM}${WIN_ROOT:-($_NOT_SET)}${RESET}"
+    echo -e "  ${YELLOW}[D]${RESET}  ${BOLD}${_DEBUG_LABEL}${RESET}           ${DIM}${_DIAG}${RESET}"
+    echo ""
+    echo -e "  ${MAGENTA}[1]${RESET}  PowerShell History            ${DIM}PSReadLine *_history.txt${RESET}"
+    echo -e "  ${MAGENTA}[2]${RESET}  Notepad TabState              ${DIM}$(L "Tab rimasti aperti (.bin)" "Open tabs (.bin)")${RESET}"
+    echo -e "  ${RED}[3]${RESET}  IFEO Hijacking                ${DIM}Image File Execution Options${RESET}"
+    echo -e "  ${BLUE}[4]${RESET}  BAM                           ${DIM}Background Activity Moderator${RESET}"
+    echo -e "  ${ORANGE}[5]${RESET}  Run Keys & $(L "Persistenza" "Persistence")        ${DIM}$(L "Autorun nel registro" "Autorun in registry")${RESET}"
+    echo -e "  ${GREEN}[6]${RESET}  Prefetch                      ${DIM}$(L "Eseguibili tracciati" "Tracked executables") (*.pf)${RESET}"
+    echo -e "  ${YELLOW}[7]${RESET}  Scheduled Tasks               ${DIM}$(L "Task pianificati (XML)" "Scheduled tasks (XML)")${RESET}"
+    echo -e "  ${BLUE}[8]${RESET}  USB Devices                   ${DIM}$(L "Dispositivi rimovibili (USBSTOR)" "Removable devices (USBSTOR)")${RESET}"
+    echo -e "  ${GREEN}[9]${RESET}  LNK & JumpList                ${DIM}$(L "File recenti e target path" "Recent files and target path")${RESET}"
+    echo -e "  ${CYAN}[10]${RESET} RDP Cache                     ${DIM}Terminal Server Client Cache${RESET}"
+  echo -e "  ${RED}[11]${RESET} Services                      ${DIM}$(L "Servizi Windows (SYSTEM hive)" "Windows Services (SYSTEM hive)")${RESET}"
+  echo -e "  ${RED}[12]${RESET} Event Log                     ${DIM}Security/System/PS/RDP (.evtx)${RESET}"
+  echo -e "  ${YELLOW}[13]${RESET} Amcache + Shimcache           ${DIM}$(L "Timeline esecuzione binari" "Binary execution timeline")${RESET}"
+  echo -e "  ${GREEN}[14]${RESET} Recycle Bin                   ${DIM}$(L "File eliminati" "Deleted files") (\$Recycle.Bin)${RESET}"
+  echo -e "  ${RED}[15]${RESET} WMI Subscriptions             ${DIM}$(L "Persistenza invisibile" "Fileless persistence") (T1546.003)${RESET}"
+  echo -e "  ${BLUE}[16]${RESET} SRUM                          ${DIM}$(L "Uso risorse per applicazione" "Resource usage per application")${RESET}"
+  echo -e "  ${CYAN}[17]${RESET} Browser History               ${DIM}Chrome / Edge / Firefox${RESET}"
+  echo -e "  ${MAGENTA}[18]${RESET} UserAssist / RunMRU           ${DIM}$(L "Attività interattiva utente" "Interactive user activity")${RESET}"
+  echo -e "  ${CYAN}[19]${RESET} ShellBags                     ${DIM}$(L "Navigazione cartelle (anche cancellate)" "Folder navigation (including deleted)")${RESET}"
+  echo -e "  ${RED}[20]${RESET} SAM — $(L "Hash Locali " "Local Hashes")            ${DIM}$(L "Hash NTLM account (impacket)" "NTLM account hashes (impacket)")${RESET}"
+  echo -e "  ${YELLOW}[21]${RESET} MFT Timeline                  ${DIM}Master File Table + timestomping${RESET}"
+  echo -e "  ${GREEN}[22]${RESET} OpenSave / LastVisited MRU    ${DIM}$(L "File aperti/salvati via dialogo" "Files opened/saved via dialog")${RESET}"
+  echo -e "  ${CYAN}[23]${RESET} USN Journal                   ${DIM}\$UsnJrnl:\$J — $(L "change log NTFS" "NTFS change log")${RESET}"
+  echo -e "  ${RED}[24]${RESET} NTDS.dit                      ${DIM}Active Directory hash (DC offline)${RESET}"
+  echo -e "  ${BLUE}[25]${RESET} Hibernation / Pagefile        ${DIM}hiberfil.sys · pagefile.sys strings${RESET}"
+  echo -e "  ${RED}[26]${RESET} WER Files (Error Reports)     ${DIM}ReportArchive · ReportQueue (.wer)${RESET}"
+  echo -e "  ${MAGENTA}[27]${RESET} Credential Manager            ${DIM}DPAPI blob offline${RESET}"
+  echo -e "  ${CYAN}[28]${RESET} WLAN & VPN Profiles           ${DIM}WiFi · NetworkList · VPN${RESET}"
+  echo -e "  ${GREEN}[29]${RESET} AppX / UWP Packages           ${DIM}$(L "App Store + sideload sospetti" "App Store + suspicious sideloads")${RESET}"
+  echo -e "  ${CYAN}[30]${RESET} Browser Downloads & Logins    ${DIM}Download + Login Data (DPAPI)${RESET}"
+  echo -e "  ${YELLOW}[31]${RESET} Clipboard History             ${DIM}$(L "Cronologia appunti Win10+" "Clipboard history Win10+")${RESET}"
+  echo -e "  ${GREEN}[32]${RESET} Office MRU                    ${DIM}$(L "File recenti Word/Excel/PowerPoint" "Recent Word/Excel/PowerPoint files")${RESET}"
+  echo -e "  ${RED}[33]${RESET} Defender Quarantine           ${DIM}$(L "File in quarantena + threatname" "Quarantined files + threatname")${RESET}"
+  echo -e "  ${MAGENTA}[34]${RESET} PS ScriptBlock Logging        ${DIM}Event ID 4104 — PS Operational.evtx${RESET}"
+  echo -e "  ${GREEN}[35]${RESET} JumpLists                     ${DIM}AutomaticDestinations · CustomDestinations${RESET}"
+  echo -e "  ${CYAN}[36]${RESET} Network Artifacts             ${DIM}$(L "Profili rete · Interfacce TCP/IP (registry)" "Network profiles · TCP/IP interfaces (registry)")${RESET}"
+  echo -e "  ${YELLOW}[37]${RESET} Master Timeline               ${DIM}$(L "Aggregazione cross-moduli con filtri" "Cross-module aggregation with filters")${RESET}"
+  echo -e "  ${RED}[38]${RESET} PAD Offline AD Analysis       ${DIM}$(L "NTDS.dit offline — utenti privilegiati, ACL, GPO" "NTDS.dit offline — privileged users, ACL, GPO")${RESET}"
+  echo -e "  ${MAGENTA}[39]${RESET} AI Chat History               ${DIM}Claude · ChatGPT · Copilot · Cursor · Gemini · Codex${RESET}"
+    echo ""
+    echo -e "  ${WHITE}${BOLD}[0]${RESET}  ${BOLD}${_RUN_ALL}${RESET}"
+    echo ""
+    if [[ ${#GENERATED_REPORTS[@]} -gt 0 ]]; then
+        echo -e "  ${DIM}── ${_REPORTS_LABEL} (${#GENERATED_REPORTS[@]}) ──────────────────────────${RESET}"
+        for _R in "${GENERATED_REPORTS[@]}"; do
+            echo -e "  ${CYAN}↳${RESET} ${DIM}${_R}${RESET}"
+        done
+        echo ""
+    fi
+    echo -e "  ${RED}[Q]  ${_QUIT}${RESET}"
+    echo ""
+    echo -ne "  ${YELLOW}${_CHOICE_LABEL}:${RESET} "
+}
+
+# ================================================================
+#  HELPER FUNCTIONS PER MODALITÀ NON INTERATTIVA
+# ================================================================
+
+# Espande una stringa tipo "1,3,5-8,12" in una lista di numeri
+expand_module_list() {
+    local spec="$1"
+    local result=()
+    IFS=',' read -ra PARTS <<< "$spec"
+    for P in "${PARTS[@]}"; do
+        if [[ "$P" =~ ^([0-9]+)-([0-9]+)$ ]]; then
+            local from="${BASH_REMATCH[1]}" to="${BASH_REMATCH[2]}"
+            for (( n=from; n<=to; n++ )); do result+=("$n"); done
+        elif [[ "$P" =~ ^[0-9]+$ ]]; then
+            result+=("$P")
+        fi
+    done
+    printf '%s\n' "${result[@]}" | sort -n -u
+}
+
+run_module_by_number() {
+    case "$1" in
+        1)  module_ps_history ;;
+        2)  module_notepad_tabstate ;;
+        3)  module_ifeo ;;
+        4)  module_bam ;;
+        5)  module_run_keys ;;
+        6)  module_prefetch ;;
+        7)  module_scheduled_tasks ;;
+        8)  module_usb ;;
+        9)  module_lnk ;;
+        10) module_rdp_cache ;;
+        11) module_services ;;
+        12) module_evtx ;;
+        13) module_amcache ;;
+        14) module_recycle_bin ;;
+        15) module_wmi ;;
+        16) module_srum ;;
+        17) module_browser ;;
+        18) module_userassist ;;
+        19) module_shellbags ;;
+        20) module_sam ;;
+        21) module_mft ;;
+        22) module_opensave ;;
+        23) module_usn ;;
+        24) module_ntds ;;
+        25) module_hiberfil ;;
+        26) module_wer_files ;;
+        27) module_credential_manager ;;
+        28) module_wlan ;;
+        29) module_appx ;;
+        30) module_browser_extra ;;
+        31) module_clipboard ;;
+        32) module_office_mru ;;
+        33) module_defender_quarantine ;;
+        34) module_ps_scriptblock ;;
+        35) module_jumplists ;;
+        36) module_network_artifacts ;;
+        37) module_master_timeline ;;
+        38) module_pad_offline ;;
+        39) module_ai_chat ;;
+        *)  err "$(L "Modulo sconosciuto:" "Unknown module:") $1" ;;
+    esac
+}
+
+# ================================================================
 #  MODULO 1 — PowerShell PSReadLine History
 # ================================================================
 module_ps_history() {
@@ -1749,6 +2787,241 @@ PYEOF
           .lnum{color:var(--text-dim);user-select:none;margin-right:1rem;font-size:.7rem}
         </style>"
         echo "<div class='cards'>${CARDS_HTML}</div></main>"
+        html_footer "$SCAN" "$WIN_ROOT"
+    } > "$REPORT_HTML"
+
+    register_report "$REPORT_HTML"
+    ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
+    open_report_prompt "$REPORT_HTML"
+}
+
+# ================================================================
+#  MODULO 7 — Notepad TabState
+# ================================================================
+module_notepad_tabstate() {
+    section_header "$(L "Notepad TabState — Tab Rimasti Aperti" "Notepad TabState — Open Tabs")" "$MAGENTA"
+    check_win_root || return 1
+
+    local NOTEPAD_PKG="Microsoft.WindowsNotepad_8wekyb3d8bbwe"
+    local TABSTATE_REL="AppData/Local/Packages"
+    local TOTAL_FILES=0 TOTAL_USERS=0
+    declare -a RES_USERS=() RES_PATHS=() RES_COUNTS=()
+    declare -a RES_FILES=() RES_SIZES=() RES_MTIMES=() RES_CTIMES=()
+
+    # Parser .bin inline (stessa logica di notepad_tabstate.sh)
+    local PARSER_PY=""
+    PARSER_PY=$(mktemp /tmp/npad_parse_XXXXXX.py)
+    register_tmp "$PARSER_PY"
+    cat > "$PARSER_PY" << 'PYEOF'
+import sys, json, html as html_mod
+
+def read_varint(data, offset):
+    result = 0; shift = 0
+    while offset < len(data):
+        byte = data[offset]; offset += 1
+        result |= (byte & 0x7F) << shift
+        if not (byte & 0x80): break
+        shift += 7
+    return result, offset
+
+def is_good_text(txt, thr=0.85):
+    if not txt: return False
+    ok = sum(1 for c in txt if c.isprintable() or c in '\n\r\t ')
+    return ok / len(txt) >= thr
+
+def parse_bin(path):
+    try:
+        with open(path, 'rb') as f: data = f.read()
+    except Exception as e:
+        return {'error': str(e), 'text': '', 'type': 'error', 'saved_path': '', 'char_count': 0}
+    if len(data) < 4:
+        return {'error': 'File troppo piccolo', 'text': '', 'type': 'empty', 'saved_path': '', 'char_count': 0}
+    saved_path = ''; ftype = 0
+    if data[0] == 0x4E and data[1] == 0x50:
+        offset = 2; offset += 1
+        ftype = data[offset]; offset += 1
+        if ftype == 1 and offset < len(data):
+            path_len = data[offset]; offset += 1
+            if path_len > 0 and offset + path_len * 2 <= len(data):
+                saved_path = data[offset:offset + path_len * 2].decode('utf-16-le', errors='replace')
+                offset += path_len * 2
+        best_text = ''; best_score = 0
+        for skip in range(0, min(120, len(data) - offset)):
+            o = offset + skip
+            text_len, text_start = read_varint(data, o)
+            if not (1 <= text_len <= 200000): continue
+            end = text_start + text_len * 2
+            if end > len(data): continue
+            try:
+                txt = data[text_start:end].decode('utf-16-le', errors='strict')
+                if not is_good_text(txt): continue
+                ok = sum(1 for c in txt if c.isprintable() or c in '\n\r\t ')
+                score = len(txt) * (ok / len(txt))
+                if score > best_score: best_text = txt; best_score = score
+            except: pass
+        if best_text:
+            return {'text': best_text, 'saved_path': saved_path,
+                    'type': 'saved' if ftype == 1 else 'unsaved',
+                    'error': '', 'char_count': len(best_text)}
+    # Fallback scan UTF-16LE
+    start = 2 if (len(data) >= 2 and data[0] == 0x4E and data[1] == 0x50) else 0
+    runs = []; i = start; run = []
+    while i < len(data) - 1:
+        b1, b2 = data[i], data[i+1]
+        if b2 == 0 and (0x20 <= b1 <= 0x7e or b1 in (0x09, 0x0a, 0x0d)):
+            run.append(chr(b1)); i += 2
+        else:
+            if len(run) >= 6: runs.append(''.join(run).strip())
+            run = []; i += 1
+    if len(run) >= 6: runs.append(''.join(run).strip())
+    text = '\n'.join(r for r in runs if r)
+    if text:
+        return {'text': text, 'saved_path': saved_path, 'type': 'scan',
+                'error': '', 'char_count': len(text)}
+    return {'text': '', 'saved_path': '', 'type': 'empty', 'error': 'Nessun testo', 'char_count': 0}
+
+if __name__ == '__main__':
+    path = sys.argv[1]
+    result = parse_bin(path)
+    print(json.dumps({
+        'text': html_mod.escape(result.get('text', '')),
+        'saved_path': html_mod.escape(result.get('saved_path', '')),
+        'type': result.get('type', ''),
+        'error': result.get('error', ''),
+        'char_count': result.get('char_count', 0)
+    }))
+PYEOF
+
+    while IFS= read -r USER_DIR; do
+        local USERNAME; USERNAME=$(basename "$USER_DIR")
+        local PACKAGES_DIR
+        PACKAGES_DIR=$(ci_find_dir "$USER_DIR" "AppData/Local/Packages")
+        [[ -z "$PACKAGES_DIR" ]] && { dim_msg "$USERNAME — $(L "AppData\\Local\\Packages non trovata" "AppData\\Local\\Packages not found")"; continue; }
+        local NOTEPAD_DIR
+        NOTEPAD_DIR=$(find "$PACKAGES_DIR" -maxdepth 1 -iname "${NOTEPAD_PKG}*" -type d 2>/dev/null | head -1)
+        [[ -z "$NOTEPAD_DIR" ]] && { dim_msg "$USERNAME — $(L "Notepad UWP non installato" "Notepad UWP not installed")"; continue; }
+        local TABSTATE_DIR
+        TABSTATE_DIR=$(ci_find_dir "$NOTEPAD_DIR" "LocalState/TabState")
+        [[ -z "$TABSTATE_DIR" || ! -d "$TABSTATE_DIR" ]] && { warn "$USERNAME — $(L "TabState non trovata" "TabState not found")"; continue; }
+        mapfile -t BIN_FILES < <(find "$TABSTATE_DIR" -maxdepth 1 -iname "*.bin" -type f -printf "%T@ %p\n" 2>/dev/null | sort -rn | cut -d' ' -f2-)
+        if [[ ${#BIN_FILES[@]} -eq 0 ]]; then
+            # Fallback se printf %T@ non è supportato (BSD/macOS)
+            mapfile -t BIN_FILES < <(find "$TABSTATE_DIR" -maxdepth 1 -iname "*.bin" -type f -print0 2>/dev/null | xargs -0 ls -t 2>/dev/null)
+        fi
+        local COUNT=${#BIN_FILES[@]}
+        [[ $COUNT -eq 0 ]] && { warn "$USERNAME — $(L "TabState vuota" "TabState empty")"; continue; }
+        ok "$USERNAME — $COUNT $(L "file .bin trovati" ".bin files found")"
+        local FILE_NAMES="" FILE_SIZES="" FILE_MTIMES="" FILE_CTIMES=""
+        for BIN in "${BIN_FILES[@]}"; do
+            local FNAME; FNAME=$(basename "$BIN")
+            local FSIZE; FSIZE=$(stat -c "%s" "$BIN" 2>/dev/null || echo "?")
+            local FMTIME; FMTIME=$(stat -c "%y" "$BIN" 2>/dev/null | cut -d'.' -f1 || echo "?")
+            local RAW_CT; RAW_CT=$(stat -c "%W" "$BIN" 2>/dev/null || echo "0")
+            [[ "$RAW_CT" == "0" ]] && RAW_CT=$(stat -c "%Y" "$BIN" 2>/dev/null || echo "0")
+            local FCTIME
+            [[ "$RAW_CT" != "0" ]] && FCTIME=$(date -d "@${RAW_CT}" "+%Y-%m-%d %H:%M:%S" 2>/dev/null || echo "?") || FCTIME="?"
+            if [[ "$FNAME" =~ \.[0-9]+\.bin$ ]]; then
+                echo -e "      ${DIM}• $FNAME  (metadato sessione)${RESET}"
+            else
+                local TERM_TEXT
+                TERM_TEXT=$("$PY3" "$PARSER_PY" "$BIN" 2>/dev/null \
+                    | "$PY3" -c "import sys,json,html; d=json.load(sys.stdin); print(html.unescape(d.get('text','')))" 2>/dev/null || echo "")
+                if [[ -n "$TERM_TEXT" ]]; then
+                    echo -e "      ${GREEN}• $FNAME${RESET}  ${DIM}($FSIZE bytes)${RESET}"
+                    local LN=0
+                    while IFS= read -r LINE || [[ -n "$LINE" ]]; do
+                        LN=$((LN+1))
+                        printf "        ${DIM}%4d${RESET}  %s\n" "$LN" "$LINE"
+                    done <<< "$TERM_TEXT"
+                else
+                    echo -e "      ${DIM}• $FNAME  ($FSIZE bytes — nessun testo)${RESET}"
+                fi
+            fi
+            FILE_NAMES="${FILE_NAMES}${FNAME}|"
+            FILE_SIZES="${FILE_SIZES}${FSIZE}|"
+            FILE_MTIMES="${FILE_MTIMES}${FMTIME}|"
+            FILE_CTIMES="${FILE_CTIMES}${FCTIME}|"
+        done
+        RES_USERS+=("$USERNAME"); RES_PATHS+=("$TABSTATE_DIR")
+        RES_COUNTS+=("$COUNT")
+        RES_FILES+=("${FILE_NAMES%|}"); RES_SIZES+=("${FILE_SIZES%|}")
+        RES_MTIMES+=("${FILE_MTIMES%|}"); RES_CTIMES+=("${FILE_CTIMES%|}")
+        TOTAL_FILES=$((TOTAL_FILES + COUNT)); TOTAL_USERS=$((TOTAL_USERS + 1))
+    done < <(get_user_homes)
+
+    separator
+    info "$(L "Utenti:" "Users:") ${BOLD}$TOTAL_USERS${RESET}  |  File .bin: ${BOLD}$TOTAL_FILES"
+    [[ $TOTAL_FILES -eq 0 ]] && { warn "$(L "Nessun tab Notepad trovato." "No Notepad tab found.")"; return 0; }
+    ask_yn "Generare report HTML?" || return 0
+
+    local REPORT_HTML; REPORT_HTML=$(prepare_report_dir "notepad_tabstate")
+    local SCAN; SCAN=$(date "+%d/%m/%Y %H:%M:%S")
+    local CARDS_HTML=""
+    for i in "${!RES_USERS[@]}"; do
+        local USER="${RES_USERS[$i]}"
+        local PATH_FULL="${RES_PATHS[$i]}"
+        local COUNT="${RES_COUNTS[$i]}"
+        IFS='|' read -ra FNAMES  <<< "${RES_FILES[$i]}"
+        IFS='|' read -ra FSIZES  <<< "${RES_SIZES[$i]}"
+        IFS='|' read -ra FMTIMES <<< "${RES_MTIMES[$i]}"
+        IFS='|' read -ra FCTIMES <<< "${RES_CTIMES[$i]}"
+        local ROWS=""
+        for j in "${!FNAMES[@]}"; do
+            local FNAME="${FNAMES[$j]}" FSIZE="${FSIZES[$j]:-?}"
+            local FMTIME="${FMTIMES[$j]:-?}" FCTIME="${FCTIMES[$j]:-?}"
+            local BIN_PATH="${PATH_FULL}/${FNAME}"
+            local CONTENT_HTML=""
+            if [[ "$FNAME" =~ \.[0-9]+\.bin$ ]]; then
+                CONTENT_HTML="<span class='dim' style='font-size:.7rem'>metadato sessione</span>"
+            elif [[ -f "$BIN_PATH" ]]; then
+                local POUT
+                POUT=$("$PY3" "$PARSER_PY" "$BIN_PATH" 2>/dev/null || echo '{}')
+                local PTEXT; PTEXT=$("$PY3" -c "import sys,json; d=json.load(sys.stdin); print(d.get('text',''))" 2>/dev/null <<< "$POUT" || echo "")
+                local PTYPE; PTYPE=$("$PY3" -c "import sys,json; d=json.load(sys.stdin); print(d.get('type',''))" 2>/dev/null <<< "$POUT" || echo "")
+                local PPATH; PPATH=$("$PY3" -c "import sys,json; d=json.load(sys.stdin); print(d.get('saved_path',''))" 2>/dev/null <<< "$POUT" || echo "")
+                local TBADGE=""
+                case "$PTYPE" in
+                    unsaved) TBADGE="<span style='color:var(--accent2);font-size:.7rem'>● non salvato</span>" ;;
+                    saved)   TBADGE="<span style='color:var(--accent3);font-size:.7rem'>● salvato</span>" ;;
+                    scan)    TBADGE="<span style='color:var(--accent);font-size:.7rem'>● scan</span>" ;;
+                esac
+                local SPATH_HTML=""
+                [[ -n "$PPATH" ]] && SPATH_HTML="<div class='dim mono' style='font-size:.65rem;margin:.3rem 0'>📄 $(html_esc "$PPATH")</div>"
+                if [[ -n "$PTEXT" ]]; then
+                    CONTENT_HTML="${TBADGE}${SPATH_HTML}<pre style='font-family:var(--mono);font-size:.75rem;white-space:pre-wrap;max-height:250px;overflow-y:auto;margin-top:.4rem;color:var(--text)'>$(html_esc "$PTEXT")</pre>"
+                else
+                    CONTENT_HTML="${TBADGE}<span class='dim' style='margin-left:.5rem;font-size:.7rem'>nessun testo leggibile</span>"
+                fi
+            fi
+            ROWS+="<tr>
+              <td class='mono ok' style='white-space:nowrap;font-size:.7rem'>${FCTIME}</td>
+              <td class='mono' style='font-size:.75rem'>$(html_esc "$FNAME")</td>
+              <td class='mono mid' style='white-space:nowrap'>${FMTIME}</td>
+              <td class='mono mid'>${FSIZE} B</td>
+            </tr>
+            <tr><td colspan='4' style='padding:.5rem 1rem 1rem'>${CONTENT_HTML}</td></tr>"
+        done
+        CARDS_HTML+="<div class='card'>
+          <div class='card-header'>
+            <div class='uicon'>NT</div>
+            <div><div class='uname'>$(html_esc "$USER")</div><div class='upath'>$(html_esc "$PATH_FULL")</div></div>
+            <div class='badge'>${COUNT} tab</div>
+          </div>
+          <table><thead><tr><th>$(L "Creato" "Created")</th><th>GUID / File</th><th>$(L "Modificato" "Modified")</th><th>Dim.</th></tr></thead>
+          <tbody>${ROWS}</tbody></table>
+        </div>"
+    done
+
+    {
+        html_header "Notepad TabState"
+        html_page_header "NT" "Notepad <span>TabState</span> Forensics" \
+            "%LOCALAPPDATA%\\Packages\\Microsoft.WindowsNotepad_*\\LocalState\\TabState" "$SCAN" "$WIN_ROOT"
+        echo "<div class='statsbar'>
+          <div class='stat'><div class='label'>File .bin</div><div class='value'>${TOTAL_FILES}</div></div>
+          <div class='stat info'><div class='label'>Utenti</div><div class='value'>${TOTAL_USERS}</div></div>
+        </div>
+        <main><div class='stitle'>Tab Notepad per utente</div>
+        <div class='cards'>${CARDS_HTML}</div></main>"
         html_footer "$SCAN" "$WIN_ROOT"
     } > "$REPORT_HTML"
 
@@ -2058,165 +3331,6 @@ PYEOF
 }
 
 # ================================================================
-#  MODULO 4 — Cache RDP (Terminal Server Client)
-# ================================================================
-module_rdp_cache() {
-    section_header "$(L "Cache RDP — Terminal Server Client" "RDP Cache — Terminal Server Client")" "$CYAN"
-    check_win_root || return 1
-
-    local RDP_REL="AppData/Local/Microsoft/Terminal Server Client/Cache"
-    local TOTAL_FILES=0 TOTAL_USERS=0
-    declare -a RES_USERS=() RES_DIRS=() RES_FILES_LIST=()
-
-    while IFS= read -r USER_DIR; do
-        local USERNAME
-        USERNAME=$(basename "$USER_DIR")
-        local CACHE_DIR
-        CACHE_DIR=$(ci_find_dir "$USER_DIR" "$RDP_REL")
-        if [[ -z "$CACHE_DIR" || ! -d "$CACHE_DIR" ]]; then
-            dim_msg "$USERNAME — $(L "Cache RDP non trovata" "RDP cache not found")"
-            continue
-        fi
-        mapfile -t CACHE_FILES < <(find "$CACHE_DIR" -maxdepth 1 -type f \( -iname "*.bmc" -o -iname "*.bin" \) -printf "%T@ %p\n" 2>/dev/null | sort -rn | cut -d' ' -f2-)
-        if [[ ${#CACHE_FILES[@]} -eq 0 ]]; then
-            mapfile -t CACHE_FILES < <(find "$CACHE_DIR" -maxdepth 1 -type f \( -iname "*.bmc" -o -iname "*.bin" \) -print0 2>/dev/null | xargs -0 ls -t 2>/dev/null)
-        fi
-        local COUNT=${#CACHE_FILES[@]}
-        if [[ $COUNT -eq 0 ]]; then
-            warn "$USERNAME — $(L "Directory cache trovata ma vuota" "Cache directory found but empty")"
-            continue
-        fi
-        ok "$USERNAME — $COUNT $(L "file cache trovati in:" "cache files found in:") $CACHE_DIR"
-        local FILES_INFO=""
-        for F in "${CACHE_FILES[@]}"; do
-            local FNAME; FNAME=$(basename "$F")
-            local FSIZE; FSIZE=$(stat -c "%s" "$F" 2>/dev/null || echo "?")
-            local FMTIME; FMTIME=$(stat -c "%y" "$F" 2>/dev/null | cut -d'.' -f1 || echo "?")
-            echo -e "      ${DIM}• $FNAME  (${FSIZE} bytes — mod: $FMTIME)${RESET}"
-            FILES_INFO="${FILES_INFO}${FNAME}:${FSIZE}:${FMTIME}|"
-        done
-        RES_USERS+=("$USERNAME")
-        RES_DIRS+=("$CACHE_DIR")
-        RES_FILES_LIST+=("${FILES_INFO%|}")
-        TOTAL_FILES=$((TOTAL_FILES + COUNT))
-        TOTAL_USERS=$((TOTAL_USERS + 1))
-    done < <(get_user_homes)
-
-    # Cerca anche server RDP nel registro
-    echo ""
-    info "$(L "Ricerca server RDP recenti nel registro (NTUSER.DAT)..." "Searching recent RDP servers in registry (NTUSER.DAT)...")"
-    while IFS= read -r USER_DIR; do
-        local USERNAME
-        USERNAME=$(basename "$USER_DIR")
-        local NTUSER
-        NTUSER=$(get_user_hive "$USER_DIR" "NTUSER.DAT")
-        [[ -z "$NTUSER" ]] && continue
-        if check_regipy; then
-            local RDP_SERVERS
-            RDP_SERVERS=$("$PY3" - "$NTUSER" << 'PYEOF' 2>/dev/null || true
-import sys
-try:
-    from regipy.registry import RegistryHive
-    hive = RegistryHive(sys.argv[1])
-    try:
-        key = hive.get_key('Software\\Microsoft\\Terminal Server Client\\Servers')
-        for sk in key.iter_subkeys():
-            hostname = sk.name
-            uname = ''
-            for v in sk.get_values():
-                if v.name.lower() == 'usernamehinint' or v.name.lower() == 'usernamehint':
-                    uname = str(v.value)
-            print(f"{hostname}\t{uname}")
-    except: pass
-    try:
-        key2 = hive.get_key('Software\\Microsoft\\Terminal Server Client\\Default')
-        for v in key2.get_values():
-            if v.name.lower().startswith('mru'):
-                print(f"MRU: {v.value}\t")
-    except: pass
-except: pass
-PYEOF
-)
-            if [[ -n "$RDP_SERVERS" ]]; then
-                echo -e "  ${GREEN}${BOLD}$USERNAME — $(L "Server RDP trovati:" "RDP servers found:")${RESET}"
-                while IFS=$'\t' read -r HOST UNAME; do
-                    printf "      ${CYAN}%-40s${RESET}  ${DIM}utente: %s${RESET}\n" "$HOST" "${UNAME:--}"
-                done <<< "$RDP_SERVERS"
-            fi
-        fi
-    done < <(get_user_homes)
-
-    separator
-    info "Utenti con cache RDP: ${BOLD}$TOTAL_USERS${RESET}  |  $(L "File totali:" "Total files:") ${BOLD}$TOTAL_FILES"
-
-    if [[ $TOTAL_FILES -gt 0 ]]; then
-        echo ""
-        info "${BOLD}$(L "Per analizzare le tile bitmap della cache usa bmc-tools:" "To analyze cache bitmap tiles use bmc-tools:")${RESET}"
-        echo -e "    ${DIM}git clone https://github.com/ANSSI-FR/bmc-tools${RESET}"
-        echo -e "    ${DIM}${PY3} bmc-tools.py -s <dir_cache> -d ./output/ -b${RESET}"
-    fi
-
-    [[ $TOTAL_FILES -eq 0 ]] && { warn "$(L "Nessun file cache RDP trovato." "No RDP cache files found.")"; return 0; }
-    ask_yn "Generare report HTML?" || return 0
-
-    local REPORT_HTML; REPORT_HTML=$(prepare_report_dir "rdp_cache")
-    local SCAN; SCAN=$(date "+%d/%m/%Y %H:%M:%S")
-    local CARDS_HTML=""
-
-    for i in "${!RES_USERS[@]}"; do
-        local USER="${RES_USERS[$i]}"
-        local DIR="${RES_DIRS[$i]}"
-        local ROWS=""
-        IFS='|' read -ra FENTRIES <<< "${RES_FILES_LIST[$i]}"
-        # Ordina per FMTIME (k3, resto della riga) decrescente — FMTIME può contenere ':'
-        mapfile -t FENTRIES < <(printf '%s\n' "${FENTRIES[@]}" | sort -t':' -k3r)
-        for FE in "${FENTRIES[@]}"; do
-            IFS=':' read -r FNAME FSIZE FMTIME <<< "$FE"
-            ROWS+="<tr>
-              <td class='mono'>$(html_esc "$FNAME")</td>
-              <td class='mono mid' style='white-space:nowrap'>${FSIZE} B</td>
-              <td class='mono ok' style='white-space:nowrap'>${FMTIME}</td>
-            </tr>"
-        done
-        CARDS_HTML+="<div class='card'>
-          <div class='card-header'>
-            <div class='uicon'>RD</div>
-            <div><div class='uname'>$(html_esc "$USER")</div><div class='upath'>$(html_esc "$DIR")</div></div>
-            <div class='badge'>${#FENTRIES[@]} file</div>
-          </div>
-          <table><thead><tr><th>File</th><th>$(L "Dimensione" "Size")</th><th>$(L "Ultima modifica" "Last modified")</th></tr></thead>
-          <tbody>${ROWS}</tbody></table>
-        </div>"
-    done
-
-    {
-        html_header "RDP Cache"
-        html_page_header "RD" "RDP Cache <span>Forensics</span>" \
-            "%LOCALAPPDATA%\\Microsoft\\Terminal Server Client\\Cache" "$SCAN" "$WIN_ROOT"
-        echo "<div class='statsbar'>
-          <div class='stat'><div class='label'>File cache</div><div class='value'>${TOTAL_FILES}</div></div>
-          <div class='stat info'><div class='label'>Utenti</div><div class='value'>${TOTAL_USERS}</div></div>
-        </div>
-        <main>
-        <div class='stitle'>File cache per utente</div>
-        <div class='cards'>${CARDS_HTML}</div>
-        <div style='margin-top:1.5rem;padding:1rem 1.5rem;background:var(--bg3);border:1px solid var(--border);border-radius:6px'>
-          <div style='font-family:var(--mono);color:var(--accent);margin-bottom:.5rem'>Analisi tile bitmap</div>
-          <div style='font-family:var(--mono);font-size:.72rem;color:var(--text-dim)'>
-            git clone https://github.com/ANSSI-FR/bmc-tools<br>
-            ${PY3} bmc-tools.py -s &lt;dir_cache&gt; -d ./output/ -b
-          </div>
-        </div>
-        </main>"
-        html_footer "$SCAN" "$WIN_ROOT"
-    } > "$REPORT_HTML"
-
-    register_report "$REPORT_HTML"
-    ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
-    open_report_prompt "$REPORT_HTML"
-}
-
-# ================================================================
 #  MODULO 5 — Run Keys & Persistenza nel Registro
 # ================================================================
 module_run_keys() {
@@ -2421,241 +3535,6 @@ module_prefetch() {
           <thead><tr><th>$(L "Eseguibile" "Executable")</th><th>File .pf</th><th>$(L "Ultima esecuzione (mtime)" "Last run (mtime)")</th><th>Dim.</th></tr></thead>
           <tbody>${ROWS}</tbody>
         </table></div></main>"
-        html_footer "$SCAN" "$WIN_ROOT"
-    } > "$REPORT_HTML"
-
-    register_report "$REPORT_HTML"
-    ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
-    open_report_prompt "$REPORT_HTML"
-}
-
-# ================================================================
-#  MODULO 7 — Notepad TabState
-# ================================================================
-module_notepad_tabstate() {
-    section_header "$(L "Notepad TabState — Tab Rimasti Aperti" "Notepad TabState — Open Tabs")" "$MAGENTA"
-    check_win_root || return 1
-
-    local NOTEPAD_PKG="Microsoft.WindowsNotepad_8wekyb3d8bbwe"
-    local TABSTATE_REL="AppData/Local/Packages"
-    local TOTAL_FILES=0 TOTAL_USERS=0
-    declare -a RES_USERS=() RES_PATHS=() RES_COUNTS=()
-    declare -a RES_FILES=() RES_SIZES=() RES_MTIMES=() RES_CTIMES=()
-
-    # Parser .bin inline (stessa logica di notepad_tabstate.sh)
-    local PARSER_PY=""
-    PARSER_PY=$(mktemp /tmp/npad_parse_XXXXXX.py)
-    register_tmp "$PARSER_PY"
-    cat > "$PARSER_PY" << 'PYEOF'
-import sys, json, html as html_mod
-
-def read_varint(data, offset):
-    result = 0; shift = 0
-    while offset < len(data):
-        byte = data[offset]; offset += 1
-        result |= (byte & 0x7F) << shift
-        if not (byte & 0x80): break
-        shift += 7
-    return result, offset
-
-def is_good_text(txt, thr=0.85):
-    if not txt: return False
-    ok = sum(1 for c in txt if c.isprintable() or c in '\n\r\t ')
-    return ok / len(txt) >= thr
-
-def parse_bin(path):
-    try:
-        with open(path, 'rb') as f: data = f.read()
-    except Exception as e:
-        return {'error': str(e), 'text': '', 'type': 'error', 'saved_path': '', 'char_count': 0}
-    if len(data) < 4:
-        return {'error': 'File troppo piccolo', 'text': '', 'type': 'empty', 'saved_path': '', 'char_count': 0}
-    saved_path = ''; ftype = 0
-    if data[0] == 0x4E and data[1] == 0x50:
-        offset = 2; offset += 1
-        ftype = data[offset]; offset += 1
-        if ftype == 1 and offset < len(data):
-            path_len = data[offset]; offset += 1
-            if path_len > 0 and offset + path_len * 2 <= len(data):
-                saved_path = data[offset:offset + path_len * 2].decode('utf-16-le', errors='replace')
-                offset += path_len * 2
-        best_text = ''; best_score = 0
-        for skip in range(0, min(120, len(data) - offset)):
-            o = offset + skip
-            text_len, text_start = read_varint(data, o)
-            if not (1 <= text_len <= 200000): continue
-            end = text_start + text_len * 2
-            if end > len(data): continue
-            try:
-                txt = data[text_start:end].decode('utf-16-le', errors='strict')
-                if not is_good_text(txt): continue
-                ok = sum(1 for c in txt if c.isprintable() or c in '\n\r\t ')
-                score = len(txt) * (ok / len(txt))
-                if score > best_score: best_text = txt; best_score = score
-            except: pass
-        if best_text:
-            return {'text': best_text, 'saved_path': saved_path,
-                    'type': 'saved' if ftype == 1 else 'unsaved',
-                    'error': '', 'char_count': len(best_text)}
-    # Fallback scan UTF-16LE
-    start = 2 if (len(data) >= 2 and data[0] == 0x4E and data[1] == 0x50) else 0
-    runs = []; i = start; run = []
-    while i < len(data) - 1:
-        b1, b2 = data[i], data[i+1]
-        if b2 == 0 and (0x20 <= b1 <= 0x7e or b1 in (0x09, 0x0a, 0x0d)):
-            run.append(chr(b1)); i += 2
-        else:
-            if len(run) >= 6: runs.append(''.join(run).strip())
-            run = []; i += 1
-    if len(run) >= 6: runs.append(''.join(run).strip())
-    text = '\n'.join(r for r in runs if r)
-    if text:
-        return {'text': text, 'saved_path': saved_path, 'type': 'scan',
-                'error': '', 'char_count': len(text)}
-    return {'text': '', 'saved_path': '', 'type': 'empty', 'error': 'Nessun testo', 'char_count': 0}
-
-if __name__ == '__main__':
-    path = sys.argv[1]
-    result = parse_bin(path)
-    print(json.dumps({
-        'text': html_mod.escape(result.get('text', '')),
-        'saved_path': html_mod.escape(result.get('saved_path', '')),
-        'type': result.get('type', ''),
-        'error': result.get('error', ''),
-        'char_count': result.get('char_count', 0)
-    }))
-PYEOF
-
-    while IFS= read -r USER_DIR; do
-        local USERNAME; USERNAME=$(basename "$USER_DIR")
-        local PACKAGES_DIR
-        PACKAGES_DIR=$(ci_find_dir "$USER_DIR" "AppData/Local/Packages")
-        [[ -z "$PACKAGES_DIR" ]] && { dim_msg "$USERNAME — $(L "AppData\\Local\\Packages non trovata" "AppData\\Local\\Packages not found")"; continue; }
-        local NOTEPAD_DIR
-        NOTEPAD_DIR=$(find "$PACKAGES_DIR" -maxdepth 1 -iname "${NOTEPAD_PKG}*" -type d 2>/dev/null | head -1)
-        [[ -z "$NOTEPAD_DIR" ]] && { dim_msg "$USERNAME — $(L "Notepad UWP non installato" "Notepad UWP not installed")"; continue; }
-        local TABSTATE_DIR
-        TABSTATE_DIR=$(ci_find_dir "$NOTEPAD_DIR" "LocalState/TabState")
-        [[ -z "$TABSTATE_DIR" || ! -d "$TABSTATE_DIR" ]] && { warn "$USERNAME — $(L "TabState non trovata" "TabState not found")"; continue; }
-        mapfile -t BIN_FILES < <(find "$TABSTATE_DIR" -maxdepth 1 -iname "*.bin" -type f -printf "%T@ %p\n" 2>/dev/null | sort -rn | cut -d' ' -f2-)
-        if [[ ${#BIN_FILES[@]} -eq 0 ]]; then
-            # Fallback se printf %T@ non è supportato (BSD/macOS)
-            mapfile -t BIN_FILES < <(find "$TABSTATE_DIR" -maxdepth 1 -iname "*.bin" -type f -print0 2>/dev/null | xargs -0 ls -t 2>/dev/null)
-        fi
-        local COUNT=${#BIN_FILES[@]}
-        [[ $COUNT -eq 0 ]] && { warn "$USERNAME — $(L "TabState vuota" "TabState empty")"; continue; }
-        ok "$USERNAME — $COUNT $(L "file .bin trovati" ".bin files found")"
-        local FILE_NAMES="" FILE_SIZES="" FILE_MTIMES="" FILE_CTIMES=""
-        for BIN in "${BIN_FILES[@]}"; do
-            local FNAME; FNAME=$(basename "$BIN")
-            local FSIZE; FSIZE=$(stat -c "%s" "$BIN" 2>/dev/null || echo "?")
-            local FMTIME; FMTIME=$(stat -c "%y" "$BIN" 2>/dev/null | cut -d'.' -f1 || echo "?")
-            local RAW_CT; RAW_CT=$(stat -c "%W" "$BIN" 2>/dev/null || echo "0")
-            [[ "$RAW_CT" == "0" ]] && RAW_CT=$(stat -c "%Y" "$BIN" 2>/dev/null || echo "0")
-            local FCTIME
-            [[ "$RAW_CT" != "0" ]] && FCTIME=$(date -d "@${RAW_CT}" "+%Y-%m-%d %H:%M:%S" 2>/dev/null || echo "?") || FCTIME="?"
-            if [[ "$FNAME" =~ \.[0-9]+\.bin$ ]]; then
-                echo -e "      ${DIM}• $FNAME  (metadato sessione)${RESET}"
-            else
-                local TERM_TEXT
-                TERM_TEXT=$("$PY3" "$PARSER_PY" "$BIN" 2>/dev/null \
-                    | "$PY3" -c "import sys,json,html; d=json.load(sys.stdin); print(html.unescape(d.get('text','')))" 2>/dev/null || echo "")
-                if [[ -n "$TERM_TEXT" ]]; then
-                    echo -e "      ${GREEN}• $FNAME${RESET}  ${DIM}($FSIZE bytes)${RESET}"
-                    local LN=0
-                    while IFS= read -r LINE || [[ -n "$LINE" ]]; do
-                        LN=$((LN+1))
-                        printf "        ${DIM}%4d${RESET}  %s\n" "$LN" "$LINE"
-                    done <<< "$TERM_TEXT"
-                else
-                    echo -e "      ${DIM}• $FNAME  ($FSIZE bytes — nessun testo)${RESET}"
-                fi
-            fi
-            FILE_NAMES="${FILE_NAMES}${FNAME}|"
-            FILE_SIZES="${FILE_SIZES}${FSIZE}|"
-            FILE_MTIMES="${FILE_MTIMES}${FMTIME}|"
-            FILE_CTIMES="${FILE_CTIMES}${FCTIME}|"
-        done
-        RES_USERS+=("$USERNAME"); RES_PATHS+=("$TABSTATE_DIR")
-        RES_COUNTS+=("$COUNT")
-        RES_FILES+=("${FILE_NAMES%|}"); RES_SIZES+=("${FILE_SIZES%|}")
-        RES_MTIMES+=("${FILE_MTIMES%|}"); RES_CTIMES+=("${FILE_CTIMES%|}")
-        TOTAL_FILES=$((TOTAL_FILES + COUNT)); TOTAL_USERS=$((TOTAL_USERS + 1))
-    done < <(get_user_homes)
-
-    separator
-    info "$(L "Utenti:" "Users:") ${BOLD}$TOTAL_USERS${RESET}  |  File .bin: ${BOLD}$TOTAL_FILES"
-    [[ $TOTAL_FILES -eq 0 ]] && { warn "$(L "Nessun tab Notepad trovato." "No Notepad tab found.")"; return 0; }
-    ask_yn "Generare report HTML?" || return 0
-
-    local REPORT_HTML; REPORT_HTML=$(prepare_report_dir "notepad_tabstate")
-    local SCAN; SCAN=$(date "+%d/%m/%Y %H:%M:%S")
-    local CARDS_HTML=""
-    for i in "${!RES_USERS[@]}"; do
-        local USER="${RES_USERS[$i]}"
-        local PATH_FULL="${RES_PATHS[$i]}"
-        local COUNT="${RES_COUNTS[$i]}"
-        IFS='|' read -ra FNAMES  <<< "${RES_FILES[$i]}"
-        IFS='|' read -ra FSIZES  <<< "${RES_SIZES[$i]}"
-        IFS='|' read -ra FMTIMES <<< "${RES_MTIMES[$i]}"
-        IFS='|' read -ra FCTIMES <<< "${RES_CTIMES[$i]}"
-        local ROWS=""
-        for j in "${!FNAMES[@]}"; do
-            local FNAME="${FNAMES[$j]}" FSIZE="${FSIZES[$j]:-?}"
-            local FMTIME="${FMTIMES[$j]:-?}" FCTIME="${FCTIMES[$j]:-?}"
-            local BIN_PATH="${PATH_FULL}/${FNAME}"
-            local CONTENT_HTML=""
-            if [[ "$FNAME" =~ \.[0-9]+\.bin$ ]]; then
-                CONTENT_HTML="<span class='dim' style='font-size:.7rem'>metadato sessione</span>"
-            elif [[ -f "$BIN_PATH" ]]; then
-                local POUT
-                POUT=$("$PY3" "$PARSER_PY" "$BIN_PATH" 2>/dev/null || echo '{}')
-                local PTEXT; PTEXT=$("$PY3" -c "import sys,json; d=json.load(sys.stdin); print(d.get('text',''))" 2>/dev/null <<< "$POUT" || echo "")
-                local PTYPE; PTYPE=$("$PY3" -c "import sys,json; d=json.load(sys.stdin); print(d.get('type',''))" 2>/dev/null <<< "$POUT" || echo "")
-                local PPATH; PPATH=$("$PY3" -c "import sys,json; d=json.load(sys.stdin); print(d.get('saved_path',''))" 2>/dev/null <<< "$POUT" || echo "")
-                local TBADGE=""
-                case "$PTYPE" in
-                    unsaved) TBADGE="<span style='color:var(--accent2);font-size:.7rem'>● non salvato</span>" ;;
-                    saved)   TBADGE="<span style='color:var(--accent3);font-size:.7rem'>● salvato</span>" ;;
-                    scan)    TBADGE="<span style='color:var(--accent);font-size:.7rem'>● scan</span>" ;;
-                esac
-                local SPATH_HTML=""
-                [[ -n "$PPATH" ]] && SPATH_HTML="<div class='dim mono' style='font-size:.65rem;margin:.3rem 0'>📄 $(html_esc "$PPATH")</div>"
-                if [[ -n "$PTEXT" ]]; then
-                    CONTENT_HTML="${TBADGE}${SPATH_HTML}<pre style='font-family:var(--mono);font-size:.75rem;white-space:pre-wrap;max-height:250px;overflow-y:auto;margin-top:.4rem;color:var(--text)'>$(html_esc "$PTEXT")</pre>"
-                else
-                    CONTENT_HTML="${TBADGE}<span class='dim' style='margin-left:.5rem;font-size:.7rem'>nessun testo leggibile</span>"
-                fi
-            fi
-            ROWS+="<tr>
-              <td class='mono ok' style='white-space:nowrap;font-size:.7rem'>${FCTIME}</td>
-              <td class='mono' style='font-size:.75rem'>$(html_esc "$FNAME")</td>
-              <td class='mono mid' style='white-space:nowrap'>${FMTIME}</td>
-              <td class='mono mid'>${FSIZE} B</td>
-            </tr>
-            <tr><td colspan='4' style='padding:.5rem 1rem 1rem'>${CONTENT_HTML}</td></tr>"
-        done
-        CARDS_HTML+="<div class='card'>
-          <div class='card-header'>
-            <div class='uicon'>NT</div>
-            <div><div class='uname'>$(html_esc "$USER")</div><div class='upath'>$(html_esc "$PATH_FULL")</div></div>
-            <div class='badge'>${COUNT} tab</div>
-          </div>
-          <table><thead><tr><th>$(L "Creato" "Created")</th><th>GUID / File</th><th>$(L "Modificato" "Modified")</th><th>Dim.</th></tr></thead>
-          <tbody>${ROWS}</tbody></table>
-        </div>"
-    done
-
-    {
-        html_header "Notepad TabState"
-        html_page_header "NT" "Notepad <span>TabState</span> Forensics" \
-            "%LOCALAPPDATA%\\Packages\\Microsoft.WindowsNotepad_*\\LocalState\\TabState" "$SCAN" "$WIN_ROOT"
-        echo "<div class='statsbar'>
-          <div class='stat'><div class='label'>File .bin</div><div class='value'>${TOTAL_FILES}</div></div>
-          <div class='stat info'><div class='label'>Utenti</div><div class='value'>${TOTAL_USERS}</div></div>
-        </div>
-        <main><div class='stitle'>Tab Notepad per utente</div>
-        <div class='cards'>${CARDS_HTML}</div></main>"
         html_footer "$SCAN" "$WIN_ROOT"
     } > "$REPORT_HTML"
 
@@ -3037,6 +3916,165 @@ PYEOF
           <thead><tr><th style='width:12%'>$(L "Utente" "User")</th><th style='width:16%;white-space:nowrap'>$(L "Data accesso" "Access date")</th><th style='width:24%'>File .lnk</th><th>Target path</th></tr></thead>
           <tbody>${ROWS}</tbody>
         </table></div></main>"
+        html_footer "$SCAN" "$WIN_ROOT"
+    } > "$REPORT_HTML"
+
+    register_report "$REPORT_HTML"
+    ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
+    open_report_prompt "$REPORT_HTML"
+}
+
+# ================================================================
+#  MODULO 4 — Cache RDP (Terminal Server Client)
+# ================================================================
+module_rdp_cache() {
+    section_header "$(L "Cache RDP — Terminal Server Client" "RDP Cache — Terminal Server Client")" "$CYAN"
+    check_win_root || return 1
+
+    local RDP_REL="AppData/Local/Microsoft/Terminal Server Client/Cache"
+    local TOTAL_FILES=0 TOTAL_USERS=0
+    declare -a RES_USERS=() RES_DIRS=() RES_FILES_LIST=()
+
+    while IFS= read -r USER_DIR; do
+        local USERNAME
+        USERNAME=$(basename "$USER_DIR")
+        local CACHE_DIR
+        CACHE_DIR=$(ci_find_dir "$USER_DIR" "$RDP_REL")
+        if [[ -z "$CACHE_DIR" || ! -d "$CACHE_DIR" ]]; then
+            dim_msg "$USERNAME — $(L "Cache RDP non trovata" "RDP cache not found")"
+            continue
+        fi
+        mapfile -t CACHE_FILES < <(find "$CACHE_DIR" -maxdepth 1 -type f \( -iname "*.bmc" -o -iname "*.bin" \) -printf "%T@ %p\n" 2>/dev/null | sort -rn | cut -d' ' -f2-)
+        if [[ ${#CACHE_FILES[@]} -eq 0 ]]; then
+            mapfile -t CACHE_FILES < <(find "$CACHE_DIR" -maxdepth 1 -type f \( -iname "*.bmc" -o -iname "*.bin" \) -print0 2>/dev/null | xargs -0 ls -t 2>/dev/null)
+        fi
+        local COUNT=${#CACHE_FILES[@]}
+        if [[ $COUNT -eq 0 ]]; then
+            warn "$USERNAME — $(L "Directory cache trovata ma vuota" "Cache directory found but empty")"
+            continue
+        fi
+        ok "$USERNAME — $COUNT $(L "file cache trovati in:" "cache files found in:") $CACHE_DIR"
+        local FILES_INFO=""
+        for F in "${CACHE_FILES[@]}"; do
+            local FNAME; FNAME=$(basename "$F")
+            local FSIZE; FSIZE=$(stat -c "%s" "$F" 2>/dev/null || echo "?")
+            local FMTIME; FMTIME=$(stat -c "%y" "$F" 2>/dev/null | cut -d'.' -f1 || echo "?")
+            echo -e "      ${DIM}• $FNAME  (${FSIZE} bytes — mod: $FMTIME)${RESET}"
+            FILES_INFO="${FILES_INFO}${FNAME}:${FSIZE}:${FMTIME}|"
+        done
+        RES_USERS+=("$USERNAME")
+        RES_DIRS+=("$CACHE_DIR")
+        RES_FILES_LIST+=("${FILES_INFO%|}")
+        TOTAL_FILES=$((TOTAL_FILES + COUNT))
+        TOTAL_USERS=$((TOTAL_USERS + 1))
+    done < <(get_user_homes)
+
+    # Cerca anche server RDP nel registro
+    echo ""
+    info "$(L "Ricerca server RDP recenti nel registro (NTUSER.DAT)..." "Searching recent RDP servers in registry (NTUSER.DAT)...")"
+    while IFS= read -r USER_DIR; do
+        local USERNAME
+        USERNAME=$(basename "$USER_DIR")
+        local NTUSER
+        NTUSER=$(get_user_hive "$USER_DIR" "NTUSER.DAT")
+        [[ -z "$NTUSER" ]] && continue
+        if check_regipy; then
+            local RDP_SERVERS
+            RDP_SERVERS=$("$PY3" - "$NTUSER" << 'PYEOF' 2>/dev/null || true
+import sys
+try:
+    from regipy.registry import RegistryHive
+    hive = RegistryHive(sys.argv[1])
+    try:
+        key = hive.get_key('Software\\Microsoft\\Terminal Server Client\\Servers')
+        for sk in key.iter_subkeys():
+            hostname = sk.name
+            uname = ''
+            for v in sk.get_values():
+                if v.name.lower() == 'usernamehinint' or v.name.lower() == 'usernamehint':
+                    uname = str(v.value)
+            print(f"{hostname}\t{uname}")
+    except: pass
+    try:
+        key2 = hive.get_key('Software\\Microsoft\\Terminal Server Client\\Default')
+        for v in key2.get_values():
+            if v.name.lower().startswith('mru'):
+                print(f"MRU: {v.value}\t")
+    except: pass
+except: pass
+PYEOF
+)
+            if [[ -n "$RDP_SERVERS" ]]; then
+                echo -e "  ${GREEN}${BOLD}$USERNAME — $(L "Server RDP trovati:" "RDP servers found:")${RESET}"
+                while IFS=$'\t' read -r HOST UNAME; do
+                    printf "      ${CYAN}%-40s${RESET}  ${DIM}utente: %s${RESET}\n" "$HOST" "${UNAME:--}"
+                done <<< "$RDP_SERVERS"
+            fi
+        fi
+    done < <(get_user_homes)
+
+    separator
+    info "Utenti con cache RDP: ${BOLD}$TOTAL_USERS${RESET}  |  $(L "File totali:" "Total files:") ${BOLD}$TOTAL_FILES"
+
+    if [[ $TOTAL_FILES -gt 0 ]]; then
+        echo ""
+        info "${BOLD}$(L "Per analizzare le tile bitmap della cache usa bmc-tools:" "To analyze cache bitmap tiles use bmc-tools:")${RESET}"
+        echo -e "    ${DIM}git clone https://github.com/ANSSI-FR/bmc-tools${RESET}"
+        echo -e "    ${DIM}${PY3} bmc-tools.py -s <dir_cache> -d ./output/ -b${RESET}"
+    fi
+
+    [[ $TOTAL_FILES -eq 0 ]] && { warn "$(L "Nessun file cache RDP trovato." "No RDP cache files found.")"; return 0; }
+    ask_yn "Generare report HTML?" || return 0
+
+    local REPORT_HTML; REPORT_HTML=$(prepare_report_dir "rdp_cache")
+    local SCAN; SCAN=$(date "+%d/%m/%Y %H:%M:%S")
+    local CARDS_HTML=""
+
+    for i in "${!RES_USERS[@]}"; do
+        local USER="${RES_USERS[$i]}"
+        local DIR="${RES_DIRS[$i]}"
+        local ROWS=""
+        IFS='|' read -ra FENTRIES <<< "${RES_FILES_LIST[$i]}"
+        # Ordina per FMTIME (k3, resto della riga) decrescente — FMTIME può contenere ':'
+        mapfile -t FENTRIES < <(printf '%s\n' "${FENTRIES[@]}" | sort -t':' -k3r)
+        for FE in "${FENTRIES[@]}"; do
+            IFS=':' read -r FNAME FSIZE FMTIME <<< "$FE"
+            ROWS+="<tr>
+              <td class='mono'>$(html_esc "$FNAME")</td>
+              <td class='mono mid' style='white-space:nowrap'>${FSIZE} B</td>
+              <td class='mono ok' style='white-space:nowrap'>${FMTIME}</td>
+            </tr>"
+        done
+        CARDS_HTML+="<div class='card'>
+          <div class='card-header'>
+            <div class='uicon'>RD</div>
+            <div><div class='uname'>$(html_esc "$USER")</div><div class='upath'>$(html_esc "$DIR")</div></div>
+            <div class='badge'>${#FENTRIES[@]} file</div>
+          </div>
+          <table><thead><tr><th>File</th><th>$(L "Dimensione" "Size")</th><th>$(L "Ultima modifica" "Last modified")</th></tr></thead>
+          <tbody>${ROWS}</tbody></table>
+        </div>"
+    done
+
+    {
+        html_header "RDP Cache"
+        html_page_header "RD" "RDP Cache <span>Forensics</span>" \
+            "%LOCALAPPDATA%\\Microsoft\\Terminal Server Client\\Cache" "$SCAN" "$WIN_ROOT"
+        echo "<div class='statsbar'>
+          <div class='stat'><div class='label'>File cache</div><div class='value'>${TOTAL_FILES}</div></div>
+          <div class='stat info'><div class='label'>Utenti</div><div class='value'>${TOTAL_USERS}</div></div>
+        </div>
+        <main>
+        <div class='stitle'>File cache per utente</div>
+        <div class='cards'>${CARDS_HTML}</div>
+        <div style='margin-top:1.5rem;padding:1rem 1.5rem;background:var(--bg3);border:1px solid var(--border);border-radius:6px'>
+          <div style='font-family:var(--mono);color:var(--accent);margin-bottom:.5rem'>Analisi tile bitmap</div>
+          <div style='font-family:var(--mono);font-size:.72rem;color:var(--text-dim)'>
+            git clone https://github.com/ANSSI-FR/bmc-tools<br>
+            ${PY3} bmc-tools.py -s &lt;dir_cache&gt; -d ./output/ -b
+          </div>
+        </div>
+        </main>"
         html_footer "$SCAN" "$WIN_ROOT"
     } > "$REPORT_HTML"
 
@@ -7836,75 +8874,6 @@ TABLEEOF
     open_report_prompt "$REPORT_HTML"
 }
 
-# Esegue un modulo in modalità batch e registra il risultato in SUMMARY_TABLE.
-# Durante l'esecuzione mostra il suggerimento ESC; premendo ESC il modulo viene
-# interrotto e si passa al successivo.
-run_batch_module() {
-    local mod_num="$1"
-    local mod_func="$2"
-    local mod_name="$3"
-    local total_mods="${4:-38}"
-    local _ESC_HINT; _ESC_HINT="$(L "[ESC: salta modulo]" "[ESC: skip module]")"
-
-    echo -ne "  ${CYAN}[*]${RESET} [${mod_num}/${total_mods}] $(L "Esecuzione modulo" "Running module") $mod_num ($mod_name)...  ${DIM}${_ESC_HINT}${RESET}\r"
-    log_msg "[BATCH] Modulo $mod_num: $mod_name"
-
-    # I report generati dal subshell vengono scritti su un file temp
-    # perché gli array bash non si propagano al processo padre.
-    local _REP_TMP; _REP_TMP=$(mktemp)
-
-    (
-        # Override locale: scrive il path nel file temp invece dell'array
-        register_report() { [[ -n "${1:-}" && -f "$1" ]] && echo "$1" >> "$_REP_TMP"; }
-        $mod_func >/dev/null 2>&1
-    ) &
-    local MOD_PID=$!
-
-    # Monitoraggio tasto ESC (solo se /dev/tty è disponibile)
-    local SKIPPED=0
-    local _OLD_STTY=""
-    if [[ -c /dev/tty ]]; then
-        _OLD_STTY=$(stty -g </dev/tty 2>/dev/null) || true
-        stty -echo -icanon min 0 time 0 </dev/tty 2>/dev/null || true
-        while kill -0 "$MOD_PID" 2>/dev/null; do
-            local KEY=""
-            IFS= read -r -s -t 0.2 -N 1 KEY </dev/tty 2>/dev/null || true
-            if [[ "$KEY" == $'\033' ]]; then
-                kill "$MOD_PID" 2>/dev/null
-                SKIPPED=1
-                break
-            fi
-        done
-        [[ -n "$_OLD_STTY" ]] && stty "$_OLD_STTY" </dev/tty 2>/dev/null || true
-    fi
-
-    wait "$MOD_PID" 2>/dev/null
-
-    if [[ $SKIPPED -eq 1 ]]; then
-        printf '\r\033[K'
-        echo -e "  ${YELLOW}[⏭]${RESET} [${mod_num}/${total_mods}] $mod_name — $(L "annullato (ESC)" "cancelled (ESC)")"
-        SUMMARY_TABLE+=("$mod_num|$mod_name|SKIP|$(L "annullato" "cancelled")")
-        rm -f "$_REP_TMP"
-        return
-    fi
-
-    # Importa i report generati nel subshell
-    if [[ -s "$_REP_TMP" ]]; then
-        while IFS= read -r _rep; do
-            [[ -n "$_rep" && -f "$_rep" ]] && GENERATED_REPORTS+=("$_rep")
-        done < "$_REP_TMP"
-        local rep_path="${GENERATED_REPORTS[-1]}"
-        printf '\r\033[K'
-        echo -e "  ${GREEN}[✓]${RESET} [${mod_num}/${total_mods}] $mod_name — report: ${DIM}${rep_path}${RESET}"
-        SUMMARY_TABLE+=("$mod_num|$mod_name|SI|$rep_path")
-    else
-        printf '\r\033[K'
-        echo -e "  ${DIM}[i] [${mod_num}/${total_mods}] $mod_name — $(L "nessun risultato" "no results")${RESET}"
-        SUMMARY_TABLE+=("$mod_num|$mod_name|NO|-")
-    fi
-    rm -f "$_REP_TMP"
-}
-
 # ================================================================
 #  MODULO 38 — PAD Offline (Active Directory Analysis)
 # ================================================================
@@ -10074,640 +11043,6 @@ CSSEOF
 }
 
 # ================================================================
-#  DASHBOARD "FULL" — indice navigabile con tab + iframe centrale.
-#  Generata al termine di "esegui TUTTI i moduli" (Windows/Linux/macOS).
-#  Costruita interamente da SUMMARY_TABLE (righe "num|nome|SI/NONE/SKIP|path").
-# ================================================================
-generate_full_dashboard() {
-    [[ -z "$REPORT_BASE_DIR" ]] && return 0
-    [[ ${#SUMMARY_TABLE[@]} -eq 0 ]] && return 0
-    local OSL; OSL=$(os_label)
-    local SCAN; SCAN=$(date "+%d/%m/%Y %H:%M:%S")
-    local DASH="${REPORT_BASE_DIR}/index.html"
-    local TABS="" COUNT_OK=0 COUNT_TOTAL=0
-
-    for row in "${SUMMARY_TABLE[@]}"; do
-        IFS='|' read -r mnum mname msy mpath <<< "$row"
-        [[ -z "$mnum" ]] && continue
-        COUNT_TOTAL=$((COUNT_TOTAL + 1))
-        local NUM2; NUM2=$(printf '%02d' "$mnum" 2>/dev/null || echo "$mnum")
-        local NAME_ESC; NAME_ESC=$(html_esc "$mname")
-        if [[ "$msy" == "SI" ]]; then
-            COUNT_OK=$((COUNT_OK + 1))
-            local rel="${mpath#$REPORT_BASE_DIR/}"
-            TABS+="<button class='tab' data-src='$(html_esc "$rel")'><span class='tn'>${NUM2}</span><span class='tl'>${NAME_ESC}</span><span class='dot ok'></span></button>"
-        else
-            local CLS="none" LBL
-            [[ "$msy" == "SKIP" ]] && { CLS="skip"; LBL="skip"; } || LBL="—"
-            TABS+="<button class='tab disabled' disabled title='$([ "$msy" = "SKIP" ] && echo "$(L "saltato" "skipped")" || echo "$(L "nessuna evidenza" "no findings")")'><span class='tn'>${NUM2}</span><span class='tl'>${NAME_ESC}</span><span class='dot ${CLS}'></span></button>"
-        fi
-    done
-
-    local HOST_DISP="${HOST_NAME:-N/A}"
-    # Icona "naso di cane che fiuta" (SVG inline, bianco su sfondo blu)
-    local NOSE_SVG='<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M19 11c2-2 5-2 7 0" fill="none" stroke="#dbeafe" stroke-width="2.4" stroke-linecap="round" opacity=".85"/><path d="M38 11c2-2 5-2 7 0" fill="none" stroke="#dbeafe" stroke-width="2.4" stroke-linecap="round" opacity=".85"/><path fill="#fff" d="M32 50C17 39 10 32 10 25c0-6 6-9 12-7 4 1 7 4 10 7 3-3 6-6 10-7 6-2 12 1 12 7 0 7-7 14-22 25Z"/><ellipse cx="23" cy="28" rx="3" ry="4.3" fill="#1f6feb"/><ellipse cx="41" cy="28" rx="3" ry="4.3" fill="#1f6feb"/><path d="M32 33v10" stroke="#1f6feb" stroke-width="2.6" stroke-linecap="round"/></svg>'
-    {
-        cat << HTMLEOF
-<!DOCTYPE html>
-<html lang="$(L "it" "en")">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FIUTO — Full Report (${OSL})</title>
-<style>
-  :root{ --bg:#080b0f; --bg2:#0d1117; --bg3:#131920; --bg4:#1a2332; --border:#1e2d3d;
-    --accent:#58a6ff; --accent2:#ff7b72; --accent3:#3fb950; --accent4:#f0883e;
-    --text:#c9d1d9; --text-dim:#3d5166; --text-mid:#6e8898;
-    --mono:'Fira Code',ui-monospace,monospace; --sans:'DM Sans',system-ui,sans-serif; }
-  *{box-sizing:border-box;margin:0;padding:0}
-  html,body{height:100%}
-  body{background:var(--bg);color:var(--text);font-family:var(--sans);display:flex;flex-direction:column;height:100vh;overflow:hidden}
-  header{background:var(--bg2);border-bottom:1px solid var(--border);padding:1rem 1.6rem;display:flex;align-items:center;gap:1.4rem;flex-shrink:0}
-  .hicon{width:2.6rem;height:2.6rem;background:linear-gradient(135deg,var(--accent),#1f6feb);display:flex;align-items:center;justify-content:center;flex-shrink:0;clip-path:polygon(0 15%,15% 0,85% 0,100% 15%,100% 85%,85% 100%,15% 100%,0 85%)}
-  .hicon svg{width:62%;height:62%}
-  .htxt h1{font-size:1.1rem;color:#fff;font-weight:700}
-  .htxt .sub{font-size:.66rem;color:var(--text-dim);font-family:var(--mono);margin-top:.2rem}
-  .hstats{margin-left:auto;display:flex;gap:1.6rem;font-family:var(--mono)}
-  .hstats .s .v{font-size:1.3rem;font-weight:800}
-  .hstats .s .l{font-size:.55rem;text-transform:uppercase;letter-spacing:.12em;color:var(--text-dim)}
-  .s.ok .v{color:var(--accent3)} .s.tot .v{color:var(--accent)}
-  #tabs{display:flex;flex-wrap:wrap;gap:.15rem .2rem;background:var(--bg2);border-bottom:1px solid var(--border);padding:.4rem .8rem;flex-shrink:0;max-height:45vh;overflow-y:auto;align-content:flex-start}
-  #tabs::-webkit-scrollbar{width:6px}
-  #tabs::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
-  .tab{display:flex;align-items:center;gap:.4rem;white-space:nowrap;background:var(--bg3);border:1px solid var(--border);border-radius:5px;color:var(--text-mid);font-family:var(--mono);font-size:.72rem;padding:.4rem .6rem;cursor:pointer;transition:.15s}
-  .tab:hover:not(.disabled){color:var(--text);border-color:var(--accent);background:rgba(88,166,255,.08)}
-  .tab .tn{color:var(--text-dim);font-size:.64rem}
-  .tab.active{color:#fff;border-color:var(--accent4);background:rgba(240,136,62,.12)}
-  .tab.active .tn{color:var(--accent4)}
-  .tab.disabled{opacity:.4;cursor:not-allowed}
-  .dot{width:.45rem;height:.45rem;border-radius:50%;flex-shrink:0}
-  .dot.ok{background:var(--accent3)} .dot.none{background:var(--border)} .dot.skip{background:var(--accent4)}
-  main{flex:1;position:relative;background:var(--bg)}
-  iframe{width:100%;height:100%;border:0;background:var(--bg);display:none}
-  iframe.show{display:block}
-  #placeholder{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem;text-align:center;padding:2rem}
-  #placeholder .big{font-family:var(--mono);font-size:1.1rem;color:var(--text-mid)}
-  #placeholder .small{font-size:.8rem;color:var(--text-dim);max-width:34rem;line-height:1.6}
-  #placeholder .logo{width:4rem;height:4rem;background:linear-gradient(135deg,var(--accent),#1f6feb);display:flex;align-items:center;justify-content:center;clip-path:polygon(0 15%,15% 0,85% 0,100% 15%,100% 85%,85% 100%,15% 100%,0 85%)}
-  #placeholder .logo svg{width:62%;height:62%}
-</style>
-</head>
-<body>
-<header>
-  <div class="hicon">${NOSE_SVG}</div>
-  <div class="htxt">
-    <h1>FIUTO — Full Report</h1>
-    <div class="sub">${OSL} · ${HOST_DISP} · ${SCAN}</div>
-  </div>
-  <div class="hstats">
-    <div class="s ok"><div class="v">${COUNT_OK}</div><div class="l">$(L "con evidenze" "with findings")</div></div>
-    <div class="s tot"><div class="v">${COUNT_TOTAL}</div><div class="l">$(L "moduli" "modules")</div></div>
-  </div>
-</header>
-<nav id="tabs">${TABS}</nav>
-<main>
-  <iframe id="viewer" title="report"></iframe>
-  <div id="placeholder">
-    <div class="logo">${NOSE_SVG}</div>
-    <div class="big">$(L "Seleziona un modulo dalle tab in alto" "Select a module from the tabs above")</div>
-    <div class="small">$(L "Il report verrà caricato qui al centro. Puoi passare da un modulo all'altro senza aprire file separati." "The report will load here in the center. Switch between modules without opening separate files.")</div>
-  </div>
-</main>
-<script>
-(function(){
-  var tabs=document.querySelectorAll('.tab:not(.disabled)'),
-      viewer=document.getElementById('viewer'),
-      ph=document.getElementById('placeholder');
-  tabs.forEach(function(t){
-    t.addEventListener('click',function(){
-      document.querySelectorAll('.tab').forEach(function(x){x.classList.remove('active');});
-      t.classList.add('active');
-      var src=t.getAttribute('data-src');
-      if(src){ viewer.src=src; viewer.classList.add('show'); ph.style.display='none'; }
-    });
-  });
-})();
-</script>
-</body></html>
-HTMLEOF
-    } > "$DASH"
-
-    register_report "$DASH"
-    echo ""
-    ok "$(L "Dashboard FULL generata:" "FULL dashboard generated:") ${BOLD}$DASH"
-    open_report_prompt "$DASH"
-}
-
-run_all_modules() {
-    clear
-    print_banner
-    info "$(t batch_running)"
-    echo ""
-    if [[ -z "$REPORT_BASE_DIR" ]]; then
-        REPORT_BASE_DIR="${INVOCATION_DIR}/fiuto_reports_$(date +%Y%m%d_%H%M%S)"
-        LOG_FILE="${REPORT_BASE_DIR}/fiuto_session_$(date +%Y%m%d_%H%M%S).log"
-    fi
-    info "$(t batch_report_dir) ${BOLD}$REPORT_BASE_DIR${RESET}"
-    log_msg "$(t batch_started)$WIN_ROOT ==="
-    sleep 1
-
-    BATCH_MODE=true
-    SUMMARY_TABLE=()
-
-    echo ""
-    run_batch_module 1 module_ps_history "PowerShell History" 39
-    run_batch_module 2 module_notepad_tabstate "Notepad TabState" 39
-    run_batch_module 3 module_ifeo "IFEO" 39
-    run_batch_module 4 module_bam "BAM" 39
-    run_batch_module 5 module_run_keys "Run Keys" 39
-    run_batch_module 6 module_prefetch "Prefetch" 39
-    run_batch_module 7 module_scheduled_tasks "Scheduled Tasks" 39
-    run_batch_module 8 module_usb "USB Devices" 39
-    run_batch_module 9 module_lnk "LNK Files" 39
-    run_batch_module 10 module_rdp_cache "RDP Cache" 39
-    run_batch_module 11 module_services "Services" 39
-    run_batch_module 12 module_evtx "EVTX" 39
-    run_batch_module 13 module_amcache "Amcache" 39
-    run_batch_module 14 module_recycle_bin "Recycle Bin" 39
-    run_batch_module 15 module_wmi "WMI" 39
-    run_batch_module 16 module_srum "SRUM" 39
-    run_batch_module 17 module_browser "Browser History" 39
-    run_batch_module 18 module_userassist "UserAssist" 39
-    run_batch_module 19 module_shellbags "Shellbags" 39
-    run_batch_module 20 module_sam "SAM" 39
-    run_batch_module 21 module_mft "MFT" 39
-    run_batch_module 22 module_opensave "Open/Save MRU" 39
-    run_batch_module 23 module_usn "USN Journal" 39
-    run_batch_module 24 module_ntds "NTDS.dit" 39
-    run_batch_module 25 module_hiberfil "Hibernation / Pagefile" 39
-    run_batch_module 26 module_wer_files "WER Files" 39
-    run_batch_module 27 module_credential_manager "Credential Manager" 39
-    run_batch_module 28 module_wlan "WLAN Profiles" 39
-    run_batch_module 29 module_appx "AppX / UWP" 39
-    run_batch_module 30 module_browser_extra "Browser Logins/Downloads" 39
-    run_batch_module 31 module_clipboard "Clipboard History" 39
-    run_batch_module 32 module_office_mru "Office MRU" 39
-    run_batch_module 33 module_defender_quarantine "Defender Quarantine" 39
-    run_batch_module 34 module_ps_scriptblock "PS ScriptBlock Log" 39
-    run_batch_module 35 module_jumplists "JumpLists" 39
-    run_batch_module 36 module_network_artifacts "Network Artifacts" 39
-    run_batch_module 37 module_master_timeline "Master Timeline" 39
-    # Modulo 38: eseguito solo se il disco è un Domain Controller (ntds.dit presente)
-    local _ntds_check
-    _ntds_check=$(find "$WIN_ROOT" -maxdepth 8 -iname "ntds.dit" -type f 2>/dev/null | head -1)
-    if [[ -n "$_ntds_check" ]]; then
-        run_batch_module 38 module_pad_offline "PAD Offline AD" 39
-    else
-        echo -e "  ${DIM}[i] [38/39] PAD Offline AD — $(L "saltato (non è un Domain Controller)" "skipped (not a Domain Controller)")${RESET}"
-        SUMMARY_TABLE+=("38|PAD Offline AD|SKIP|$(L "non è un DC" "not a DC")")
-    fi
-    run_batch_module 39 module_ai_chat "AI Chat History" 39
-
-    BATCH_MODE=false
-
-    echo ""
-    section_header "$(L "Riepilogo Scansione Globale" "Global Scan Summary")" "$GREEN"
-    local _hdr_mod;    _hdr_mod="$(L    "MOD" "MOD")"
-    local _hdr_name;   _hdr_name="$(L  "NOME MODULO" "MODULE NAME")"
-    local _hdr_evid;   _hdr_evid="$(L  "EVIDENZE" "FINDINGS")"
-    local _hdr_file;   _hdr_file="$(L  "FILE GENERATI" "GENERATED FILES")"
-    local _lbl_found;  _lbl_found="$(L "TROVATE" "FOUND")"
-    local _lbl_none;   _lbl_none="$(L  "NESSUNA" "NONE")"
-    local _lbl_skip;   _lbl_skip="$(L  "SALTATO" "SKIPPED")"
-    printf "  ${BOLD}%-4s %-32s %-12s %s${RESET}\n" "$_hdr_mod" "$_hdr_name" "$_hdr_evid" "$_hdr_file"
-    echo "  ─────────────────────────────────────────────────────────────────────────────────────────"
-    for row in "${SUMMARY_TABLE[@]}"; do
-        IFS='|' read -r mnum mname msy mpath <<< "$row"
-        if [[ "$msy" == "SI" ]]; then
-            local rel_path="${mpath#$REPORT_BASE_DIR/}"
-            printf "  ${CYAN}%02d${RESET}   ${BOLD}%-32s${RESET} ${GREEN}%-12s${RESET} ${DIM}%s${RESET}\n" "$mnum" "$mname" "$_lbl_found" "$rel_path"
-        elif [[ "$msy" == "SKIP" ]]; then
-            printf "  ${CYAN}%02d${RESET}   %-32s ${YELLOW}%-12s${RESET} ${DIM}%s${RESET}\n" "$mnum" "$mname" "$_lbl_skip" "$mpath"
-        else
-            printf "  ${CYAN}%02d${RESET}   %-32s ${DIM}%-12s${RESET} ${DIM}-${RESET}\n" "$mnum" "$mname" "$_lbl_none"
-        fi
-    done
-    echo ""
-    ok "$(L "Report salvati integralmente in:" "All reports saved in:") ${BOLD}$REPORT_BASE_DIR"
-    generate_full_dashboard
-}
-
-# ================================================================
-#  AUTODETECT ROOT WINDOWS
-# ================================================================
-
-debug_mounts() {
-    echo ""
-    section_header "$(L "DEBUG — Mount attivi su questo sistema" "DEBUG — Active Mounts on This System")" "$YELLOW"
-    echo -e "  ${DIM}── /proc/mounts (non di sistema) ───────────────────${RESET}"
-    echo ""
-    local SKIP_FS='tmpfs|sysfs|proc|devtmpfs|cgroup2?|fusectl|tracefs|securityfs|pstore|bpf|hugetlbfs|mqueue|debugfs|configfs|overlay|squashfs|nsfs|efivarfs|autofs|ramfs|rpc_pipefs'
-    local SKIP_MNT='^/(proc|sys|dev|run|snap)(/|$)'
-    while IFS=' ' read -r RAW_DEV RAW_MNT FSTYPE _; do
-        local DEV MNT
-        DEV=$(printf '%b' "$RAW_DEV")
-        MNT=$(printf '%b' "$RAW_MNT")
-        [[ "$MNT" =~ $SKIP_MNT || "$MNT" == "/" || "$MNT" == /tmp/* ]] && continue
-        if [[ "$FSTYPE" =~ ^($SKIP_FS)$ ]]; then
-            printf "  ${DIM}  %-38s %-30s %s${RESET}\n" "$DEV" "$MNT" "$FSTYPE"
-        else
-            printf "  ${CYAN}→ %-38s ${GREEN}%-30s${RESET} ${YELLOW}%s${RESET}\n" "$DEV" "$MNT" "$FSTYPE"
-        fi
-    done < /proc/mounts
-    echo ""
-    local ARROW_LABEL="$([ "$LANG" = "it" ] && echo "candidati" || echo "candidates")"
-    local GRAY_LABEL="$([ "$LANG" = "it" ] && echo "esclusi" || echo "excluded")"
-    echo -e "  ${DIM}(${CYAN}→${DIM} = ${ARROW_LABEL}; grigio = ${GRAY_LABEL})${RESET}"
-    echo ""
-    echo -ne "  ${YELLOW}$(t press_key)${RESET}"
-    pause_key
-}
-
-_find_windows_mounts() {
-    local -a CANDIDATES=()
-    while IFS=' ' read -r RAW_DEV RAW_MNT FSTYPE _REST; do
-        local MNT
-        MNT=$(printf '%b' "$RAW_MNT")
-        [[ -z "$MNT" || "$MNT" == "/" ]] && continue
-        [[ "$MNT" == /proc* || "$MNT" == /sys* || "$MNT" == /dev* ]] && continue
-        [[ "$MNT" == /snap/* || "$MNT" == /run/* || "$MNT" == /tmp/* ]] && continue
-        [[ "$RAW_DEV" == *.AppImage ]] && continue
-        [[ "$FSTYPE" == "fuse.ewfmount" || "$FSTYPE" == "fuse.xmount" ]] && continue
-        # Marcatori Windows
-        if [[ -d "$MNT/Users" || -d "$MNT/Windows" ||
-              -d "$MNT/users" || -d "$MNT/windows" ]]; then
-            CANDIDATES+=("$MNT"); continue
-        fi
-        # Marcatori macOS
-        if [[ -d "$MNT/System/Library/CoreServices" || -d "$MNT/private/var/db/dslocal" ]]; then
-            CANDIDATES+=("$MNT"); continue
-        fi
-        # Marcatori Linux
-        if [[ -f "$MNT/etc/os-release" || -f "$MNT/etc/passwd" ]]; then
-            CANDIDATES+=("$MNT"); continue
-        fi
-        if find "$MNT" -maxdepth 1 -type d \( -iname "Users" -o -iname "Windows" \) \
-               2>/dev/null | grep -q .; then
-            CANDIDATES+=("$MNT")
-        fi
-    done < /proc/mounts
-    local -A SEEN=()
-    for MNT in "${CANDIDATES[@]}"; do
-        [[ -n "${SEEN[$MNT]+x}" ]] && continue
-        SEEN["$MNT"]=1; echo "$MNT"
-    done
-}
-
-# Conta gli utenti reali su un volume, in base al suo OS (per il menu di selezione)
-_count_volume_users() {
-    local MNT="$1" VOS="$2"
-    case "$VOS" in
-        windows|macos)
-            local UD
-            UD=$(find "$MNT" -maxdepth 1 -type d -iname "Users" 2>/dev/null | head -1)
-            [[ -z "$UD" ]] && { echo 0; return; }
-            find "$UD" -maxdepth 1 -mindepth 1 -type d 2>/dev/null \
-                | grep -ciEv '/(Public|Default|Default User|All Users|Shared|Guest|\.localized)$' || echo 0 ;;
-        linux)
-            local HD C=0
-            HD=$(find "$MNT" -maxdepth 1 -type d -iname "home" 2>/dev/null | head -1)
-            [[ -n "$HD" ]] && C=$(find "$HD" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | wc -l)
-            [[ -d "$MNT/root" ]] && C=$((C + 1))
-            echo "$C" ;;
-        *) echo 0 ;;
-    esac
-}
-
-autodetect_win_root() {
-    local SILENT="${1:-}"
-    local -a FOUND=()
-    mapfile -t FOUND < <(_find_windows_mounts)
-    if [[ ${#FOUND[@]} -eq 0 ]]; then
-        [[ "$SILENT" != "silent" ]] && warn "$(L "Nessun volume analizzabile rilevato tra i filesystem montati." "No analysable volume detected among mounted filesystems.")"
-        return 1
-    fi
-
-    # Per ogni volume trovato, aggiungi Windows.old se presente e valido
-    local -a EXTRA_PATHS=() EXTRA_BASES=()
-    for MNT in "${FOUND[@]}"; do
-        local WOLD
-        WOLD=$(find "$MNT" -maxdepth 1 -type d -iname "Windows.old" 2>/dev/null | head -1)
-        if [[ -n "$WOLD" ]]; then
-            # Verifica che Windows.old contenga una struttura Windows
-            if find "$WOLD" -maxdepth 1 -type d \( -iname "Users" -o -iname "Windows" \) \
-                    2>/dev/null | grep -q .; then
-                EXTRA_PATHS+=("$WOLD")
-                EXTRA_BASES+=("$MNT")
-            fi
-        fi
-    done
-
-    # Costruisci la lista finale: volumi base + Windows.old
-    local -a ALL_PATHS=("${FOUND[@]}" "${EXTRA_PATHS[@]}")
-
-    echo ""
-    echo -e "  ${CYAN}${BOLD}$(L "Volumi rilevati:" "Detected volumes:")${RESET}"
-    echo ""
-    local IDX=1
-    for MNT in "${FOUND[@]}"; do
-        local LABEL; LABEL=$(basename "$MNT")
-        local VOS; VOS=$(detect_os_type "$MNT")
-        local BADGE_COLOR
-        case "$VOS" in
-            windows) BADGE_COLOR="$BLUE" ;;
-            linux)   BADGE_COLOR="$YELLOW" ;;
-            macos)   BADGE_COLOR="$WHITE" ;;
-            *)       BADGE_COLOR="$DIM" ;;
-        esac
-        local USER_COUNT
-        USER_COUNT=$(_count_volume_users "$MNT" "$VOS")
-        echo -e "  ${GREEN}[${IDX}]${RESET}  ${BOLD}${MNT}${RESET} ${MAGENTA}(${LABEL})${RESET}  ${BADGE_COLOR}[$(os_label "$VOS")]${RESET}  ${CYAN}${USER_COUNT} $(L "utenti" "users")${RESET}"
-        IDX=$((IDX + 1))
-    done
-    # Mostra le opzioni Windows.old con indicatore visivo
-    for i in "${!EXTRA_PATHS[@]}"; do
-        local WOLD="${EXTRA_PATHS[$i]}"
-        local BASE="${EXTRA_BASES[$i]}"
-        local USERS_DIR
-        USERS_DIR=$(find "$WOLD" -maxdepth 1 -type d -iname "Users" 2>/dev/null | head -1)
-        local USER_COUNT=0
-        [[ -n "$USERS_DIR" ]] && \
-            USER_COUNT=$(find "$USERS_DIR" -maxdepth 1 -mindepth 1 -type d 2>/dev/null \
-                | grep -ciEv '/(Public|Default|Default User|All Users)$' || true)
-        echo -e "  ${YELLOW}[${IDX}]${RESET}  ${BOLD}${WOLD}${RESET}  ${YELLOW}★ Windows.old${RESET} ${DIM}($(L "da" "from") ${BASE})${RESET}  ${CYAN}${USER_COUNT} $(L "utenti" "users")${RESET}"
-        IDX=$((IDX + 1))
-    done
-    echo ""
-
-    local CHOICE
-    if [[ ${#ALL_PATHS[@]} -eq 1 ]]; then
-        echo -ne "  ${YELLOW}[?]${RESET} $(L "Usare" "Use") ${BOLD}${ALL_PATHS[0]}${RESET} $(L "come root da analizzare? [S/n]:" "as analysis root? [Y/n]:") "
-        read -r CHOICE || true
-        [[ "${CHOICE,,}" == "n" ]] && return 1
-        _apply_win_root "${ALL_PATHS[0]}"; return 0
-    fi
-    echo -ne "  ${YELLOW}[?]${RESET} $(L "Seleziona numero, inserisci path manuale, o [N] per saltare:" "Select number, enter manual path, or [N] to skip:") "
-    read -r CHOICE || true
-    case "${CHOICE,,}" in
-        n|"") return 1 ;;
-        [0-9]*)
-            local SEL=$((CHOICE - 1))
-            if [[ $SEL -ge 0 && $SEL -lt ${#ALL_PATHS[@]} ]]; then
-                _apply_win_root "${ALL_PATHS[$SEL]}"; return 0
-            else
-                err "$(L "Selezione non valida" "Invalid selection")"; return 1
-            fi ;;
-        *)
-            local MP; MP=$(realpath -m "$CHOICE" 2>/dev/null || echo "$CHOICE")
-            [[ ! -d "$MP" ]] && err "$(L "Directory non trovata:" "Directory not found:") $MP" && return 1
-            _apply_win_root "$MP"; return 0 ;;
-    esac
-}
-
-# Imposta WIN_ROOT e innesca la raccolta informazioni
-_apply_win_root() {
-    local ROOT="$1"
-    WIN_ROOT="$ROOT"
-    OS_TYPE=$(detect_os_type "$ROOT")
-    ok "$(L "Root impostata:" "Root set:") ${BOLD}$WIN_ROOT${RESET}  ${CYAN}[$(os_label)]${RESET}"
-
-    # Recupera info macchina (hostname, OS, IP, dominio)
-    gather_host_info
-    # Resetta REPORT_BASE_DIR per ricalcolarla con il nuovo hostname
-    REPORT_BASE_DIR=""
-    setup_report_dir || true
-}
-
-# ================================================================
-#  IMPOSTAZIONE MANUALE ROOT WINDOWS  (voce R del menu)
-# ================================================================
-set_win_root() {
-    echo ""
-    # Prima prova autodetect
-    echo -e "  ${CYAN}[*]${RESET} $(L "Ricerca volumi montati (Windows/Linux/macOS)..." "Searching mounted volumes (Windows/Linux/macOS)...")"
-    if autodetect_win_root; then
-        return 0
-    fi
-    # Fallback: input manuale
-    echo ""
-    echo -ne "  ${YELLOW}[?]${RESET} $(L "Inserisci il path della root da analizzare (es. /mnt/disk):" "Enter analysis root path (e.g. /mnt/disk):") "
-    read -r INPUT_ROOT
-    [[ -z "$INPUT_ROOT" ]] && return 1
-    INPUT_ROOT=$(realpath -m "$INPUT_ROOT" 2>/dev/null || echo "$INPUT_ROOT")
-    if [[ ! -d "$INPUT_ROOT" ]]; then
-        err "$(L "Directory non trovata:" "Directory not found:") $INPUT_ROOT"
-        return 1
-    fi
-    _apply_win_root "$INPUT_ROOT"
-}
-
-# ================================================================
-#  SETUP DIRECTORY REPORT
-# ================================================================
-# Chiesta interattivamente la prima volta (REPORT_BASE_DIR vuota).
-# Propone una directory di default, verifica i permessi di scrittura
-# e aggiorna REPORT_BASE_DIR.
-setup_report_dir() {
-    local TS; TS=$(date +%Y%m%d_%H%M)
-    local SUGGESTED_DEFAULT="${INVOCATION_DIR}/${HOST_NAME:-CASE}_fiuto_${TS}"
-    echo ""
-    echo -e "  ${CYAN}${BOLD}╔══════════════════════════════════════════════════════╗${RESET}"
-    echo -e "  ${CYAN}${BOLD}║  $(L "Configurazione cartella di output dei report" "Report output directory setup               ")        ║ ${RESET}"
-    echo -e "  ${CYAN}${BOLD}╚══════════════════════════════════════════════════════╝${RESET}"
-    echo ""
-    local _PARENT_OK=false
-    if [[ -d "$SUGGESTED_DEFAULT" ]]; then
-        [[ -w "$SUGGESTED_DEFAULT" ]] && _PARENT_OK=true
-    elif [[ -w "$(dirname "$SUGGESTED_DEFAULT")" ]]; then
-        _PARENT_OK=true
-    fi
-    if $_PARENT_OK; then
-        echo -e "  ${GREEN}[✓]${RESET} $(L "Directory suggerita:" "Suggested directory:") ${BOLD}${SUGGESTED_DEFAULT}${RESET}  ${GREEN}[$(L "scrivibile" "writable")]${RESET}"
-    else
-        echo -e "  ${RED}[!]${RESET} $(L "Directory suggerita:" "Suggested directory:") ${BOLD}${SUGGESTED_DEFAULT}${RESET}  ${RED}[$(L "non scrivibile o parent protetto" "not writable or protected parent")]${RESET}"
-    fi
-    echo ""
-    echo -e "  ${DIM}$(L "I report di ogni modulo verranno salvati in sottocartelle con data/ora." "Each module report will be saved in subfolders with date/time.")${RESET}"
-    echo -e "  ${DIM}$(L "Puoi inserire un percorso diverso oppure premere INVIO per usare quello suggerito." "You can enter a different path or press ENTER to use the suggested one.")${RESET}"
-    echo ""
-    echo -ne "  ${YELLOW}[?]${RESET} $(L "Cartella report" "Report directory") [${BOLD}${SUGGESTED_DEFAULT}${RESET}]: "
-    local _INPUT
-    read -r _INPUT
-    local _CHOSEN
-    if [[ -z "$_INPUT" ]]; then
-        _CHOSEN="$SUGGESTED_DEFAULT"
-    else
-        _CHOSEN=$(realpath -m "$_INPUT" 2>/dev/null || echo "$_INPUT")
-    fi
-    local _RW_OK=false _RW_MSG=""
-    if [[ -d "$_CHOSEN" ]]; then
-        if [[ -w "$_CHOSEN" ]]; then
-            _RW_OK=true
-            _RW_MSG="${GREEN}[$(L "scrivibile" "writable")]${RESET}"
-        else
-            _RW_MSG="${RED}[$(L "SOLA LETTURA — i report NON potranno essere salvati!" "READ ONLY — reports CANNOT be saved!")]${RESET}"
-        fi
-    else
-        local _P; _P=$(dirname "$_CHOSEN")
-        if [[ -w "$_P" ]]; then
-            _RW_OK=true
-            _RW_MSG="${GREEN}[$(L "verrà creata — parent scrivibile" "will be created — parent writable")]${RESET}"
-        else
-            _RW_MSG="${RED}[$(L "parent '${_P}' NON scrivibile — i report NON potranno essere salvati!" "parent '${_P}' NOT writable — reports CANNOT be saved!")]${RESET}"
-        fi
-    fi
-    echo ""
-    echo -e "  ${CYAN}[→]${RESET} $(L "Cartella scelta:" "Selected directory:") ${BOLD}${_CHOSEN}${RESET}  ${_RW_MSG}"
-    echo ""
-    if ! $_RW_OK; then
-        warn "$(L "Attenzione: la directory selezionata non è scrivibile." "Warning: the selected directory is not writable.")"
-        echo -ne "  ${YELLOW}[?]${RESET} $(L "Vuoi comunque usarla? [s/N]:" "Use it anyway? [y/N]:") "
-        local _CONF; read -r _CONF
-        local _YES_KEY="$(L "s" "y")"
-        [[ "${_CONF,,}" != "$_YES_KEY" ]] && { warn "$(L "Setup annullato. Ripeti con [P] dal menu." "Setup cancelled. Repeat with [P] from menu.")"; return 1; }
-    fi
-    REPORT_BASE_DIR="$_CHOSEN"
-    LOG_FILE="${REPORT_BASE_DIR}/fiuto_session_$(date +%Y%m%d_%H%M%S).log"
-    log_msg "=== Log sessione inizializzato ==="
-    ok "$(L "Log sessione:" "Session log:") ${BOLD}$LOG_FILE"
-    ok "$(L "Report dir impostata:" "Report directory set:") ${BOLD}$REPORT_BASE_DIR"
-    sleep 1
-}
-
-# ================================================================
-#  MENU PRINCIPALE
-# ================================================================
-# ================================================================
-#  HELPER CONDIVISI PER I MODULI LINUX / macOS
-# ================================================================
-
-# Blocco <style> per i <pre> con numeri di riga ed evidenziazione (riuso dal modulo PS)
-pre_style_block() {
-    cat << 'EOF'
-<style>
-  .hist-pre{font-family:var(--mono);font-size:.75rem;line-height:1.7;padding:.8rem 1rem;
-    overflow-x:auto;max-height:520px;overflow-y:auto;}
-  .hist-pre::-webkit-scrollbar{width:5px;height:5px}
-  .hist-pre::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
-  .line{display:block;color:var(--text);white-space:pre;padding:.05rem .5rem;border-radius:2px}
-  .line:hover{background:rgba(88,166,255,.05)}
-  .line.sensitive{color:var(--accent2);background:rgba(255,123,114,.07);
-    border-left:2px solid rgba(255,123,114,.5);padding-left:calc(.5rem - 2px)}
-  .lnum{color:var(--text-dim);user-select:none;margin-right:1rem;font-size:.7rem}
-  .grp{margin-bottom:1.5rem}
-</style>
-EOF
-}
-
-# Genera il contenuto di un <pre> (numeri di riga + escape HTML + evidenziazione IoC).
-# $1 = file, $2 = keyword separate da '|' (case-insensitive) per marcare le righe sensibili.
-render_pre_block() {
-    local FILE="$1" KW="$2" MODE="${3:-}"
-    "$PY3" - "$FILE" "$KW" "$MODE" << 'PYEOF'
-import sys, html, re, datetime
-path, kw = sys.argv[1], sys.argv[2].lower()
-mode = sys.argv[3] if len(sys.argv) > 3 else ''
-keys = [k for k in kw.split('|') if k]
-
-# Decodifica i timestamp UNIX nelle history di shell in formato leggibile.
-# zsh extended_history:  ": <epoch>:<elapsed>;<comando>"
-# bash con HISTTIMEFORMAT: una riga "#<epoch>" prima del comando
-_ZSH = re.compile(r'^: (\d{9,12}):(\d+);(.*)$', re.S)
-_BASH = re.compile(r'^#(\d{9,12})$')
-def fmt(ep):
-    try:
-        return datetime.datetime.utcfromtimestamp(int(ep)).strftime('%Y-%m-%d %H:%M:%S')
-    except Exception:
-        return ep
-def decode_histts(line):
-    m = _ZSH.match(line)
-    if m:
-        return f"[{fmt(m.group(1))}]  {m.group(3)}"
-    m = _BASH.match(line)
-    if m:
-        return f"[{fmt(m.group(1))}]"
-    return line
-
-try:
-    with open(path, 'rb') as f:
-        raw = f.read()
-    text = raw.decode('utf-8', 'replace').replace('\r\n', '\n').replace('\r', '\n')
-    out = []
-    for i, line in enumerate(text.split('\n'), 1):
-        if mode == 'histts':
-            line = decode_histts(line)
-        esc = html.escape(line)
-        css = 'line sensitive' if any(k in line.lower() for k in keys) else 'line'
-        out.append(f'<span class="{css}"><span class="lnum">{i:5d}</span> {esc}</span>')
-    print('\n'.join(out))
-except Exception as e:
-    print(f'<span class="line bad">{html.escape(str(e))}</span>')
-PYEOF
-}
-
-# Stampa a console le righe di un file con evidenziazione IoC (rosso sulle corrispondenze).
-# $1 = file, $2 = regex grep (-iE), $3 = max righe (default 200)
-print_file_lines() {
-    local FILE="$1" KW="$2" MAX="${3:-200}"
-    [[ -f "$FILE" ]] || return
-    local LN=0
-    while IFS= read -r LINE || [[ -n "$LINE" ]]; do
-        LN=$((LN + 1))
-        if [[ $LN -gt $MAX ]]; then
-            echo -e "      ${DIM}... ($(L "troncato a" "truncated at") $MAX $(L "righe" "lines"))${RESET}"
-            break
-        fi
-        if [[ -n "$KW" ]] && printf '%s' "$LINE" | grep -qiE "$KW"; then
-            printf "      ${RED}%5d  %s${RESET}\n" "$LN" "$LINE"
-        else
-            printf "      ${DIM}%5d${RESET}  %s\n" "$LN" "$LINE"
-        fi
-    done < "$FILE"
-}
-
-# Card HTML per un singolo file di testo (header con metadati + <pre> evidenziato).
-# $1 = file, $2 = keyword IoC, $3 = icona (default ≣)
-file_card_html() {
-    local F="$1" KW="$2" ICON="${3:-≣}" MODE="${4:-}"
-    local SZ MT BODY
-    SZ=$(stat -c %s "$F" 2>/dev/null || echo "?")
-    MT=$(stat -c %y "$F" 2>/dev/null | cut -d. -f1 || echo "?")
-    BODY=$(render_pre_block "$F" "$KW" "$MODE")
-    printf "<div class='card' style='margin-bottom:.8rem'><div class='card-header'><div class='uicon' style='font-size:.7rem'>%s</div><div><div class='uname' style='font-size:.85rem'>%s</div><div class='upath'>%s</div></div><div style='margin-left:auto;text-align:right;font-family:var(--mono);font-size:.65rem;color:var(--text-dim)'><div class='mid'>%s</div><div>%s B</div></div></div><div class='hist-content'><pre class='hist-pre'>%s</pre></div></div>" \
-        "$ICON" "$(html_esc "$(basename "$F")")" "$(html_esc "$F")" "$MT" "$SZ" "$BODY"
-}
-
-# Card HTML generica con corpo arbitrario (tabella/pre già formattati).
-# $1 = titolo, $2 = sottopath, $3 = badge, $4 = corpo HTML, $5 = icona
-generic_card_html() {
-    printf "<div class='card'><div class='card-header'><div class='uicon'>%s</div><div class='user-info'><div class='uname'>%s</div><div class='upath'>%s</div></div><div class='badge'>%s</div></div><div style='padding:1rem 1.5rem'>%s</div></div>" \
-        "${5:-▣}" "$(html_esc "$1")" "$(html_esc "$2")" "$3" "$4"
-}
-
-# Scrive il report HTML finale e lo registra.
-# $1 slug · $2 titolo · $3 icona · $4 sottotitolo · $5 stats_html · $6 body_html
-finish_report() {
-    local REPORT_HTML; REPORT_HTML=$(prepare_report_dir "$1")
-    local SCAN; SCAN=$(date "+%d/%m/%Y %H:%M:%S")
-    {
-        html_header "$2"
-        html_page_header "$3" "$2" "$4" "$SCAN" "$WIN_ROOT"
-        [[ -n "$5" ]] && printf "<div class='statsbar'>%s</div>\n" "$5"
-        echo "<main>"
-        pre_style_block
-        printf '%s\n' "$6"
-        echo "</main>"
-        html_footer "$SCAN" "$WIN_ROOT"
-    } > "$REPORT_HTML"
-    register_report "$REPORT_HTML"
-    ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
-    open_report_prompt "$REPORT_HTML"
-}
-
-# Helper per una stat della statsbar
-stat_box() { printf "<div class='stat %s'><div class='label'>%s</div><div class='value'>%s</div></div>" "${3:-}" "$1" "$2"; }
-
-# ================================================================
 #  MODULI LINUX
 # ================================================================
 
@@ -11642,29 +11977,6 @@ PYEOF
         "${NOTE}<div class='cards'>$(generic_card_html "$(L "Inventario container" "Container inventory")" "${DOCKER:-$PODMAN}" "$TOTAL" "$TABLE" "▣")</div>"
 }
 
-# ================================================================
-#  MODULI macOS
-# ================================================================
-
-# Renderizza una tabella HTML da righe tab-separated. $1=righe, $2.. = intestazioni
-_rows_to_table() {
-    local ROWS="$1"; shift
-    local _RTMP; _RTMP=$(mktemp); printf '%s\n' "$ROWS" > "$_RTMP"
-    printf '%s\n' "$@" > "${_RTMP}.h"
-    "$PY3" - "$_RTMP" "${_RTMP}.h" << 'PYEOF'
-import sys, html
-heads=[h.rstrip('\n') for h in open(sys.argv[2])]
-print("<table><tr>"+''.join(f'<th>{html.escape(h)}</th>' for h in heads)+"</tr>")
-for line in open(sys.argv[1], errors='replace'):
-    if not line.strip(): continue
-    cells=line.rstrip('\n').split('\t')
-    tds=''.join(f"<td class='mono'>{html.escape(c)}</td>" for c in cells)
-    print(f"<tr>{tds}</tr>")
-print("</table>")
-PYEOF
-    rm -f "$_RTMP" "${_RTMP}.h"
-}
-
 # --- macOS 1 — System Logs ---
 module_macos_logs() {
     section_header "macOS — System Logs" "$GREEN"
@@ -12455,302 +12767,6 @@ MODULES_MACOS=(
 )
 
 # Restituisce il NOME dell'array registro per l'OS corrente (vuoto per windows/unknown)
-active_registry_name() {
-    case "$OS_TYPE" in
-        linux) echo "MODULES_LINUX" ;;
-        macos) echo "MODULES_MACOS" ;;
-        *)     echo "" ;;
-    esac
-}
-
-# Renderizza il menu a partire da un registro (equivalente dinamico di print_menu)
-render_menu_from_registry() {
-    local -n _REG="$1"
-    local _NOT_SET _WRITABLE _READONLY _NOT_CREATED _PARENT_RO _DIAG _RUN_ALL _QUIT _CHOICE_LABEL _REPORTS_LABEL
-    _NOT_SET="$(L "non impostata" "not set")"
-    _WRITABLE="$(L "scrivibile" "writable")"
-    _READONLY="$(L "SOLA LETTURA" "READ ONLY")"
-    _NOT_CREATED="$(L "OK (non ancora creata)" "OK (not yet created)")"
-    _PARENT_RO="$(L "PARENT NON SCRIVIBILE" "PARENT NOT WRITABLE")"
-    _DIAG="$(L "Diagnostica volumi montati" "Diagnose mounted volumes")"
-    _RUN_ALL="$(L "Esegui TUTTI i moduli" "Run ALL modules")"
-    _QUIT="$(L "Esci" "Quit")"
-    _CHOICE_LABEL="$(L "Scelta" "Choice")"
-    _REPORTS_LABEL="$(L "Report generati" "Generated reports")"
-    local _OSL; _OSL=$(os_label)
-    local _TITLE; _TITLE="$(L "SELEZIONA UN MODULO" "SELECT A MODULE")"
-
-    echo -e "  ${CYAN}${BOLD}╔══════════════════════════════════════════════════╗${RESET}"
-    printf  "  ${CYAN}${BOLD}║   F I U T O  —  %-8s —  %-18s║${RESET}\n" "$_OSL" "$_TITLE"
-    echo -e "  ${CYAN}${BOLD}╚══════════════════════════════════════════════════╝${RESET}"
-    echo ""
-    if [[ -n "$REPORT_BASE_DIR" ]]; then
-        local _RW_LABEL _RW_COLOR
-        if [[ -d "$REPORT_BASE_DIR" ]]; then
-            if [[ -w "$REPORT_BASE_DIR" ]]; then _RW_LABEL="$_WRITABLE"; _RW_COLOR="$GREEN"
-            else _RW_LABEL="$_READONLY"; _RW_COLOR="$RED"; fi
-        else
-            local _RD_PARENT; _RD_PARENT=$(dirname "$REPORT_BASE_DIR")
-            if [[ -w "$_RD_PARENT" ]]; then _RW_LABEL="$_NOT_CREATED"; _RW_COLOR="$GREEN"
-            else _RW_LABEL="$_PARENT_RO"; _RW_COLOR="$RED"; fi
-        fi
-        echo -e "  ${WHITE}[P]${RESET}  ${BOLD}Report dir:${RESET} ${DIM}${REPORT_BASE_DIR}${RESET}  ${_RW_COLOR}[${_RW_LABEL}]${RESET}"
-    else
-        echo -e "  ${WHITE}[P]${RESET}  ${BOLD}Report dir:${RESET} ${RED}$(L "non impostata — premi [P] per configurare" "not set — press [P] to configure")${RESET}"
-    fi
-    echo -e "  ${WHITE}[R]${RESET}  ${BOLD}$(L "Imposta root da analizzare" "Set analysis root")${RESET}  ${DIM}${WIN_ROOT:-($_NOT_SET)} [${_OSL}]${RESET}"
-    echo -e "  ${YELLOW}[D]${RESET}  ${BOLD}$(L "Debug mount attivi" "Debug active mounts")${RESET}  ${DIM}${_DIAG}${RESET}"
-    echo ""
-    local _i=1 _entry _f _name _color _desc
-    for _entry in "${_REG[@]}"; do
-        IFS='|' read -r _f _name _color _desc <<< "$_entry"
-        local _C="${!_color:-$RESET}"
-        printf "  ${_C}[%2d]${RESET} %-26s ${DIM}%s${RESET}\n" "$_i" "$_name" "$_desc"
-        _i=$((_i + 1))
-    done
-    echo ""
-    echo -e "  ${WHITE}${BOLD}[0]${RESET}  ${BOLD}${_RUN_ALL}${RESET}"
-    echo ""
-    if [[ ${#GENERATED_REPORTS[@]} -gt 0 ]]; then
-        echo -e "  ${DIM}── ${_REPORTS_LABEL} (${#GENERATED_REPORTS[@]}) ──────────────────────────${RESET}"
-        for _R in "${GENERATED_REPORTS[@]}"; do
-            echo -e "  ${CYAN}↳${RESET} ${DIM}${_R}${RESET}"
-        done
-        echo ""
-    fi
-    echo -e "  ${RED}[Q]  ${_QUIT}${RESET}"
-    echo ""
-    echo -ne "  ${YELLOW}${_CHOICE_LABEL}:${RESET} "
-}
-
-# Esegue il modulo n-esimo (1-based) di un registro
-dispatch_from_registry() {
-    local _RNAME="$1" _N="$2"
-    local -n _REG="$_RNAME"
-    if ! [[ "$_N" =~ ^[0-9]+$ ]] || (( _N < 1 || _N > ${#_REG[@]} )); then
-        err "$(L "Modulo sconosciuto:" "Unknown module:") $_N"
-        return 1
-    fi
-    local _entry="${_REG[$((_N - 1))]}"
-    local _f="${_entry%%|*}"
-    "$_f"
-}
-
-# Esegue TUTTI i moduli di un registro in modalità batch (equivalente di run_all_modules)
-run_all_from_registry() {
-    local _RNAME="$1"
-    local -n _REG="$_RNAME"
-    clear
-    print_banner
-    info "$(t batch_running)"
-    echo ""
-    if [[ -z "$REPORT_BASE_DIR" ]]; then
-        REPORT_BASE_DIR="${INVOCATION_DIR}/fiuto_reports_$(date +%Y%m%d_%H%M%S)"
-        LOG_FILE="${REPORT_BASE_DIR}/fiuto_session_$(date +%Y%m%d_%H%M%S).log"
-    fi
-    info "$(t batch_report_dir) ${BOLD}$REPORT_BASE_DIR${RESET}"
-    log_msg "$(t batch_started)$WIN_ROOT ==="
-    sleep 1
-    BATCH_MODE=true
-    SUMMARY_TABLE=()
-    echo ""
-    local _total=${#_REG[@]} _i=1 _entry _f _name _rest
-    for _entry in "${_REG[@]}"; do
-        IFS='|' read -r _f _name _rest <<< "$_entry"
-        run_batch_module "$_i" "$_f" "$_name" "$_total"
-        _i=$((_i + 1))
-    done
-    BATCH_MODE=false
-    echo ""
-    section_header "$(L "Riepilogo Scansione Globale" "Global Scan Summary")" "$GREEN"
-    local _hdr_mod _hdr_name _hdr_evid _hdr_file _lbl_found _lbl_none _lbl_skip
-    _hdr_mod="$(L "MOD" "MOD")"; _hdr_name="$(L "NOME MODULO" "MODULE NAME")"
-    _hdr_evid="$(L "EVIDENZE" "FINDINGS")"; _hdr_file="$(L "FILE GENERATI" "GENERATED FILES")"
-    _lbl_found="$(L "TROVATE" "FOUND")"; _lbl_none="$(L "NESSUNA" "NONE")"; _lbl_skip="$(L "SALTATO" "SKIPPED")"
-    printf "  ${BOLD}%-4s %-32s %-12s %s${RESET}\n" "$_hdr_mod" "$_hdr_name" "$_hdr_evid" "$_hdr_file"
-    echo "  ─────────────────────────────────────────────────────────────────────────────────────────"
-    for row in "${SUMMARY_TABLE[@]}"; do
-        IFS='|' read -r mnum mname msy mpath <<< "$row"
-        if [[ "$msy" == "SI" ]]; then
-            local rel_path="${mpath#$REPORT_BASE_DIR/}"
-            printf "  ${CYAN}%02d${RESET}   ${BOLD}%-32s${RESET} ${GREEN}%-12s${RESET} ${DIM}%s${RESET}\n" "$mnum" "$mname" "$_lbl_found" "$rel_path"
-        elif [[ "$msy" == "SKIP" ]]; then
-            printf "  ${CYAN}%02d${RESET}   %-32s ${YELLOW}%-12s${RESET} ${DIM}%s${RESET}\n" "$mnum" "$mname" "$_lbl_skip" "$mpath"
-        else
-            printf "  ${CYAN}%02d${RESET}   %-32s ${DIM}%-12s${RESET} ${DIM}-${RESET}\n" "$mnum" "$mname" "$_lbl_none"
-        fi
-    done
-    echo ""
-    ok "$(L "Report salvati integralmente in:" "All reports saved in:") ${BOLD}$REPORT_BASE_DIR"
-    generate_full_dashboard
-}
-
-print_menu() {
-    local _MENU_TITLE _SELECT_MODULE _NOT_SET _WRITABLE _READONLY _NOT_CREATED _PARENT_RO
-    local _REPORT_DIR_LABEL _WIN_ROOT_LABEL _DEBUG_LABEL _RUN_ALL _QUIT _CHOICE_LABEL
-    local _REPORTS_LABEL
-    _MENU_TITLE="$(L "SELEZIONA UN MODULO" "SELECT A MODULE    ")"
-    _SELECT_MODULE="$(L "Seleziona" "Select")"
-    _NOT_SET="$(L "non impostata" "not set")"
-    _WRITABLE="$(L "scrivibile" "writable")"
-    _READONLY="$(L "SOLA LETTURA" "READ ONLY")"
-    _NOT_CREATED="$(L "OK (non ancora creata)" "OK (not yet created)")"
-    _PARENT_RO="$(L "PARENT NON SCRIVIBILE" "PARENT NOT WRITABLE")"
-    _REPORT_DIR_LABEL="$(L "Imposta dir report" "Set report dir")"
-    _WIN_ROOT_LABEL="$(L "Imposta root Windows" "Set Windows root    ")"
-    _DEBUG_LABEL="$(L "Debug mount attivi " "Debug active mounts")"
-    _DIAG="$(L "Diagnostica volumi montati" "Diagnose mounted volumes")"
-    _RUN_ALL="$(L "Esegui TUTTI i moduli" "Run ALL modules")"
-    _QUIT="$(L "Esci" "Quit")"
-    _CHOICE_LABEL="$(L "Scelta" "Choice")"
-    _REPORTS_LABEL="$(L "Report generati" "Generated reports")"
-
-    echo -e "  ${CYAN}${BOLD}╔══════════════════════════════════════════════════╗${RESET}"
-    echo -e "  ${CYAN}${BOLD}║           F I U T O  —  ${_MENU_TITLE}      ║ ${RESET}"
-    echo -e "  ${CYAN}${BOLD}╚══════════════════════════════════════════════════╝${RESET}"
-    echo ""
-    if [[ -n "$REPORT_BASE_DIR" ]]; then
-        local _RW_LABEL _RW_COLOR
-        if [[ -d "$REPORT_BASE_DIR" ]]; then
-            if [[ -w "$REPORT_BASE_DIR" ]]; then
-                _RW_LABEL="$_WRITABLE"; _RW_COLOR="$GREEN"
-            else
-                _RW_LABEL="$_READONLY"; _RW_COLOR="$RED"
-            fi
-        else
-            local _RD_PARENT; _RD_PARENT=$(dirname "$REPORT_BASE_DIR")
-            if [[ -w "$_RD_PARENT" ]]; then
-                _RW_LABEL="$_NOT_CREATED"; _RW_COLOR="$GREEN"
-            else
-                _RW_LABEL="$_PARENT_RO"; _RW_COLOR="$RED"
-            fi
-        fi
-        echo -e "  ${WHITE}[P]${RESET}  ${BOLD}Report dir:${RESET} ${DIM}${REPORT_BASE_DIR}${RESET}  ${_RW_COLOR}[${_RW_LABEL}]${RESET}"
-    else
-        local _CONF_MSG="$(L "non impostata — premi [P] per configurare" "not set — press [P] to configure")"
-        echo -e "  ${WHITE}[P]${RESET}  ${BOLD}Report dir:${RESET} ${RED}${_CONF_MSG}${RESET}"
-    fi
-    echo -e "  ${WHITE}[R]${RESET}  ${BOLD}${_WIN_ROOT_LABEL}${RESET}          ${DIM}${WIN_ROOT:-($_NOT_SET)}${RESET}"
-    echo -e "  ${YELLOW}[D]${RESET}  ${BOLD}${_DEBUG_LABEL}${RESET}           ${DIM}${_DIAG}${RESET}"
-    echo ""
-    echo -e "  ${MAGENTA}[1]${RESET}  PowerShell History            ${DIM}PSReadLine *_history.txt${RESET}"
-    echo -e "  ${MAGENTA}[2]${RESET}  Notepad TabState              ${DIM}$(L "Tab rimasti aperti (.bin)" "Open tabs (.bin)")${RESET}"
-    echo -e "  ${RED}[3]${RESET}  IFEO Hijacking                ${DIM}Image File Execution Options${RESET}"
-    echo -e "  ${BLUE}[4]${RESET}  BAM                           ${DIM}Background Activity Moderator${RESET}"
-    echo -e "  ${ORANGE}[5]${RESET}  Run Keys & $(L "Persistenza" "Persistence")        ${DIM}$(L "Autorun nel registro" "Autorun in registry")${RESET}"
-    echo -e "  ${GREEN}[6]${RESET}  Prefetch                      ${DIM}$(L "Eseguibili tracciati" "Tracked executables") (*.pf)${RESET}"
-    echo -e "  ${YELLOW}[7]${RESET}  Scheduled Tasks               ${DIM}$(L "Task pianificati (XML)" "Scheduled tasks (XML)")${RESET}"
-    echo -e "  ${BLUE}[8]${RESET}  USB Devices                   ${DIM}$(L "Dispositivi rimovibili (USBSTOR)" "Removable devices (USBSTOR)")${RESET}"
-    echo -e "  ${GREEN}[9]${RESET}  LNK & JumpList                ${DIM}$(L "File recenti e target path" "Recent files and target path")${RESET}"
-    echo -e "  ${CYAN}[10]${RESET} RDP Cache                     ${DIM}Terminal Server Client Cache${RESET}"
-  echo -e "  ${RED}[11]${RESET} Services                      ${DIM}$(L "Servizi Windows (SYSTEM hive)" "Windows Services (SYSTEM hive)")${RESET}"
-  echo -e "  ${RED}[12]${RESET} Event Log                     ${DIM}Security/System/PS/RDP (.evtx)${RESET}"
-  echo -e "  ${YELLOW}[13]${RESET} Amcache + Shimcache           ${DIM}$(L "Timeline esecuzione binari" "Binary execution timeline")${RESET}"
-  echo -e "  ${GREEN}[14]${RESET} Recycle Bin                   ${DIM}$(L "File eliminati" "Deleted files") (\$Recycle.Bin)${RESET}"
-  echo -e "  ${RED}[15]${RESET} WMI Subscriptions             ${DIM}$(L "Persistenza invisibile" "Fileless persistence") (T1546.003)${RESET}"
-  echo -e "  ${BLUE}[16]${RESET} SRUM                          ${DIM}$(L "Uso risorse per applicazione" "Resource usage per application")${RESET}"
-  echo -e "  ${CYAN}[17]${RESET} Browser History               ${DIM}Chrome / Edge / Firefox${RESET}"
-  echo -e "  ${MAGENTA}[18]${RESET} UserAssist / RunMRU           ${DIM}$(L "Attività interattiva utente" "Interactive user activity")${RESET}"
-  echo -e "  ${CYAN}[19]${RESET} ShellBags                     ${DIM}$(L "Navigazione cartelle (anche cancellate)" "Folder navigation (including deleted)")${RESET}"
-  echo -e "  ${RED}[20]${RESET} SAM — $(L "Hash Locali " "Local Hashes")            ${DIM}$(L "Hash NTLM account (impacket)" "NTLM account hashes (impacket)")${RESET}"
-  echo -e "  ${YELLOW}[21]${RESET} MFT Timeline                  ${DIM}Master File Table + timestomping${RESET}"
-  echo -e "  ${GREEN}[22]${RESET} OpenSave / LastVisited MRU    ${DIM}$(L "File aperti/salvati via dialogo" "Files opened/saved via dialog")${RESET}"
-  echo -e "  ${CYAN}[23]${RESET} USN Journal                   ${DIM}\$UsnJrnl:\$J — $(L "change log NTFS" "NTFS change log")${RESET}"
-  echo -e "  ${RED}[24]${RESET} NTDS.dit                      ${DIM}Active Directory hash (DC offline)${RESET}"
-  echo -e "  ${BLUE}[25]${RESET} Hibernation / Pagefile        ${DIM}hiberfil.sys · pagefile.sys strings${RESET}"
-  echo -e "  ${RED}[26]${RESET} WER Files (Error Reports)     ${DIM}ReportArchive · ReportQueue (.wer)${RESET}"
-  echo -e "  ${MAGENTA}[27]${RESET} Credential Manager            ${DIM}DPAPI blob offline${RESET}"
-  echo -e "  ${CYAN}[28]${RESET} WLAN & VPN Profiles           ${DIM}WiFi · NetworkList · VPN${RESET}"
-  echo -e "  ${GREEN}[29]${RESET} AppX / UWP Packages           ${DIM}$(L "App Store + sideload sospetti" "App Store + suspicious sideloads")${RESET}"
-  echo -e "  ${CYAN}[30]${RESET} Browser Downloads & Logins    ${DIM}Download + Login Data (DPAPI)${RESET}"
-  echo -e "  ${YELLOW}[31]${RESET} Clipboard History             ${DIM}$(L "Cronologia appunti Win10+" "Clipboard history Win10+")${RESET}"
-  echo -e "  ${GREEN}[32]${RESET} Office MRU                    ${DIM}$(L "File recenti Word/Excel/PowerPoint" "Recent Word/Excel/PowerPoint files")${RESET}"
-  echo -e "  ${RED}[33]${RESET} Defender Quarantine           ${DIM}$(L "File in quarantena + threatname" "Quarantined files + threatname")${RESET}"
-  echo -e "  ${MAGENTA}[34]${RESET} PS ScriptBlock Logging        ${DIM}Event ID 4104 — PS Operational.evtx${RESET}"
-  echo -e "  ${GREEN}[35]${RESET} JumpLists                     ${DIM}AutomaticDestinations · CustomDestinations${RESET}"
-  echo -e "  ${CYAN}[36]${RESET} Network Artifacts             ${DIM}$(L "Profili rete · Interfacce TCP/IP (registry)" "Network profiles · TCP/IP interfaces (registry)")${RESET}"
-  echo -e "  ${YELLOW}[37]${RESET} Master Timeline               ${DIM}$(L "Aggregazione cross-moduli con filtri" "Cross-module aggregation with filters")${RESET}"
-  echo -e "  ${RED}[38]${RESET} PAD Offline AD Analysis       ${DIM}$(L "NTDS.dit offline — utenti privilegiati, ACL, GPO" "NTDS.dit offline — privileged users, ACL, GPO")${RESET}"
-  echo -e "  ${MAGENTA}[39]${RESET} AI Chat History               ${DIM}Claude · ChatGPT · Copilot · Cursor · Gemini · Codex${RESET}"
-    echo ""
-    echo -e "  ${WHITE}${BOLD}[0]${RESET}  ${BOLD}${_RUN_ALL}${RESET}"
-    echo ""
-    if [[ ${#GENERATED_REPORTS[@]} -gt 0 ]]; then
-        echo -e "  ${DIM}── ${_REPORTS_LABEL} (${#GENERATED_REPORTS[@]}) ──────────────────────────${RESET}"
-        for _R in "${GENERATED_REPORTS[@]}"; do
-            echo -e "  ${CYAN}↳${RESET} ${DIM}${_R}${RESET}"
-        done
-        echo ""
-    fi
-    echo -e "  ${RED}[Q]  ${_QUIT}${RESET}"
-    echo ""
-    echo -ne "  ${YELLOW}${_CHOICE_LABEL}:${RESET} "
-}
-
-# ================================================================
-#  HELPER FUNCTIONS PER MODALITÀ NON INTERATTIVA
-# ================================================================
-
-# Espande una stringa tipo "1,3,5-8,12" in una lista di numeri
-expand_module_list() {
-    local spec="$1"
-    local result=()
-    IFS=',' read -ra PARTS <<< "$spec"
-    for P in "${PARTS[@]}"; do
-        if [[ "$P" =~ ^([0-9]+)-([0-9]+)$ ]]; then
-            local from="${BASH_REMATCH[1]}" to="${BASH_REMATCH[2]}"
-            for (( n=from; n<=to; n++ )); do result+=("$n"); done
-        elif [[ "$P" =~ ^[0-9]+$ ]]; then
-            result+=("$P")
-        fi
-    done
-    printf '%s\n' "${result[@]}" | sort -n -u
-}
-
-run_module_by_number() {
-    case "$1" in
-        1)  module_ps_history ;;
-        2)  module_notepad_tabstate ;;
-        3)  module_ifeo ;;
-        4)  module_bam ;;
-        5)  module_run_keys ;;
-        6)  module_prefetch ;;
-        7)  module_scheduled_tasks ;;
-        8)  module_usb ;;
-        9)  module_lnk ;;
-        10) module_rdp_cache ;;
-        11) module_services ;;
-        12) module_evtx ;;
-        13) module_amcache ;;
-        14) module_recycle_bin ;;
-        15) module_wmi ;;
-        16) module_srum ;;
-        17) module_browser ;;
-        18) module_userassist ;;
-        19) module_shellbags ;;
-        20) module_sam ;;
-        21) module_mft ;;
-        22) module_opensave ;;
-        23) module_usn ;;
-        24) module_ntds ;;
-        25) module_hiberfil ;;
-        26) module_wer_files ;;
-        27) module_credential_manager ;;
-        28) module_wlan ;;
-        29) module_appx ;;
-        30) module_browser_extra ;;
-        31) module_clipboard ;;
-        32) module_office_mru ;;
-        33) module_defender_quarantine ;;
-        34) module_ps_scriptblock ;;
-        35) module_jumplists ;;
-        36) module_network_artifacts ;;
-        37) module_master_timeline ;;
-        38) module_pad_offline ;;
-        39) module_ai_chat ;;
-        *)  err "$(L "Modulo sconosciuto:" "Unknown module:") $1" ;;
-    esac
-}
 
 # ================================================================
 #  MAIN

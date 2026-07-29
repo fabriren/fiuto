@@ -4,7 +4,7 @@ Documento di lavoro per portare FIUTO da 2.1 a 3.0. È pensato per essere
 ripreso a distanza di tempo, anche da un'altra sessione o da un'altra persona:
 ogni fase dichiara **cosa fare**, **dove**, **come verificarlo** e **perché**.
 
-Stato aggiornato al: **2026-07-29** (versione 2.1).
+Stato aggiornato al: **2026-07-29** (versione 2.1, Fase 1 in corso).
 
 ---
 
@@ -39,6 +39,8 @@ Stato aggiornato al: **2026-07-29** (versione 2.1).
 | Export JSONL / schema Timesketch (`--jsonl`) | ✅ |
 | macOS: FSEvents, Spotlight | ✅ |
 | Linux: auditd, Container (Docker/Podman) | ✅ |
+| Fase 1 — split `src/` + `build.sh` (file singolo generato) | ✅ |
+| Fase 1 — registro moduli data-driven anche per Windows | ⬜ |
 
 Bug corretti in v2.1, da non reintrodurre:
 
@@ -75,33 +77,65 @@ tests/
 docs/
 ```
 
-### Vincoli non negoziabili
+### Decisione presa
 
-- **Distribuzione a file singolo.** Oggi FIUTO si usa copiando un solo file su
-  una workstation forense; è una qualità reale, non un dettaglio. Serve quindi
-  `build.sh` che concateni `lib/` + `modules/` in un `fiuto.sh` distribuibile,
-  **e** la CI deve verificare che il file committato coincida con il build
-  (`./build.sh --check`), altrimenti le due forme divergono silenziosamente.
-- In alternativa: `fiuto.sh` fa `source` dei moduli quando li trova accanto a
-  sé e usa la versione concatenata quando è solo. Più semplice da mantenere,
-  ma va deciso **prima** di iniziare, non a metà.
+**Distribuzione a file singolo mantenuta.** `build.sh` concatena i sorgenti
+elencati in `src/build.order` producendo `fiuto.sh`, che resta versionato: il
+tool si copia su una workstation forense e funziona senza installare nulla.
+La CI verifica con `./build.sh --check` che il file committato coincida con il
+build, così le due forme non possono divergere in silenzio.
 
-### Passi
+Il build è una **concatenazione pura**, senza trasformazioni: il file generato
+resta leggibile e un diff fra due build dice esattamente cosa è cambiato.
 
-1. Estrarre prima `lib/` (basso rischio: nessuna logica forense).
-2. Poi i moduli, **un OS alla volta**, eseguendo la suite a ogni passo.
-3. Estendere il registro data-driven anche a Windows: oggi Linux e macOS usano
-   `MODULES_LINUX`/`MODULES_MACOS`, mentre Windows ha `run_module_by_number`
-   con un `case` di 39 rami e un menu stampato a mano. Unificare elimina la
-   principale fonte di disallineamento fra menu, dispatcher e README.
-4. Aggiungere `MODULES_WIN` e far derivare da lì menu, dispatcher e `--all`.
+### Fatto (1/2)
+
+Struttura prodotta — 82 sorgenti:
+
+```
+src/header.sh              intestazione + set -uo pipefail
+src/lib/00-core.sh .. 12-registries.sh    13 file di libreria
+src/modules/win/           39 moduli
+src/modules/linux/         15 moduli
+src/modules/macos/         12 moduli
+src/modules/xplat/          1 modulo
+src/main.sh                main() + entrypoint
+```
+
+Lo split è stato eseguito meccanicamente, non a mano, con verifica di
+equivalenza: il multiset delle righe prima e dopo è identico a meno delle 16
+righe del banner "file generato". **Zero righe perse.**
+
+Nota per chi rifà un'operazione simile: un parser riga-per-riga non basta,
+perché gli heredoc contengono CSS e Python con `}` a colonna 0 e le funzioni
+one-liner (`nome() { ...; }`) non hanno mai una graffa di chiusura a colonna 0.
+
+### Da fare (2/2) — registro moduli per Windows
+
+Oggi Linux e macOS usano `MODULES_LINUX`/`MODULES_MACOS` data-driven, mentre
+Windows ha `run_module_by_number` con un `case` di 39 rami **e** un menu
+stampato a mano in `print_menu`. È la principale fonte di disallineamento fra
+menu, dispatcher e README.
+
+1. Aggiungere `MODULES_WIN` in `src/lib/12-registries.sh` con lo stesso
+   formato `funzione|Nome|COLORE|descrizione`.
+2. Far derivare menu, dispatcher e `--all` dal registro, riusando
+   `render_menu_from_registry` / `dispatch_from_registry` /
+   `run_all_from_registry` già esistenti.
+3. Rimuovere `print_menu` e `run_module_by_number`.
+4. Aggiornare `active_registry_name` perché ritorni `MODULES_WIN` per windows.
+
+Attenzione: la numerazione attuale del menu Windows **non** segue l'ordine di
+definizione delle funzioni (es. il modulo 2 è `module_notepad_tabstate`, il 3 è
+`module_ifeo`). Il registro deve riprodurre l'ordine del menu, non quello del
+sorgente, o si rompono i `--module N` documentati e gli script degli utenti.
 
 ### Verifica
 
-- Il test strutturale esistente ("ogni numero del menu Windows invoca una
-  funzione esistente") va esteso al nuovo registro.
-- Nuovo test: la numerazione dei moduli nei registri coincide con le tabelle
-  del README (evita il disallineamento che si è già verificato).
+- Estendere il test strutturale "ogni numero del menu Windows invoca una
+  funzione esistente" al nuovo registro.
+- Nuovo test: la numerazione nei registri coincide con le tabelle del README
+  (il disallineamento si è già verificato in passato).
 
 ---
 

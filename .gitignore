@@ -19,6 +19,12 @@
 # Documentazione di progetto (piano di implementazione).
 !/docs/
 
+# Sorgenti divisi per OS e script di build.
+# fiuto.sh alla radice e' il prodotto della concatenazione (vedi build.sh):
+# resta versionato perche' il tool si distribuisce come file singolo.
+!/src/
+!/build.sh
+
 # Config GitHub: il pulsante sponsor e i workflow di CI.
 # Per escludere il pulsante sponsor: rimuovi la riga !/.github/FUNDING.yml
 # ed esegui  git rm -r --cached .github

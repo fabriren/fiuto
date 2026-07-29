@@ -20,6 +20,18 @@ jobs:
       - name: Verifica bit di esecuzione
         run: test -x fiuto.sh || { echo "fiuto.sh non è eseguibile"; exit 1; }
 
+  build:
+    # fiuto.sh e' generato da src/ tramite build.sh e viene committato perche'
+    # il tool si distribuisce come file singolo. Le due forme possono divergere
+    # se qualcuno modifica il file generato invece dei sorgenti: questo job lo
+    # impedisce.
+    name: Build allineato ai sorgenti
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: ./build.sh --check
+        run: ./build.sh --check
+
   shellcheck:
     name: ShellCheck
     runs-on: ubuntu-latest
