@@ -57,22 +57,30 @@ Bug corretti in v2.1, da non reintrodurre:
 **Obiettivo:** da un `fiuto.sh` monolitico a un albero navigabile, senza
 cambiare il comportamento osservabile.
 
-### Struttura di destinazione
+### Struttura realizzata
 
 ```
-fiuto.sh                  # entrypoint: sourcing, parsing argomenti, menu
-lib/
-  core.sh                 # globali, colori, cleanup, log, i18n (L, t)
-  fs.sh                   # ci_find_dir, ci_find_file, detect_os_type, homes
-  report.sh               # html_header/footer, finish_report, register_report
-  export.sh               # export_report_jsonl e futuri formati
-  registry.sh             # get_hive, recover_hive, regipy_query
-  ioc.sh                  # load_ioc_file, check_ioc
-modules/
-  win/*.sh                # un file per modulo (o per famiglia)
-  linux/*.sh
-  macos/*.sh
-  xplat/*.sh              # master timeline, ESP/bootkit, SQLite recovery
+build.sh                   genera fiuto.sh concatenando src/build.order
+fiuto.sh                   GENERATO — non modificare a mano
+src/
+  header.sh                shebang, banner, set -uo pipefail
+  build.order              ordine di concatenazione (unica fonte di verità)
+  lib/
+    00-core.sh             globali, colori, cleanup, rilevamento Python
+    01-i18n.sh             L(), t(), selezione lingua
+    02-ui.sh               banner, info/ok/warn/err, prompt
+    03-util.sh             html_esc, sha256_file, log_msg
+    04-ioc.sh              caricamento e match IoC
+    05-fs.sh               ci_find_*, detect_os_type, home utenti, sqlite, plist
+    06-hostinfo.sh         raccolta informazioni macchina
+    07-registry.sh         get_hive, recover_hive (replay .LOG1/.LOG2), regipy
+    08-report.sh           HTML: header/footer, card, finish_report
+    09-export.sh           export JSONL (Timesketch)
+    10-mount.sh            rilevamento volumi, set_win_root, dir dei report
+    11-runner.sh           menu, dispatcher, esecuzione batch
+    12-registries.sh       MODULES_LINUX / MODULES_MACOS
+  modules/{win,linux,macos,xplat}/   un file per modulo
+  main.sh                  main() + entrypoint
 tests/
 docs/
 ```
