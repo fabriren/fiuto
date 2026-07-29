@@ -7,8 +7,8 @@
 **FIUTO** (**F**orensic **I**nvestigation **U**tility **T**ool for **O**ffline) is a unified DFIR (Digital Forensics and Incident Response) toolkit for comprehensive **offline disk analysis of Windows, Linux and macOS** volumes. It automatically **detects the operating system of each mounted volume** and proposes the relevant module set, generating detailed HTML reports for rapid and effective investigations.
 
 - **Windows** volumes → the 39 Windows artifact modules.
-- **Linux** volumes → 14 dedicated modules (system logs, journal, logins, shell/AI history, browsers, accounts, persistence, SSH, network, packages, trash, filesystem timeline, master timeline).
-- **macOS** volumes → 11 dedicated modules (system logs, dslocal accounts, persistence, login items/BTM, quarantine, TCC, KnowledgeC, browsers, shell/AI history, recent items, master timeline).
+- **Linux** volumes → 16 dedicated modules (system logs, journal, logins, shell/AI history, browsers, accounts, persistence, SSH, network, packages, trash, filesystem timeline, auditd, containers, master timeline).
+- **macOS** volumes → 13 dedicated modules (system logs, dslocal accounts, persistence, login items/BTM, quarantine, TCC, KnowledgeC, browsers, shell/AI history, recent items, FSEvents, Spotlight, master timeline).
 
 Everything runs strictly **offline**, parsing the read-only mounted filesystem.
 
@@ -51,6 +51,8 @@ On Linux volumes FIUTO collects and analyzes:
 - **Installed packages** (dpkg, rpm, apt history, snap — installation timeline)
 - **Trash & recent files** (`~/.local/share/Trash` with deletion timestamps, `recently-used.xbel`)
 - **Filesystem MAC-time timeline** of forensically sensitive areas
+- **auditd** (`/var/log/audit`) — syscalls, authentications, EXECVE with hex-decoded arguments, policy violations
+- **Containers** (Docker/Podman) — offline inventory from on-disk metadata, with detection of escape-prone configurations (privileged, host root or Docker socket bind-mounted, `CAP_SYS_ADMIN`, host PID/network namespace)
 
 ### macOS Artifact Coverage — *new in v2.0*
 
@@ -66,6 +68,8 @@ On macOS volumes FIUTO collects and analyzes:
 - **Browser history** (Safari `History.db`, Chrome, Firefox)
 - **Shell & AI history** (`.zsh_history`, `.bash_history`, AI CLI)
 - **Recent items** (`SFL`/`SFL2`, `~/.Trash`)
+- **FSEvents** (`/.fseventsd`) — filesystem change history, the macOS counterpart of the USN Journal
+- **Spotlight** (`.Spotlight-V100/store.db`) — heuristic extraction of download URLs and user paths
 
 ### Flexible Execution Modes
 
@@ -75,6 +79,8 @@ On macOS volumes FIUTO collects and analyzes:
 ./fiuto.sh /mnt/disk --all          # Run all modules for the detected OS
 ./fiuto.sh /mnt/disk --module 3     # Run a specific module (numbering depends on the OS)
 ./fiuto.sh /mnt/disk --modules 1,4,6-8   # Run a list/range of modules
+./fiuto.sh /mnt/disk --all --jsonl       # Also export JSONL (Timesketch schema)
+./fiuto.sh /mnt/disk --all --no-log-replay   # Do not replay registry .LOG1/.LOG2
 ```
 
 The module numbers shown by `--module`/`--modules` always refer to the **menu of the detected OS**.
@@ -101,7 +107,7 @@ The module numbers shown by `--module`/`--modules` always refer to the **menu of
 ### Required Python Modules
 
 ```bash
-pip install regipy          # Offline registry hive parsing
+pip install regipy          # Offline registry hive parsing + .LOG1/.LOG2 replay
 pip install python-evtx     # Reading .evtx files
 ```
 
@@ -176,7 +182,7 @@ The script uses internal bash helpers for:
 ./fiuto.sh /mnt/disk
 ```
 
-The script detects the volume's OS and presents a numbered menu with the relevant modules (39 for Windows, 14 for Linux, 11 for macOS). Select the module number or type `--all` to run them all.
+The script detects the volume's OS and presents a numbered menu with the relevant modules (39 for Windows, 16 for Linux, 13 for macOS). Select the module number or type `--all` to run them all.
 
 ### Automated Batch Analysis
 
@@ -255,7 +261,7 @@ fiuto_reports/
 
 ---
 
-## 🐧 The 14 Linux analysis modules
+## 🐧 The 16 Linux analysis modules
 
 | #  | Module Name         | Linux Artifact                                                     | Usage                                                           |
 | -- | ------------------- | ------------------------------------------------------------------ | --------------------------------------------------------------- |
@@ -272,11 +278,13 @@ fiuto_reports/
 | 11 | Installed Packages  | dpkg, rpm, apt history, snap                                       | Installation timeline / suspicious packages                     |
 | 12 | Trash & Recent      | `~/.local/share/Trash` (+`.trashinfo`), `recently-used.xbel` | Deleted files with deletion timestamp                           |
 | 13 | Filesystem Timeline | MAC times of sensitive areas (`find`/`stat`)                   | Cross-area chronological timeline                               |
-| 14 | Master Timeline     | (Aggregated)                                                       | Cross-module chronological timeline of all collected evidence   |
+| 14 | auditd              | `/var/log/audit/audit.log*`                                      | Syscall, authentication, EXECVE, policy violations              |
+| 15 | Container           | `/var/lib/docker`, `/var/lib/containers`                        | Docker/Podman inventory + container-escape indicators           |
+| 16 | Master Timeline     | (Aggregated)                                                       | Cross-module chronological timeline of all collected evidence   |
 
 ---
 
-## 🍎 The 11 macOS analysis modules
+## 🍎 The 13 macOS analysis modules
 
 | #  | Module Name            | macOS Artifact                                                 | Usage                                                         |
 | -- | ---------------------- | -------------------------------------------------------------- | ------------------------------------------------------------- |
@@ -290,7 +298,9 @@ fiuto_reports/
 | 8  | Browser History        | Safari `History.db`, Chrome, Firefox                         | Web navigation                                                |
 | 9  | Shell & AI History     | `.zsh_history`, `.bash_history`, AI CLI                    | Executed commands and AI conversations                        |
 | 10 | Recent Items           | `SFL`/`SFL2`, `~/.Trash`                                 | Recent apps/docs/servers and trash                            |
-| 11 | Master Timeline        | (Aggregated)                                                   | Cross-module chronological timeline of all collected evidence |
+| 11 | FSEvents               | `/.fseventsd`                                                | Filesystem change history (creations, renames, deletions)     |
+| 12 | Spotlight              | `.Spotlight-V100/store.db`                                   | Download provenance and names of deleted files (heuristic)    |
+| 13 | Master Timeline        | (Aggregated)                                                   | Cross-module chronological timeline of all collected evidence |
 
 ---
 
@@ -320,14 +330,6 @@ Use USB history, WLAN/VPN profiles, and web navigation to uncover data exfiltrat
 
 ## ⚙️ Advanced Options
 
-### Specify User
-
-```bash
-./fiuto.sh /mnt/windows --user Administrator
-```
-
-Focus analysis on a specific user.
-
 ### Load IoC List
 
 ```bash
@@ -336,13 +338,37 @@ Focus analysis on a specific user.
 
 Scan artifacts for matches with indicators of compromise.
 
-### Silent Mode
+### Registry transaction log replay (Windows)
+
+Windows does not write registry changes straight into the primary hive: it
+queues them in the transaction logs (`.LOG1` / `.LOG2`) and consolidates them
+only on a clean unmount. A hive taken from a machine powered off abruptly, from
+a disk image or from a snapshot is therefore almost always *dirty* — the most
+recent writes, frequently the attacker's, exist **only** in the logs.
+
+FIUTO replays those logs by default onto a **temporary copy**; the evidence
+volume is never written to. On a real test hive this recovered 2,456 additional
+keys and 3,905 additional values that raw parsing simply does not see.
 
 ```bash
-./fiuto.sh /mnt/windows --all --silent
+./fiuto.sh /mnt/windows --all --no-log-replay   # disable (not recommended)
 ```
 
-Run without interactive output (useful for automated scripts).
+Requires `regipy`. If it is missing, FIUTO warns once and falls back to the raw
+hive rather than failing.
+
+### JSONL export (Timesketch / plaso)
+
+```bash
+./fiuto.sh /mnt/disk --all --jsonl
+```
+
+Alongside every HTML report writes a `report.jsonl`, plus a single
+`fiuto_timeline.jsonl` for the whole session, using the fields expected by
+Timesketch (`datetime`, `timestamp_desc`, `message`) enriched with volume,
+hostname and module. Events whose year had to be inferred from a syslog-style
+timestamp are flagged with `year_inferred: true` rather than being presented as
+certain.
 
 ---
 
@@ -426,6 +452,23 @@ tail -f fiuto_reports/session_*.log
 
 ---
 
+## 🧪 Development and tests
+
+```bash
+bats tests/                              # test suite (bats-core)
+shellcheck -S warning -x fiuto.sh        # lint
+python3 tests/lint_embedded_python.py fiuto.sh   # compile the embedded parsers
+```
+
+CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs on every push:
+bash syntax, ShellCheck, the bats suite, and compilation of the ~76 Python
+parsers embedded as heredocs on both Python 3.9 and 3.12.
+
+That last job is not decoration: `bash -n` treats heredocs as opaque text, so a
+syntax error inside an embedded parser stays invisible until that module runs on
+a real disk. It is how a long-standing defect in module 38 (PAD Offline) was
+found — the block never compiled, so the module had never produced output.
+
 ## 🤝 Contributing
 
 If you have improvements, bug reports, or additional modules:
@@ -483,8 +526,8 @@ FIUTO is a tool to accelerate legitimate digital forensic analysis, intended for
 **FIUTO** (**F**orensic **I**nvestigation **U**tility **T**ool for **O**ffline) è un toolkit DFIR (Digital Forensics and Incident Response) unificato per l'analisi offline di dischi **Windows, Linux e macOS**. **Rileva automaticamente il sistema operativo di ogni volume montato** e propone il set di moduli pertinente, generando report HTML dettagliati per investigazioni rapide ed efficaci.
 
 - Volumi **Windows** → i 39 moduli per artefatti Windows.
-- Volumi **Linux** → 14 moduli dedicati (log di sistema, journal, login, history shell/AI, browser, account, persistenza, SSH, rete, pacchetti, cestino, timeline filesystem, master timeline).
-- Volumi **macOS** → 11 moduli dedicati (log, account dslocal, persistenza, login items/BTM, quarantine, TCC, KnowledgeC, browser, history shell/AI, recenti, master timeline).
+- Volumi **Linux** → 16 moduli dedicati (log di sistema, journal, login, history shell/AI, browser, account, persistenza, SSH, rete, pacchetti, cestino, timeline filesystem, auditd, container, master timeline).
+- Volumi **macOS** → 13 moduli dedicati (log, account dslocal, persistenza, login items/BTM, quarantine, TCC, KnowledgeC, browser, history shell/AI, recenti, FSEvents, Spotlight, master timeline).
 
 Tutto rigorosamente **offline**, sul filesystem montato in sola lettura.
 
@@ -527,6 +570,8 @@ Sui volumi macOS: **log** (`system.log`, `install.log`, ASL — i unified log `.
 ./fiuto.sh /mnt/disk                # Specifica la root di un volume (Windows/Linux/macOS)
 ./fiuto.sh /mnt/disk --all          # Esegui tutti i moduli dell'OS rilevato
 ./fiuto.sh /mnt/disk --module 3     # Esegui un modulo specifico (numerazione per OS)
+./fiuto.sh /mnt/disk --all --jsonl  # Esporta anche in JSONL (schema Timesketch)
+./fiuto.sh /mnt/disk --all --no-log-replay   # Non applicare i .LOG1/.LOG2 del registro
 ```
 
 ### Output Professionale
@@ -550,7 +595,7 @@ Sui volumi macOS: **log** (`system.log`, `install.log`, ASL — i unified log `.
 ### Moduli Python Richiesti
 
 ```bash
-pip install regipy          # Parsing degli hive di registro offline
+pip install regipy          # Parsing hive di registro offline + replay .LOG1/.LOG2
 pip install python-evtx     # Lettura dei file .evtx
 ```
 
@@ -625,7 +670,7 @@ Lo script utilizza internamente helper bash per:
 ./fiuto.sh /mnt/disk
 ```
 
-Lo script rileva l'OS del volume e presenta un menu numerato con i moduli pertinenti (39 per Windows, 14 per Linux, 11 per macOS). Seleziona il numero del modulo o digita `--all` per eseguirli tutti.
+Lo script rileva l'OS del volume e presenta un menu numerato con i moduli pertinenti (39 per Windows, 16 per Linux, 13 per macOS). Seleziona il numero del modulo o digita `--all` per eseguirli tutti.
 
 ### Analisi Batch Automatica
 
@@ -704,7 +749,7 @@ fiuto_reports/
 
 ---
 
-## 🐧 I 14 Moduli di Analisi Linux
+## 🐧 I 16 Moduli di Analisi Linux
 
 | #  | Nome Modulo         | Artefatto Linux                                                    | Utilizzo                                                        |
 | -- | ------------------- | ------------------------------------------------------------------ | --------------------------------------------------------------- |
@@ -721,11 +766,13 @@ fiuto_reports/
 | 11 | Installed Packages  | dpkg, rpm, apt history, snap                                       | Timeline installazioni / pacchetti sospetti                     |
 | 12 | Trash & Recent      | `~/.local/share/Trash` (+`.trashinfo`), `recently-used.xbel` | File cancellati con data di cancellazione                       |
 | 13 | Filesystem Timeline | MAC times aree sensibili (`find`/`stat`)                       | Timeline cronologica cross-area                                 |
-| 14 | Master Timeline     | (Aggregato)                                                        | Timeline cronologica cross-modulo di tutte le evidenze raccolte |
+| 14 | auditd              | `/var/log/audit/audit.log*`                                      | Syscall, autenticazioni, EXECVE, violazioni di policy           |
+| 15 | Container           | `/var/lib/docker`, `/var/lib/containers`                        | Inventario Docker/Podman + indicatori di fuga dal container     |
+| 16 | Master Timeline     | (Aggregato)                                                        | Timeline cronologica cross-modulo di tutte le evidenze raccolte |
 
 ---
 
-## 🍎 I 11 Moduli di Analisi macOS
+## 🍎 I 13 Moduli di Analisi macOS
 
 | #  | Nome Modulo            | Artefatto macOS                                                   | Utilizzo                                                        |
 | -- | ---------------------- | ----------------------------------------------------------------- | --------------------------------------------------------------- |
@@ -739,7 +786,9 @@ fiuto_reports/
 | 8  | Browser History        | Safari `History.db`, Chrome, Firefox                            | Navigazione web                                                 |
 | 9  | Shell & AI History     | `.zsh_history`, `.bash_history`, AI CLI                       | Comandi eseguiti e conversazioni AI                             |
 | 10 | Recent Items           | `SFL`/`SFL2`, `~/.Trash`                                    | App/documenti/server recenti e cestino                          |
-| 11 | Master Timeline        | (Aggregato)                                                       | Timeline cronologica cross-modulo di tutte le evidenze raccolte |
+| 11 | FSEvents               | `/.fseventsd`                                                   | Storico modifiche al filesystem (creazioni, rinomine, cancellazioni) |
+| 12 | Spotlight              | `.Spotlight-V100/store.db`                                      | Provenienza download e nomi di file cancellati (euristico)      |
+| 13 | Master Timeline        | (Aggregato)                                                       | Timeline cronologica cross-modulo di tutte le evidenze raccolte |
 
 ---
 
@@ -769,14 +818,6 @@ Usa la cronologia USB, i profili WLAN/VPN e la navigazione web per scoprire esfi
 
 ## ⚙️ Opzioni Avanzate
 
-### Specificare Utenti
-
-```bash
-./fiuto.sh /mnt/windows --user Administrator
-```
-
-Focalizza l'analisi su un utente specifico.
-
 ### Carica Lista IoC
 
 ```bash
@@ -785,13 +826,36 @@ Focalizza l'analisi su un utente specifico.
 
 Scansiona gli artefatti per trovare match con indicatori di compromissione.
 
-### Modalità Silenziosa
+### Replay dei transaction log del registro (Windows)
+
+Windows non scrive subito le modifiche nell'hive primario: le accoda nei
+transaction log (`.LOG1` / `.LOG2`) e le consolida solo a uno smontaggio
+pulito. Un hive acquisito da una macchina spenta a caldo, da un'immagine o da
+uno snapshot è quindi quasi sempre *dirty*: le scritture più recenti — spesso
+proprio quelle dell'attaccante — esistono **solo** nei log.
+
+FIUTO li riapplica di default su una **copia temporanea**; il volume di
+evidenza non viene mai toccato. Su un hive di test reale questo ha recuperato
+2.456 chiavi e 3.905 valori in più, invisibili al parsing dell'hive grezzo.
 
 ```bash
-./fiuto.sh /mnt/windows --all --silent
+./fiuto.sh /mnt/windows --all --no-log-replay   # disattiva (sconsigliato)
 ```
 
-Esegui senza output interattivo (utile per script automatici).
+Richiede `regipy`. Se manca, FIUTO avvisa una volta e ripiega sull'hive
+originale invece di fallire.
+
+### Export JSONL (Timesketch / plaso)
+
+```bash
+./fiuto.sh /mnt/disk --all --jsonl
+```
+
+Accanto a ogni report HTML scrive un `report.jsonl` e, per l'intera sessione,
+un unico `fiuto_timeline.jsonl` con i campi attesi da Timesketch (`datetime`,
+`timestamp_desc`, `message`) arricchiti con volume, hostname e modulo. Gli
+eventi il cui anno è stato dedotto da un timestamp in stile syslog vengono
+marcati con `year_inferred: true` invece di essere presentati come certi.
 
 ---
 
@@ -875,6 +939,24 @@ tail -f fiuto_reports/session_*.log
 
 ---
 
+## 🧪 Sviluppo e test
+
+```bash
+bats tests/                              # suite di test (bats-core)
+shellcheck -S warning -x fiuto.sh        # lint
+python3 tests/lint_embedded_python.py fiuto.sh   # compila i parser incorporati
+```
+
+La CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) gira a ogni push:
+sintassi bash, ShellCheck, suite bats e compilazione dei ~76 parser Python
+incorporati come heredoc, sia su Python 3.9 sia su 3.12.
+
+Quest'ultimo job non è un ornamento: `bash -n` tratta gli heredoc come testo
+opaco, quindi un errore di sintassi dentro un parser incorporato resta
+invisibile finché quel modulo non gira su un disco reale. È così che è emerso un
+difetto di lunga data nel modulo 38 (PAD Offline): il blocco non compilava, e il
+modulo non aveva mai prodotto output.
+
 ## 🤝 Contributi
 
 Se hai miglioramenti, segnalazioni di bug o moduli aggiuntivi:
@@ -926,6 +1008,18 @@ FIUTO è uno strumento per velocizzare le analisi forensi digitale legittimo, da
 ---
 
 ## 📝 Changelog
+
+**Date:** 2026-07-29 | **Version:** 2.1
+
+**Forensic correctness.** Windows registry **transaction logs (`.LOG1`/`.LOG2`) are now replayed by default** onto a temporary copy before parsing — the evidence volume is never written to. Without this step the most recent hive writes are invisible: on a real test hive the replay recovered **+2,456 keys and +3,905 values**. Applies to the four system hives and to every per-user `NTUSER.DAT` / `UsrClass.dat`. Disable with `--no-log-replay`.
+
+**New modules.** Linux: **auditd** (`/var/log/audit`, hex-decoded EXECVE arguments and proctitle, breakdown by record type) and **Container forensics** (offline Docker/Podman inventory with container-escape indicators: privileged, host root or Docker socket bind-mounted, `CAP_SYS_ADMIN`, host PID/network namespace). macOS: **FSEvents** (`/.fseventsd` binary parser, the macOS counterpart of the USN Journal) and **Spotlight** (heuristic extraction of download provenance).
+
+**Interoperability.** New `--jsonl` flag: every report is also emitted as JSON Lines in the **Timesketch/plaso** schema, plus a single `fiuto_timeline.jsonl` per session, so FIUTO output can be loaded straight into a super-timeline or a SIEM.
+
+**Quality.** First test suite (53 bats tests) and CI: bash syntax, ShellCheck at zero warnings, and compilation of every embedded Python parser on Python 3.9 and 3.12.
+
+**Bug fixes.** Module 38 (PAD Offline) was **entirely non-functional**: four f-strings with nested quoting meant the embedded parser never compiled. `ci_find_file` was defined twice with incompatible semantics, silently breaking relative-path lookups (`recently-used.xbel`). Five `find | xargs` pipelines dropped files whose names contain spaces — which is the norm for Scheduled Tasks and Recent items.
 
 **Date:** 2026-06-05 | **Version:** 2.0
 **Multi-OS support**: FIUTO now auto-detects each mounted volume's operating system and proposes the relevant module set — Windows (39 modules, unchanged), **Linux (14 new modules)** and **macOS (11 new modules)**, all strictly offline. Linux coverage: system logs, systemd journal, login history (wtmp/btmp/lastlog), shell & AI CLI history, browsers, accounts, persistence, SSH, network, packages, trash, filesystem timeline, cross-module master timeline. macOS coverage: system logs, dslocal accounts, persistence (LaunchAgents/Daemons), Login Items/BTM, quarantine, TCC, KnowledgeC, browsers, shell & AI history, recent items, cross-module master timeline. New OS-aware menu/dispatch with a data-driven module registry for the Linux/macOS sets, an aggregated **Full HTML dashboard** generated when running all modules, an in-report search bar, and a cross-module **Master Timeline** that collects every timestamped finding.
