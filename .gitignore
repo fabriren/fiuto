@@ -11,10 +11,18 @@
 !/.gitignore
 !/fiuto.sh
 !/README.md
+!/.shellcheckrc
 
-# Config GitHub: tieni SOLO il pulsante sponsor (FUNDING.yml).
-# Per escludere anche questo: rimuovi le 3 righe sotto ed esegui
-#   git rm -r --cached .github
+# Suite di test (bats + linter dei parser Python incorporati).
+!/tests/
+
+# Documentazione di progetto (piano di implementazione).
+!/docs/
+
+# Config GitHub: il pulsante sponsor e i workflow di CI.
+# Per escludere il pulsante sponsor: rimuovi la riga !/.github/FUNDING.yml
+# ed esegui  git rm -r --cached .github
 !/.github/
 /.github/*
 !/.github/FUNDING.yml
+!/.github/workflows/

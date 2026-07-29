@@ -1,0 +1,25 @@
+# Configurazione ShellCheck per FIUTO
+#
+# La CI fallisce su severità >= warning. I codici disabilitati qui sotto sono
+# stati valutati singolarmente e rappresentano rumore per questo codebase,
+# NON debito tecnico accettato alla cieca.
+
+# SC2155 — "Declare and assign separately to avoid masking return values".
+#   In FIUTO `local X; X=$(...)` è già il pattern usato dove il codice di uscita
+#   conta; i casi restanti sono assegnazioni di stringhe di presentazione.
+disable=SC2155
+
+# SC2034 — variabili apparentemente inutilizzate.
+#   Falsi positivi su colori/etichette usati solo dentro stringhe indirette
+#   (${!_color}) e su nameref.
+disable=SC2034
+
+# SC2128/SC2178 — "array usato come stringa" / "variabile usata come array".
+#   Falsi positivi sistematici di ShellCheck sui `local -n` (nameref) usati dal
+#   registro moduli data-driven.
+disable=SC2128,SC2178
+
+# SC2088 — tilde tra virgolette non espansa.
+#   Le occorrenze sono sottotitoli di report (testo mostrato all'utente,
+#   es. "~/.bash_history"), non path da risolvere.
+disable=SC2088

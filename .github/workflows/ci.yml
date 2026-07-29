@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  syntax:
+    name: Sintassi bash
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: bash -n
+        run: bash -n fiuto.sh
+      - name: Verifica bit di esecuzione
+        run: test -x fiuto.sh || { echo "fiuto.sh non è eseguibile"; exit 1; }
+
+  shellcheck:
+    name: ShellCheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Installa ShellCheck
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y shellcheck
+          shellcheck --version
+      - name: Lint (severità >= warning)
+        run: shellcheck -S warning -x fiuto.sh
+
+  tests:
+    name: Bats
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Installa bats
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y bats
+          bats --version
+      - name: Esegui la suite
+        run: bats --tap tests/
+
+  python-parsers:
+    # I ~70 parser Python sono incorporati come heredoc: bash -n li tratta come
+    # testo opaco, quindi un errore di sintassi resta invisibile fino a quando
+    # quel modulo gira su un disco reale.
+    #
+    # La matrice copre la versione minima dichiarata nel README (3.9) e una
+    # recente: PEP 701 (Python 3.12) ha rilassato le regole di quoting delle
+    # f-string, quindi codice che compila su 3.12+ può rompersi su 3.9.
+    name: Parser Python incorporati (${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.9", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Compila ogni heredoc Python
+        run: python3 tests/lint_embedded_python.py fiuto.sh
