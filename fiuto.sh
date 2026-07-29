@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ================================================================
-#  fiuto.sh  –  v2.0
+#  fiuto.sh  –  v2.1
 #  Toolkit DFIR unificato per analisi offline di dischi Windows/Linux/macOS
 #
 #  Uso:
@@ -63,6 +63,11 @@ BATCH_MODE=false             # true in run_all_modules
 declare -a SUMMARY_TABLE=()  # tabella riepilogativa batch
 LOG_FILE=""                  # percorso log sessione (impostato all'avvio)
 declare -a IOC_LIST=()       # lista IoC da file esterno (--ioc)
+HIVE_REPLAY=true             # replay dei transaction log del registro (--no-log-replay per disattivarlo)
+EXPORT_JSONL=false           # export JSONL schema Timesketch accanto a ogni report (--jsonl)
+# Lo stato del replay (cache, esiti, avvisi gia' emessi) vive su disco in
+# ${TMPDIR:-/tmp}/fiuto_hives_$$ e non in variabili: recover_hive gira quasi
+# sempre dentro una command substitution, quindi in subshell.
 HOST_NAME=""                 # Nome macchina (da registro)
 OS_VER=""                    # Sistema Operativo
 IP_ADDR=""                   # Indirizzo IP
@@ -251,7 +256,7 @@ print_banner() {
     echo "  ║      ╚═╝       ╚═╝   ╚═════╝      ╚═╝      ╚═════╝       ║"
     echo "  ║                                                          ║"
     echo -e "  ║    ${CYAN}${BOLD}F${RESET}${CYAN}orensic ${BOLD}I${RESET}${CYAN}nvestigation ${BOLD}U${RESET}${CYAN}tility ${BOLD}T${RESET}${CYAN}ool for ${BOLD}O${RESET}${CYAN}ffline${RESET}       ${CYAN}${BOLD}║"
-    echo -e "  ║                    ${MAGENTA}${BOLD}v2.0 - zi®iginal${RESET}${CYAN}                      ║"
+    echo -e "  ║                    ${MAGENTA}${BOLD}v2.1 - zi®iginal${RESET}${CYAN}                      ║"
     echo "  ╚══════════════════════════════════════════════════════════╝"
     echo -e "${RESET}"
     local DATE_LABEL="$([ "$LANG" = "it" ] && echo "Data" || echo "Date")"
@@ -642,11 +647,10 @@ ci_find_dir() {
     echo "$RESULT"
 }
 
-ci_find_file() {
-    local BASE="$1"
-    local NAME="$2"
-    find "$BASE" -maxdepth 1 -iname "$NAME" -type f 2>/dev/null | head -1
-}
+# NB: la definizione di ci_find_file sta più in alto (vicino a ci_find_dir che usa).
+# Qui esisteva un secondo ci_find_file che sovrascriveva il primo con semantiche
+# diverse (solo nome file, -maxdepth 1): rompeva silenziosamente le chiamate che
+# passano un percorso relativo, es. ci_find_file "$HOME" ".local/share/recently-used.xbel".
 
 # ----------------------------------------------------------------
 # Rilevamento OS del volume montato.
@@ -894,8 +898,154 @@ prepare_report_dir() {
 
 # Registra il report nel riepilogo di sessione.
 # Chiamata DOPO la scrittura effettiva del file, fuori da qualsiasi subshell.
+#
+# E' anche il punto di aggancio dell'export JSONL: ogni modulo passa di qui
+# dopo aver scritto il proprio HTML, quindi l'export copre automaticamente
+# tutti i moduli — inclusi quelli Windows, che generano l'HTML per conto
+# proprio senza passare da finish_report.
 register_report() {
-    [[ -n "${1:-}" && -f "$1" ]] && GENERATED_REPORTS+=("$1")
+    [[ -n "${1:-}" && -f "$1" ]] || return 0
+    GENERATED_REPORTS+=("$1")
+    [[ "$EXPORT_JSONL" == "true" ]] && export_report_jsonl "$1"
+    return 0
+}
+
+# ----------------------------------------------------------------
+#  Export JSONL (schema Timesketch / plaso)
+#
+#  I report HTML sono ottimi per l'analista e inutilizzabili per una
+#  pipeline: non si correlano con altre sorgenti e non si caricano in un
+#  SIEM. Qui gli stessi eventi vengono riemessi in JSON Lines con i campi
+#  attesi da Timesketch (datetime, timestamp_desc, message), cosi' il
+#  risultato di FIUTO entra direttamente in una super-timeline.
+#
+#  L'estrazione lavora sull'HTML gia' prodotto invece che sui dati grezzi
+#  dei singoli moduli: e' l'unico punto in cui il formato e' omogeneo per
+#  tutti e 64+ i moduli, e non richiede di toccarli uno per uno.
+# ----------------------------------------------------------------
+export_report_jsonl() {
+    local HTML="$1"
+    local DIR; DIR=$(dirname "$HTML")
+    local SLUG; SLUG=$(basename "$DIR" | sed -E 's/_[0-9]{8}_[0-9]{6}$//')
+    local OUT="${DIR}/report.jsonl"
+
+    "$PY3" - "$HTML" "$SLUG" "${WIN_ROOT:-}" "${HOST_NAME:-}" "${OS_TYPE:-}" > "$OUT" << 'PYEOF' 2>/dev/null
+import sys, re, json, html as H, datetime
+
+html_path, slug = sys.argv[1], sys.argv[2]
+volume  = sys.argv[3] if len(sys.argv) > 3 else ''
+host    = sys.argv[4] if len(sys.argv) > 4 else ''
+os_type = sys.argv[5] if len(sys.argv) > 5 else ''
+
+MONTHS = {'Jan':'01','Feb':'02','Mar':'03','Apr':'04','May':'05','Jun':'06',
+          'Jul':'07','Aug':'08','Sep':'09','Oct':'10','Nov':'11','Dec':'12'}
+TS_ISO = re.compile(r'\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}')
+TS_SYS = re.compile(r'\b(' + '|'.join(MONTHS) + r')\s+(\d{1,2})\s+(\d{2}:\d{2}:\d{2})')
+TD     = re.compile(r'<td[^>]*>(.*?)</td>', re.DOTALL | re.I)
+PRE    = re.compile(r'<pre[^>]*>(.*?)</pre>', re.DOTALL | re.I)
+TAG    = re.compile(r'<[^>]+>')
+
+def strip(s):
+    return TAG.sub('', H.unescape(s)).strip()
+
+# I log syslog non portano l'anno: si usa quello del file HTML (l'analisi e'
+# contestuale all'acquisizione). Approssimazione esplicita, non silenziosa.
+year = str(datetime.date.today().year)
+year_assumed = False
+
+def norm_iso(raw):
+    return raw.replace('T', ' ')[:19].replace(' ', 'T')
+
+def from_sys(m):
+    global year_assumed
+    year_assumed = True
+    return f"{year}-{MONTHS[m.group(1)]}-{int(m.group(2)):02d}T{m.group(3)}"
+
+try:
+    content = open(html_path, encoding='utf-8', errors='replace').read()
+except Exception:
+    sys.exit(0)
+
+seen = set()
+out  = []
+
+def emit(dt, message, assumed):
+    message = ' '.join(message.split())[:2000]
+    if not message:
+        return
+    key = (dt, message[:120])
+    if key in seen:
+        return
+    seen.add(key)
+    rec = {
+        # Campi richiesti da Timesketch
+        "datetime": dt,
+        "timestamp_desc": f"FIUTO {slug}",
+        "message": message,
+        # Contesto aggiuntivo
+        "data_type": f"fiuto:{slug}",
+        "module": slug,
+        "source_volume": volume,
+        "hostname": host,
+        "os": os_type,
+    }
+    if assumed:
+        # L'anno non era nel dato di origine: va dichiarato, non nascosto.
+        rec["year_inferred"] = True
+    out.append(rec)
+
+# 1) Righe di tabella in cui una cella contiene un timestamp
+for tr in re.finditer(r'<tr[^>]*>(.*?)</tr>', content, re.DOTALL | re.I):
+    cells = [strip(m.group(1)) for m in TD.finditer(tr.group(1))]
+    if not cells:
+        continue
+    dt = None
+    for c in cells:
+        m = TS_ISO.search(c)
+        if m:
+            dt = norm_iso(m.group(0))
+            break
+    if not dt:
+        continue
+    msg = ' | '.join(c for c in cells
+                     if c and not TS_ISO.fullmatch(c.strip()) and not re.fullmatch(r'\d+', c.strip()))
+    emit(dt, msg, False)
+
+# 2) Blocchi <pre> (log, history, config): una riga per evento
+for pm in PRE.finditer(content):
+    block = H.unescape(TAG.sub('', pm.group(1)))
+    for raw in block.split('\n'):
+        txt = re.sub(r'^\s*\d+\s+', '', raw).strip()   # via il numero di riga
+        if not txt:
+            continue
+        assumed = False
+        m = TS_ISO.search(txt)
+        if m:
+            dt = norm_iso(m.group(0))
+        else:
+            m = TS_SYS.search(txt)
+            if not m:
+                continue
+            dt = from_sys(m)
+            assumed = True
+        emit(dt, txt, assumed)
+
+for rec in sorted(out, key=lambda r: r["datetime"]):
+    print(json.dumps(rec, ensure_ascii=False))
+PYEOF
+
+    local N=0
+    [[ -s "$OUT" ]] && N=$(wc -l < "$OUT")
+    if [[ "$N" -eq 0 ]]; then
+        rm -f "$OUT"
+        return 0
+    fi
+
+    # Timeline unica di sessione: e' il file da caricare in Timesketch.
+    local COMBINED="${REPORT_BASE_DIR}/fiuto_timeline.jsonl"
+    cat "$OUT" >> "$COMBINED" 2>/dev/null || true
+    ok "$(L "Export JSONL:" "JSONL export:") ${BOLD}${N}$(L " eventi" " events")${RESET} → $(basename "$OUT")"
+    log_msg "[JSONL] $OUT — $N eventi"
 }
 
 # Controlla se regipy è disponibile tramite il Python rilevato all'avvio ($PY3)
@@ -903,18 +1053,180 @@ check_regipy() {
     "$PY3" -c "import regipy" 2>/dev/null
 }
 
-# Torna il percorso di un hive di sistema
+# ----------------------------------------------------------------
+#  Replay dei transaction log del registro (.LOG1 / .LOG2)
+#
+#  Windows non scrive immediatamente nell'hive primario: accoda le modifiche
+#  nei transaction log e le consolida solo a uno smontaggio pulito. Un hive
+#  acquisito da una macchina spenta a caldo, da un'immagine o da uno snapshot
+#  e' quindi quasi sempre "dirty": le scritture piu' recenti — tipicamente
+#  proprio quelle dell'attaccante — esistono SOLO nei .LOG1/.LOG2.
+#
+#  Parsare l'hive grezzo le perde senza emettere alcun errore: il modulo
+#  produce un report che sembra completo ma non lo e'. Qui i log vengono
+#  riapplicati su una COPIA in area temporanea; il volume di evidenza resta
+#  intatto e in sola lettura.
+#
+#  Nota: regipy scriverebbe di default l'hive ricostruito accanto
+#  all'originale (<hive>.restored), cioe' SUL volume di evidenza. Il percorso
+#  di destinazione viene quindi sempre passato esplicitamente.
+# ----------------------------------------------------------------
+
+# Area temporanea per gli hive ricostruiti.
+#
+# recover_hive viene invocata quasi sempre dentro una command substitution,
+# quindi gira in una subshell: variabili globali e array modificati li' non
+# risalgono al processo padre. Il percorso deve percio' essere DETERMINISTICO
+# e non memorizzato in una variabile, altrimenti ogni chiamata creerebbe una
+# nuova directory — rifacendo il replay ogni volta e, peggio, lasciando in
+# giro copie di hive (che contengono credenziali) mai ripulite.
+#
+# $$ resta il PID della shell principale anche nelle subshell, quindi
+# identifica la sessione in modo stabile.
+_hive_replay_tmpdir() {
+    local D="${TMPDIR:-/tmp}/fiuto_hives_$$"
+    if [[ ! -d "$D" ]]; then
+        mkdir -p "$D" 2>/dev/null || return 1
+        chmod 700 "$D" 2>/dev/null || true   # gli hive ricostruiti contengono credenziali
+    fi
+    echo "$D"
+}
+
+# Percorso deterministico dell'hive ricostruito a partire dall'originale.
+# Fa anche da cache: se il file esiste gia', il replay e' gia' stato fatto.
+_hive_recovered_path() {
+    local ORIG="$1" TMPD
+    TMPD=$(_hive_replay_tmpdir) || return 1
+    printf '%s/%s_%s.recovered' "$TMPD" \
+        "$(printf '%s' "$ORIG" | sha256sum | cut -c1-16)" "$(basename "$ORIG")"
+}
+
+# Annota l'esito del replay su file: gli array in subshell non sopravvivono.
+_hive_replay_note() {
+    local TMPD; TMPD=$(_hive_replay_tmpdir) || return 0
+    printf '%s\t%s\t%s\n' "$1" "$2" "$3" >> "${TMPD}/replay.log" 2>/dev/null || true
+}
+
+# Righe di esito del replay raccolte finora (una per hive, formato TSV).
+hive_replay_report() {
+    local TMPD="${TMPDIR:-/tmp}/fiuto_hives_$$"
+    [[ -f "${TMPD}/replay.log" ]] && sort -u "${TMPD}/replay.log"
+}
+
+# recover_hive <path_hive>
+# Stampa il percorso dell'hive da parsare: la copia ricostruita se erano
+# presenti transaction log applicabili, altrimenti l'originale.
+# Non fallisce mai: in caso di problema ripiega sull'originale e lo annota.
+recover_hive() {
+    local ORIG="$1"
+    [[ -n "$ORIG" && -f "$ORIG" ]] || { echo ""; return; }
+    [[ "$HIVE_REPLAY" == "true" ]] || { echo "$ORIG"; return; }
+
+    local OUT; OUT=$(_hive_recovered_path "$ORIG") || { echo "$ORIG"; return; }
+
+    # Cache su disco: sopravvive alle subshell delle command substitution.
+    [[ -s "$OUT" ]] && { echo "$OUT"; return; }
+    # Marcatore "gia' valutato, si usa l'originale" (hive pulito o replay fallito):
+    # evita di ritentare a ogni modulo.
+    [[ -f "${OUT}.skip" ]] && { echo "$ORIG"; return; }
+
+    local DIR BASE LOG1 LOG2
+    DIR=$(dirname "$ORIG")
+    BASE=$(basename "$ORIG")
+    LOG1=$(find "$DIR" -maxdepth 1 -iname "${BASE}.LOG1" -type f 2>/dev/null | head -1)
+    LOG2=$(find "$DIR" -maxdepth 1 -iname "${BASE}.LOG2" -type f 2>/dev/null | head -1)
+
+    # Nessun log, o log vuoti: l'hive e' gia' consolidato.
+    if [[ ( -z "$LOG1" || ! -s "$LOG1" ) && ( -z "$LOG2" || ! -s "$LOG2" ) ]]; then
+        : > "${OUT}.skip"
+        _hive_replay_note "clean" "$BASE" "$(L "nessun transaction log da applicare" "no transaction log to apply")"
+        echo "$ORIG"
+        return
+    fi
+
+    if ! check_regipy; then
+        # L'avviso va emesso una sola volta per sessione: il marcatore sta su
+        # disco perche' una variabile non sopravvivrebbe alla subshell.
+        local WARNED; WARNED="$(_hive_replay_tmpdir)/.regipy_warned"
+        if [[ ! -f "$WARNED" ]]; then
+            : > "$WARNED"
+            warn "$(L "regipy assente: i transaction log del registro non verranno applicati (dati recenti potenzialmente mancanti)." \
+                     "regipy missing: registry transaction logs will not be applied (recent data potentially missing).")" >&2
+        fi
+        : > "${OUT}.skip"
+        _hive_replay_note "skipped" "$BASE" "$(L "regipy non disponibile" "regipy unavailable")"
+        echo "$ORIG"
+        return
+    fi
+
+    local RES
+    RES=$("$PY3" - "$ORIG" "$OUT" "${LOG1:-}" "${LOG2:-}" << 'PYEOF' 2>/dev/null
+import sys, os
+
+hive_path, out_path = sys.argv[1], sys.argv[2]
+log1 = sys.argv[3] if len(sys.argv) > 3 and sys.argv[3] else None
+log2 = sys.argv[4] if len(sys.argv) > 4 and sys.argv[4] else None
+
+# Se esiste solo il secondario, va passato come primario: regipy richiede
+# comunque un primary_log_path valido.
+if not log1 and log2:
+    log1, log2 = log2, None
+
+try:
+    from regipy.recovery import apply_transaction_logs
+    restored, dirty = apply_transaction_logs(
+        hive_path, log1, secondary_log_path=log2, restored_hive_path=out_path
+    )
+    if restored and os.path.isfile(restored) and os.path.getsize(restored) > 0:
+        print(f"OK\t{dirty}")
+    else:
+        print("FAIL\tnessun hive ricostruito prodotto")
+except Exception as exc:
+    print(f"FAIL\t{exc}")
+PYEOF
+    )
+
+    local STATUS DETAIL
+    STATUS="${RES%%	*}"
+    DETAIL="${RES#*	}"
+
+    if [[ "$STATUS" == "OK" && -s "$OUT" ]]; then
+        _hive_replay_note "recovered" "$BASE" "${DETAIL} $(L "pagine dirty riapplicate" "dirty pages replayed")"
+        info "$(L "Transaction log applicati a" "Transaction logs applied to") ${BOLD}${BASE}${RESET} — ${DETAIL} $(L "pagine dirty" "dirty pages")" >&2
+        log_msg "[HIVE] replay OK: $ORIG -> $OUT (${DETAIL} dirty pages)"
+        echo "$OUT"
+        return
+    fi
+
+    # Fallback non distruttivo: si continua sull'hive originale.
+    rm -f "$OUT" 2>/dev/null
+    : > "${OUT}.skip"
+    _hive_replay_note "failed" "$BASE" "$DETAIL"
+    warn "$(L "Replay dei transaction log fallito per" "Transaction log replay failed for") ${BASE}: ${DETAIL}" >&2
+    log_msg "[HIVE] replay FAILED: $ORIG — $DETAIL"
+    echo "$ORIG"
+}
+
+# Torna il percorso di un hive di sistema, con i transaction log gia' applicati.
 get_hive() {
     local NAME="$1"   # SOFTWARE, SYSTEM, SECURITY, SAM
+    local FOUND=""
     local PATH1="$WIN_ROOT/Windows/System32/config/${NAME}"
-    local PATH2
-    PATH2=$(ci_find_dir "$WIN_ROOT" "Windows/System32/config")
-    [[ -f "$PATH1" ]] && echo "$PATH1" && return
-    [[ -n "$PATH2" ]] && {
-        local F
-        F=$(ci_find_file "$PATH2" "$NAME")
-        [[ -n "$F" ]] && echo "$F"
-    }
+    if [[ -f "$PATH1" ]]; then
+        FOUND="$PATH1"
+    else
+        local PATH2
+        PATH2=$(ci_find_dir "$WIN_ROOT" "Windows/System32/config")
+        [[ -n "$PATH2" ]] && FOUND=$(ci_find_file "$PATH2" "$NAME")
+    fi
+    [[ -n "$FOUND" ]] && recover_hive "$FOUND"
+}
+
+# Torna l'hive di un utente (NTUSER.DAT, UsrClass.dat) con i log applicati.
+# $1 = directory da cui cercare · $2 = nome hive
+get_user_hive() {
+    local FOUND; FOUND=$(ci_find_file "$1" "$2")
+    [[ -n "$FOUND" ]] && recover_hive "$FOUND"
 }
 
 # Avvia un parser regipy su un hive e una chiave
@@ -1767,7 +2079,7 @@ module_rdp_cache() {
         fi
         mapfile -t CACHE_FILES < <(find "$CACHE_DIR" -maxdepth 1 -type f \( -iname "*.bmc" -o -iname "*.bin" \) -printf "%T@ %p\n" 2>/dev/null | sort -rn | cut -d' ' -f2-)
         if [[ ${#CACHE_FILES[@]} -eq 0 ]]; then
-            mapfile -t CACHE_FILES < <(find "$CACHE_DIR" -maxdepth 1 -type f \( -iname "*.bmc" -o -iname "*.bin" \) 2>/dev/null | xargs ls -t 2>/dev/null)
+            mapfile -t CACHE_FILES < <(find "$CACHE_DIR" -maxdepth 1 -type f \( -iname "*.bmc" -o -iname "*.bin" \) -print0 2>/dev/null | xargs -0 ls -t 2>/dev/null)
         fi
         local COUNT=${#CACHE_FILES[@]}
         if [[ $COUNT -eq 0 ]]; then
@@ -1797,7 +2109,7 @@ module_rdp_cache() {
         local USERNAME
         USERNAME=$(basename "$USER_DIR")
         local NTUSER
-        NTUSER=$(ci_find_file "$USER_DIR" "NTUSER.DAT")
+        NTUSER=$(get_user_hive "$USER_DIR" "NTUSER.DAT")
         [[ -z "$NTUSER" ]] && continue
         if check_regipy; then
             local RDP_SERVERS
@@ -1841,7 +2153,7 @@ PYEOF
         echo ""
         info "${BOLD}$(L "Per analizzare le tile bitmap della cache usa bmc-tools:" "To analyze cache bitmap tiles use bmc-tools:")${RESET}"
         echo -e "    ${DIM}git clone https://github.com/ANSSI-FR/bmc-tools${RESET}"
-        echo -e "    ${DIM}"$PY3" bmc-tools.py -s <dir_cache> -d ./output/ -b${RESET}"
+        echo -e "    ${DIM}${PY3} bmc-tools.py -s <dir_cache> -d ./output/ -b${RESET}"
     fi
 
     [[ $TOTAL_FILES -eq 0 ]] && { warn "$(L "Nessun file cache RDP trovato." "No RDP cache files found.")"; return 0; }
@@ -1892,7 +2204,7 @@ PYEOF
           <div style='font-family:var(--mono);color:var(--accent);margin-bottom:.5rem'>Analisi tile bitmap</div>
           <div style='font-family:var(--mono);font-size:.72rem;color:var(--text-dim)'>
             git clone https://github.com/ANSSI-FR/bmc-tools<br>
-            "$PY3" bmc-tools.py -s &lt;dir_cache&gt; -d ./output/ -b
+            ${PY3} bmc-tools.py -s &lt;dir_cache&gt; -d ./output/ -b
           </div>
         </div>
         </main>"
@@ -1963,7 +2275,7 @@ PYEOF
 
     while IFS= read -r USER_DIR; do
         local USERNAME; USERNAME=$(basename "$USER_DIR")
-        local NTUSER; NTUSER=$(ci_find_file "$USER_DIR" "NTUSER.DAT")
+        local NTUSER; NTUSER=$(get_user_hive "$USER_DIR" "NTUSER.DAT")
         [[ -z "$NTUSER" ]] && continue
         for KEY in "${HKCU_KEYS[@]}"; do
             local VALS
@@ -2228,7 +2540,7 @@ PYEOF
         mapfile -t BIN_FILES < <(find "$TABSTATE_DIR" -maxdepth 1 -iname "*.bin" -type f -printf "%T@ %p\n" 2>/dev/null | sort -rn | cut -d' ' -f2-)
         if [[ ${#BIN_FILES[@]} -eq 0 ]]; then
             # Fallback se printf %T@ non è supportato (BSD/macOS)
-            mapfile -t BIN_FILES < <(find "$TABSTATE_DIR" -maxdepth 1 -iname "*.bin" -type f 2>/dev/null | xargs ls -t 2>/dev/null)
+            mapfile -t BIN_FILES < <(find "$TABSTATE_DIR" -maxdepth 1 -iname "*.bin" -type f -print0 2>/dev/null | xargs -0 ls -t 2>/dev/null)
         fi
         local COUNT=${#BIN_FILES[@]}
         [[ $COUNT -eq 0 ]] && { warn "$USERNAME — $(L "TabState vuota" "TabState empty")"; continue; }
@@ -2368,7 +2680,7 @@ module_scheduled_tasks() {
 
     mapfile -t TASK_FILES < <(find "$TASKS_DIR" -type f ! -iname "*.job" -printf "%T@ %p\n" 2>/dev/null | sort -rn | cut -d' ' -f2-)
     if [[ ${#TASK_FILES[@]} -eq 0 ]]; then
-        mapfile -t TASK_FILES < <(find "$TASKS_DIR" -type f ! -iname "*.job" 2>/dev/null | xargs ls -t 2>/dev/null)
+        mapfile -t TASK_FILES < <(find "$TASKS_DIR" -type f ! -iname "*.job" -print0 2>/dev/null | xargs -0 ls -t 2>/dev/null)
     fi
     local TOTAL=${#TASK_FILES[@]}
     info "$(L "Trovati" "Found") $TOTAL task in: $TASKS_DIR"
@@ -2642,7 +2954,7 @@ module_lnk() {
 
         mapfile -t LNK_FILES < <(find "$RECENT_DIR" -maxdepth 1 -iname "*.lnk" -type f -printf "%T@ %p\n" 2>/dev/null | sort -rn | cut -d' ' -f2- | head -50)
         if [[ ${#LNK_FILES[@]} -eq 0 ]]; then
-            mapfile -t LNK_FILES < <(find "$RECENT_DIR" -maxdepth 1 -iname "*.lnk" -type f 2>/dev/null | xargs ls -t 2>/dev/null | head -50)
+            mapfile -t LNK_FILES < <(find "$RECENT_DIR" -maxdepth 1 -iname "*.lnk" -type f -print0 2>/dev/null | xargs -0 ls -t 2>/dev/null | head -50)
         fi
         local COUNT=${#LNK_FILES[@]}
         [[ $COUNT -eq 0 ]] && { dim_msg "$USERNAME — $(L "nessun .lnk trovato" "no .lnk files found")"; continue; }
@@ -3636,8 +3948,8 @@ PYEOF
     # Fallback: strings su tutto il repository
     if [[ -z "$WMI_DATA" || $(echo "$WMI_DATA" | wc -l) -lt 2 ]]; then
         info "$(L "Fallback: strings sul repository..." "Fallback: strings on repository...")"
-        WMI_DATA=$(find "$WMI_DIR" -type f 2>/dev/null | \
-            xargs strings 2>/dev/null | \
+        WMI_DATA=$(find "$WMI_DIR" -type f -print0 2>/dev/null | \
+            xargs -0 strings 2>/dev/null | \
             grep -iE "CommandLineTemplate|ScriptText|ActiveScript|EventFilter|EventConsumer|FilterToConsumer" | \
             head -100 | \
             awk '{print "StringsMatch\t" $0}' || true)
@@ -4253,7 +4565,7 @@ module_userassist() {
 
     while IFS= read -r USER_DIR; do
         local USERNAME; USERNAME=$(basename "$USER_DIR")
-        local NTUSER; NTUSER=$(ci_find_file "$USER_DIR" "NTUSER.DAT")
+        local NTUSER; NTUSER=$(get_user_hive "$USER_DIR" "NTUSER.DAT")
         [[ -z "$NTUSER" ]] && { dim_msg "$USERNAME — NTUSER.DAT $(L "non trovato" "not found")"; continue; }
 
         info "Parsing NTUSER.DAT: $USERNAME"
@@ -4533,11 +4845,11 @@ module_shellbags() {
         local USERNAME; USERNAME=$(basename "$USER_DIR")
 
         # UsrClass.dat contiene le ShellBags principali (Win7+)
-        local USRCLASS; USRCLASS=$(ci_find_file \
+        local USRCLASS; USRCLASS=$(get_user_hive \
             "$(ci_find_dir "$USER_DIR" "AppData/Local/Microsoft/Windows")" \
             "UsrClass.dat")
         # Fallback: anche in NTUSER.DAT ci sono bag per desktop/drive locali
-        local NTUSER; NTUSER=$(ci_find_file "$USER_DIR" "NTUSER.DAT")
+        local NTUSER; NTUSER=$(get_user_hive "$USER_DIR" "NTUSER.DAT")
 
         local FOUND_ANY=false
 
@@ -5221,7 +5533,7 @@ module_opensave() {
 
     while IFS= read -r USER_DIR; do
         local USERNAME; USERNAME=$(basename "$USER_DIR")
-        local NTUSER; NTUSER=$(ci_find_file "$USER_DIR" "NTUSER.DAT")
+        local NTUSER; NTUSER=$(get_user_hive "$USER_DIR" "NTUSER.DAT")
         [[ -z "$NTUSER" ]] && continue
 
         # ── OpenSavePidlMRU / OpenSaveMRU ───────────────────────────
@@ -6329,7 +6641,7 @@ PYEOF
     # Per utente: NTUSER.DAT
     while IFS= read -r USER_DIR; do
         local USERNAME; USERNAME=$(basename "$USER_DIR")
-        local NTUSER; NTUSER=$(ci_find_file "$USER_DIR" "NTUSER.DAT")
+        local NTUSER; NTUSER=$(get_user_hive "$USER_DIR" "NTUSER.DAT")
         [[ -z "$NTUSER" ]] && continue
         local UPKG_DATA
         UPKG_DATA=$("$PY3" - "$NTUSER" "$USERNAME" << 'PYEOF' 2>/dev/null || true
@@ -6732,7 +7044,7 @@ module_office_mru() {
 
     while IFS= read -r USER_DIR; do
         local USERNAME; USERNAME=$(basename "$USER_DIR")
-        local NTUSER; NTUSER=$(ci_find_file "$USER_DIR" "NTUSER.DAT")
+        local NTUSER; NTUSER=$(get_user_hive "$USER_DIR" "NTUSER.DAT")
         [[ -z "$NTUSER" ]] && continue
         info "Parsing Office MRU: $USERNAME"
 
@@ -8619,7 +8931,7 @@ for c in computers:
 # ── Sezione ACL ────────────────────────────────────────────────────
 def ace_rows(aces):
     if not aces:
-        return "<tr><td colspan='5' class='dim' style='padding:1rem;text-align:center'>{L("Nessun ACE pericoloso rilevato (o nTSecurityDescriptor non trovato)", "No dangerous ACE found (or nTSecurityDescriptor not present)")}</td></tr>"
+        return f"<tr><td colspan='5' class='dim' style='padding:1rem;text-align:center'>{L('Nessun ACE pericoloso rilevato (o nTSecurityDescriptor non trovato)', 'No dangerous ACE found (or nTSecurityDescriptor not present)')}</td></tr>"
     out = ''
     for a in aces:
         cls = 'row-bad' if a['everyone'] else 'row-warn'
@@ -8638,6 +8950,18 @@ def ace_rows(aces):
 fl_badge_cls = 'ok' if domain_fl != 'N/A' else 'dim'
 krbtgt_cls = 'bad' if (krbtgt_days is not None and krbtgt_days > 180) else 'ok'
 krbtgt_badge = tag(f'{krbtgt_days}d ago','bad') if (krbtgt_days and krbtgt_days > 180) else (tag(f'{krbtgt_days}d ago','ok') if krbtgt_days else '')
+
+# ── Frammenti HTML pre-generati (evitano f-string annidati con lo stesso quoting) ──
+_krbtgt_risk_html = (
+    f'<span class="tag tag-bad">{L("GOLDEN TICKET RISK: rotazione &gt;180gg", "GOLDEN TICKET RISK: rotation &gt;180d")}</span>'
+    if (krbtgt_days and krbtgt_days > 180) else ''
+)
+def _empty_row(cols, it, en):
+    return f"<tr><td colspan='{cols}' class='dim' style='padding:1rem;text-align:center'>{L(it, en)}</td></tr>"
+
+_no_priv_row = _empty_row(6, 'Nessun utente privilegiato trovato', 'No privileged users found')
+_no_gpo_row  = _empty_row(3, 'Nessuna GPO trovata', 'No GPOs found')
+_no_comp_row = _empty_row(3, 'Nessun computer trovato', 'No computers found')
 
 # ── Blocco HTML per catalogo corrotto (pre-generato per evitare f-string annidati) ──
 _catalog_corrupt_html = ""
@@ -8741,7 +9065,7 @@ html_out = f"""<!DOCTYPE html>
     <td class="mono {fl_badge_cls}">{h(domain_fl)}</td><td></td></tr>
 <tr><td class="mono dim">KRBTGT pwdLastSet</td>
     <td class="mono {krbtgt_cls}">{h(krbtgt_pwd)}</td>
-    <td>{krbtgt_badge}{'<span class="tag tag-bad">{L("GOLDEN TICKET RISK: rotazione &gt;180gg", "GOLDEN TICKET RISK: rotation &gt;180d")}</span>' if (krbtgt_days and krbtgt_days>180) else ''}</td></tr>
+    <td>{krbtgt_badge}{_krbtgt_risk_html}</td></tr>
 <tr><td class="mono dim">AD Recycle Bin</td>
     <td class="mono {"ok" if recycle_bin=="Enabled" else "bad"}">{h(recycle_bin)}</td>
     <td>{"" if recycle_bin=="Enabled" else "<span class='tag tag-warn'>Oggetti eliminati non recuperabili</span>"}</td></tr>
@@ -8753,7 +9077,7 @@ html_out = f"""<!DOCTYPE html>
 <div class="stitle">{L("Utenti Privilegiati", "Privileged Users")} — {total_priv} account ({len(PRIV_GROUPS)} gruppi monitorati)</div>
 <div class="card"><table>
 <thead><tr><th>sAMAccountName</th><th>{L("Gruppi (Direct/Nested)", "Groups (Direct/Nested)")}</th><th>pwdLastSet</th><th>lastLogon</th><th>Flags</th><th>SID</th></tr></thead>
-<tbody>{rows_priv if rows_priv else "<tr><td colspan='6' class='dim' style='padding:1rem;text-align:center'>{L("Nessun utente privilegiato trovato", "No privileged users found")}</td></tr>"}</tbody>
+<tbody>{rows_priv if rows_priv else _no_priv_row}</tbody>
 </table></div>
 
 <div class="stitle">{L("ACL Domain Root — ACE con diritti pericolosi", "ACL Domain Root — Dangerous ACE rights")}</div>
@@ -8771,13 +9095,13 @@ html_out = f"""<!DOCTYPE html>
 <div class="stitle">Group Policy Objects — {total_gpo} {L("GPO totali", "total GPOs")}</div>
 <div class="card"><table>
 <thead><tr><th>Display Name</th><th>{L("Ultima Modifica", "Last Modified")}</th><th>Path SYSVOL</th></tr></thead>
-<tbody>{rows_gpo if rows_gpo else "<tr><td colspan='3' class='dim' style='padding:1rem;text-align:center'>{L("Nessuna GPO trovata", "No GPOs found")}</td></tr>"}</tbody>
+<tbody>{rows_gpo if rows_gpo else _no_gpo_row}</tbody>
 </table></div>
 
 <div class="stitle">{L("Computer nel Dominio", "Domain Computers")} — {total_comp} oggetti</div>
 <div class="card"><table>
 <thead><tr><th>Computer Name</th><th>Operating System</th><th>Distinguished Name</th></tr></thead>
-<tbody>{rows_comp if rows_comp else "<tr><td colspan='3' class='dim' style='padding:1rem;text-align:center'>{L("Nessun computer trovato", "No computers found")}</td></tr>"}</tbody>
+<tbody>{rows_comp if rows_comp else _no_comp_row}</tbody>
 </table></div>
 
 </main>
@@ -10539,10 +10863,10 @@ module_linux_shell_history() {
         done
         # fish history
         local FISH; FISH=$(ci_find_dir "$HOME_DIR" ".local/share/fish")
-        [[ -n "$FISH" ]] && for FF in "$FISH"/fish_history; do
-            [[ -f "$FF" && -s "$FF" ]] || continue
-            UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + 1)); CARDS+=$(file_card_html "$FF" "$KW" "\$" "histts")
-        done
+        if [[ -n "$FISH" && -s "$FISH/fish_history" ]]; then
+            UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + 1))
+            CARDS+=$(file_card_html "$FISH/fish_history" "$KW" "\$" "histts")
+        fi
         [[ $UCOUNT -eq 0 ]] && { dim_msg "$UNAME — $(L "nessuna history" "no history")"; continue; }
         USERS=$((USERS + 1))
         ok "$UNAME — ${BOLD}$UCOUNT file"
@@ -10998,6 +11322,326 @@ PYEOF
     finish_report "linux_timeline" "Linux Filesystem Timeline" "TML" "MAC times (find/stat)" "$STATS" "<div class='cards'>$BODY</div>"
 }
 
+# --- LINUX 15 — auditd (/var/log/audit) ---
+#
+# Su RHEL/CentOS/Fedora e su ogni sistema hardenizzato auditd e' la fonte
+# primaria di intrusion detection: registra syscall, esecuzioni, autenticazioni
+# e violazioni di policy con un dettaglio che syslog non ha. Il modulo "System
+# Logs" copre /var/log testuali ma non tocca audit.log, che ha un formato
+# proprio (campi chiave=valore, stringhe in esadecimale, timestamp epoch).
+module_linux_auditd() {
+    section_header "Linux — auditd" "$RED"
+    check_target_root || return 1
+
+    local AUDITDIR; AUDITDIR=$(ci_find_dir "$WIN_ROOT" "var/log/audit")
+    if [[ -z "$AUDITDIR" ]]; then
+        warn "$(L "Directory /var/log/audit non trovata (auditd non installato o log altrove)." \
+                 "/var/log/audit directory not found (auditd not installed or logs elsewhere).")"
+        return 0
+    fi
+    mapfile -t LOGS < <(find "$AUDITDIR" -maxdepth 1 -type f -name 'audit.log*' -print0 2>/dev/null | xargs -0 ls -t 2>/dev/null)
+    if [[ ${#LOGS[@]} -eq 0 ]]; then
+        warn "$(L "Nessun audit.log presente." "No audit.log present.")"
+        return 0
+    fi
+    info "$(L "File di audit trovati:" "Audit files found:") ${BOLD}${#LOGS[@]}"
+
+    local OUT; OUT=$(mktemp); register_tmp "$OUT"
+    local SUM; SUM=$(mktemp); register_tmp "$SUM"
+    "$PY3" - "$OUT" "$SUM" "${LOGS[@]}" << 'PYEOF' 2>/dev/null
+import sys, re, datetime, collections, binascii
+
+out_path, sum_path = sys.argv[1], sys.argv[2]
+files = sys.argv[3:]
+
+HDR = re.compile(r'type=(?P<type>\S+)\s+msg=audit\((?P<epoch>\d+)\.(?P<ms>\d+):(?P<serial>\d+)\):\s*(?P<rest>.*)')
+KV  = re.compile(r'(\w+)=("([^"]*)"|\S+)')
+
+# Campi che auditd puo' emettere in esadecimale quando contengono spazi o
+# caratteri speciali: senza decodifica il comando dell'attaccante resta
+# illeggibile proprio nei casi piu' interessanti.
+HEXFIELDS = {"proctitle", "exe", "cmd", "comm", "name", "cwd", "a0", "a1", "a2", "a3"}
+
+# Tipi che pesano in un'indagine.
+NOTABLE = {
+    "USER_AUTH", "USER_LOGIN", "USER_ACCT", "USER_START", "USER_CMD",
+    "ADD_USER", "DEL_USER", "ADD_GROUP", "DEL_GROUP", "USER_CHAUTHTOK",
+    "USER_ROLE_CHANGE", "ROLE_ASSIGN", "ANOM_ABEND", "AVC", "SECCOMP",
+    "EXECVE", "ANOM_PROMISCUOUS", "CONFIG_CHANGE", "MAC_POLICY_LOAD",
+}
+
+def unhex(val):
+    """auditd codifica alcuni valori come esadecimale puro (senza virgolette)."""
+    if len(val) >= 4 and len(val) % 2 == 0 and re.fullmatch(r'[0-9A-Fa-f]+', val):
+        try:
+            return binascii.unhexlify(val).decode('utf-8', 'replace').replace('\x00', ' ').strip()
+        except Exception:
+            return val
+    return val
+
+counts = collections.Counter()
+rows = []
+
+for fp in files:
+    try:
+        fh = open(fp, encoding='utf-8', errors='replace')
+    except Exception:
+        continue
+    with fh:
+        for line in fh:
+            m = HDR.match(line.strip())
+            if not m:
+                continue
+            typ = m.group('type')
+            counts[typ] += 1
+            try:
+                ts = datetime.datetime.utcfromtimestamp(int(m.group('epoch'))).strftime('%Y-%m-%d %H:%M:%S')
+            except Exception:
+                ts = ''
+            fields = {}
+            for km in KV.finditer(m.group('rest')):
+                key = km.group(1)
+                if km.group(3) is not None:
+                    val = km.group(3)          # valore fra virgolette
+                else:
+                    # Valore non quotato. auditd annida i sottocampi dentro
+                    # msg='...': l'ultimo di questi si porta dietro l'apice di
+                    # chiusura (res=failed'), che va tolto o il confronto salta.
+                    val = km.group(2).strip().rstrip("',")
+                    if key in HEXFIELDS:
+                        val = unhex(val)
+                fields[key] = val
+
+            # Ricompone il comando dagli argomenti a0..aN di EXECVE.
+            if typ == 'EXECVE':
+                args = []
+                i = 0
+                while f'a{i}' in fields:
+                    args.append(fields[f'a{i}'])
+                    i += 1
+                detail = ' '.join(args) if args else m.group('rest')[:300]
+            else:
+                parts = []
+                for key in ('res', 'acct', 'uid', 'auid', 'exe', 'comm', 'terminal',
+                            'hostname', 'addr', 'op', 'key', 'proctitle', 'cmd', 'name'):
+                    if key in fields and fields[key] not in ('', '?', '(none)'):
+                        parts.append(f"{key}={fields[key]}")
+                detail = ' '.join(parts) or m.group('rest')[:300]
+
+            user = fields.get('acct') or fields.get('auid') or fields.get('uid') or ''
+            failed = '1' if fields.get('res') in ('failed', 'fail', '0') else '0'
+            notable = '1' if (typ in NOTABLE or failed == '1') else '0'
+            rows.append((ts, typ, str(user), detail[:500], notable, failed))
+
+with open(out_path, 'w', encoding='utf-8') as fh:
+    for r in rows:
+        fh.write("\t".join(x.replace("\t", " ").replace("\n", " ") for x in r) + "\n")
+
+with open(sum_path, 'w', encoding='utf-8') as fh:
+    for typ, n in counts.most_common():
+        fh.write(f"{typ}\t{n}\n")
+PYEOF
+
+    local TOTAL=0
+    [[ -s "$OUT" ]] && TOTAL=$(wc -l < "$OUT")
+    if [[ "$TOTAL" -eq 0 ]]; then
+        warn "$(L "Nessun record auditd interpretabile." "No parsable auditd record.")"
+        return 0
+    fi
+    local NFAIL NNOTE
+    NFAIL=$(awk -F'\t' '$6=="1"' "$OUT" | wc -l)
+    NNOTE=$(awk -F'\t' '$5=="1"' "$OUT" | wc -l)
+    local NEXEC; NEXEC=$(awk -F'\t' '$2=="EXECVE"' "$OUT" | wc -l)
+
+    ok "$(L "Record auditd:" "auditd records:") ${BOLD}$TOTAL"
+    info "EXECVE: ${BOLD}${NEXEC}${RESET}  ·  $(L "esiti negativi:" "failed outcomes:") ${BOLD}${NFAIL}"
+    echo ""
+    info "$(L "Distribuzione per tipo:" "Breakdown by type:")"
+    head -12 "$SUM" | while IFS=$'\t' read -r T N; do
+        printf "      ${DIM}%-24s %6s${RESET}\n" "$T" "$N"
+    done
+
+    ask_yn "Generare report HTML?" || return 0
+
+    # Prima gli eventi rilevanti, poi il resto.
+    local ROWS; ROWS=$( { awk -F'\t' '$5=="1"{print $1"\t"$2"\t"$3"\t"$4}' "$OUT";
+                          awk -F'\t' '$5=="0"{print $1"\t"$2"\t"$3"\t"$4}' "$OUT"; } | head -20000 )
+    local TABLE; TABLE=$(_rows_to_table "$ROWS" "$(L "Data (UTC)" "Date (UTC)")" "$(L "Tipo" "Type")" "$(L "Utente" "User")" "$(L "Dettaglio" "Detail")")
+    local SUMTABLE; SUMTABLE=$(_rows_to_table "$(cat "$SUM")" "$(L "Tipo" "Type")" "$(L "Occorrenze" "Occurrences")")
+
+    local BODY="<div class='cards'>"
+    BODY+=$(generic_card_html "$(L "Distribuzione per tipo" "Breakdown by type")" "$AUDITDIR" "$TOTAL" "$SUMTABLE" "∑")
+    BODY+=$(generic_card_html "$(L "Eventi" "Events")" "$(L "rilevanti in testa" "notable first")" "$TOTAL" "$TABLE" "⚑")
+    BODY+="</div>"
+
+    local STATS
+    STATS="$(stat_box "$(L "Record" "Records")" "$TOTAL")"
+    STATS+="$(stat_box "EXECVE" "$NEXEC" "info")"
+    STATS+="$(stat_box "$(L "Esiti negativi" "Failed")" "$NFAIL" "warn")"
+    STATS+="$(stat_box "$(L "Rilevanti" "Notable")" "$NNOTE" "warn")"
+    finish_report "linux_auditd" "Linux auditd" "AUD" "/var/log/audit/audit.log" "$STATS" "$BODY"
+}
+
+# --- LINUX 16 — Container (Docker / Podman) ---
+#
+# Un host con container ha un intero piano di esecuzione che gli altri moduli
+# non vedono: processi, filesystem e persistenza vivono dentro le immagini.
+# Qui si ricostruisce l'inventario offline dai metadati sul disco e si
+# evidenziano le configurazioni che permettono la fuga dal container verso
+# l'host — privileged, mount di / o del socket Docker, CAP_SYS_ADMIN,
+# condivisione del namespace PID/rete dell'host.
+module_linux_containers() {
+    section_header "Linux — Container (Docker / Podman)" "$BLUE"
+    check_target_root || return 1
+
+    local DOCKER PODMAN
+    DOCKER=$(ci_find_dir "$WIN_ROOT" "var/lib/docker")
+    PODMAN=$(ci_find_dir "$WIN_ROOT" "var/lib/containers/storage")
+    if [[ -z "$DOCKER" && -z "$PODMAN" ]]; then
+        warn "$(L "Nessun runtime container trovato (/var/lib/docker, /var/lib/containers)." \
+                 "No container runtime found (/var/lib/docker, /var/lib/containers).")"
+        return 0
+    fi
+    [[ -n "$DOCKER" ]] && info "Docker: ${BOLD}${DOCKER}"
+    [[ -n "$PODMAN" ]] && info "Podman: ${BOLD}${PODMAN}"
+
+    local OUT; OUT=$(mktemp); register_tmp "$OUT"
+    "$PY3" - "$OUT" "${DOCKER:-}" "${PODMAN:-}" << 'PYEOF' 2>/dev/null
+import sys, os, json, glob
+
+out_path = sys.argv[1]
+docker   = sys.argv[2] if len(sys.argv) > 2 else ''
+podman   = sys.argv[3] if len(sys.argv) > 3 else ''
+
+rows = []
+
+def risk_of(hostconfig, config):
+    """Indicatori di fuga dal container verso l'host."""
+    risks = []
+    hc = hostconfig or {}
+    if hc.get('Privileged'):
+        risks.append('PRIVILEGED')
+    for b in (hc.get('Binds') or []):
+        src = str(b).split(':')[0]
+        if src == '/':
+            risks.append('MOUNT_ROOT_HOST')
+        elif 'docker.sock' in str(b):
+            risks.append('DOCKER_SOCKET')
+        elif src in ('/etc', '/var/run', '/proc', '/sys', '/boot'):
+            risks.append(f'MOUNT_{src.strip("/").upper()}')
+    caps = hc.get('CapAdd') or []
+    for c in caps:
+        if str(c).upper().replace('CAP_', '') in ('SYS_ADMIN', 'SYS_PTRACE', 'SYS_MODULE', 'ALL'):
+            risks.append(f'CAP_{str(c).upper().replace("CAP_", "")}')
+    if str(hc.get('PidMode', '')) == 'host':
+        risks.append('PID_HOST')
+    if str(hc.get('NetworkMode', '')) == 'host':
+        risks.append('NET_HOST')
+    if str(hc.get('IpcMode', '')) == 'host':
+        risks.append('IPC_HOST')
+    return risks
+
+# ---- Docker -------------------------------------------------------------
+if docker and os.path.isdir(docker):
+    for cdir in sorted(glob.glob(os.path.join(docker, 'containers', '*'))):
+        cfg_path = os.path.join(cdir, 'config.v2.json')
+        hc_path  = os.path.join(cdir, 'hostconfig.json')
+        if not os.path.isfile(cfg_path):
+            continue
+        try:
+            cfg = json.load(open(cfg_path, encoding='utf-8', errors='replace'))
+        except Exception:
+            continue
+        hc = {}
+        if os.path.isfile(hc_path):
+            try:
+                hc = json.load(open(hc_path, encoding='utf-8', errors='replace'))
+            except Exception:
+                hc = {}
+        name  = str(cfg.get('Name', '')).lstrip('/')
+        image = cfg.get('Config', {}).get('Image') or cfg.get('Image', '')
+        created = str(cfg.get('Created', ''))[:19].replace('T', ' ')
+        state = cfg.get('State', {}) or {}
+        started  = str(state.get('StartedAt', ''))[:19].replace('T', ' ')
+        finished = str(state.get('FinishedAt', ''))[:19].replace('T', ' ')
+        running = 'running' if state.get('Running') else 'stopped'
+        cmd = ' '.join((cfg.get('Config', {}) or {}).get('Cmd') or [])
+        entry = ' '.join((cfg.get('Config', {}) or {}).get('Entrypoint') or [])
+        risks = risk_of(hc, cfg)
+        rows.append((
+            'docker', created or started, name, str(image), running,
+            (entry + ' ' + cmd).strip()[:300], ';'.join(risks), os.path.basename(cdir)[:12],
+            started, finished,
+        ))
+
+# ---- Podman -------------------------------------------------------------
+if podman and os.path.isdir(podman):
+    cjson = os.path.join(podman, 'overlay-containers', 'containers.json')
+    if os.path.isfile(cjson):
+        try:
+            for c in json.load(open(cjson, encoding='utf-8', errors='replace')):
+                rows.append((
+                    'podman', str(c.get('created', ''))[:19].replace('T', ' '),
+                    str(c.get('names', [''])[0] if c.get('names') else ''),
+                    str(c.get('image', '')), '', '', '', str(c.get('id', ''))[:12], '', '',
+                ))
+        except Exception:
+            pass
+
+with open(out_path, 'w', encoding='utf-8') as fh:
+    for r in rows:
+        fh.write("\t".join(str(x).replace("\t", " ").replace("\n", " ") for x in r) + "\n")
+PYEOF
+
+    local TOTAL=0
+    [[ -s "$OUT" ]] && TOTAL=$(wc -l < "$OUT")
+    if [[ "$TOTAL" -eq 0 ]]; then
+        warn "$(L "Nessun container ricostruibile dai metadati." "No container reconstructable from metadata.")"
+        return 0
+    fi
+    local NRISK; NRISK=$(awk -F'\t' '$7!=""' "$OUT" | wc -l)
+
+    ok "$(L "Container trovati:" "Containers found:") ${BOLD}$TOTAL"
+    if [[ "$NRISK" -gt 0 ]]; then
+        warn "$(L "Container con configurazione a rischio di fuga:" "Containers with escape-prone configuration:") ${BOLD}$NRISK"
+        awk -F'\t' '$7!=""{printf "      %s  [%s]  %s\n", $3, $7, $4}' "$OUT" | head -20 | while IFS= read -r LN; do
+            echo -e "      ${RED}${LN}${RESET}"
+        done
+    else
+        info "$(L "Nessun indicatore di fuga rilevato." "No escape indicator detected.")"
+    fi
+
+    # Log stdout dei container: spesso contengono l'attivita' dell'attaccante.
+    local NLOGS=0
+    if [[ -n "$DOCKER" ]]; then
+        NLOGS=$(find "$DOCKER/containers" -maxdepth 2 -name '*-json.log' -size +0 2>/dev/null | wc -l)
+        [[ "$NLOGS" -gt 0 ]] && info "$(L "Log stdout disponibili:" "stdout logs available:") ${BOLD}${NLOGS}"
+    fi
+
+    ask_yn "Generare report HTML?" || return 0
+
+    local ROWS; ROWS=$(awk -F'\t' '{print $1"\t"$2"\t"$3"\t"$4"\t"$5"\t"$6"\t"$7"\t"$8}' "$OUT")
+    local TABLE; TABLE=$(_rows_to_table "$ROWS" \
+        "Runtime" "$(L "Creato" "Created")" "$(L "Nome" "Name")" "Image" "$(L "Stato" "State")" \
+        "$(L "Comando" "Command")" "$(L "Rischi" "Risks")" "ID")
+
+    local NOTE=""
+    if [[ "$NRISK" -gt 0 ]]; then
+        NOTE="<div class='card' style='margin-bottom:1rem;border-color:rgba(255,123,114,.5)'><div style='padding:1rem 1.5rem;font-size:.8rem;line-height:1.7'>"
+        NOTE+="<b>$(L "Indicatori di fuga dal container" "Container escape indicators")</b><br>"
+        NOTE+="$(L "PRIVILEGED e MOUNT_ROOT_HOST danno di fatto accesso completo all'host. DOCKER_SOCKET consente di creare nuovi container privilegiati. CAP_SYS_ADMIN e CAP_SYS_MODULE permettono di caricare moduli kernel. PID_HOST espone i processi dell'host." \
+            "PRIVILEGED and MOUNT_ROOT_HOST effectively grant full host access. DOCKER_SOCKET allows spawning new privileged containers. CAP_SYS_ADMIN and CAP_SYS_MODULE allow loading kernel modules. PID_HOST exposes host processes.")"
+        NOTE+="</div></div>"
+    fi
+
+    local STATS
+    STATS="$(stat_box "Container" "$TOTAL")"
+    STATS+="$(stat_box "$(L "A rischio" "At risk")" "$NRISK" "$([[ "$NRISK" -gt 0 ]] && echo warn || echo info)")"
+    STATS+="$(stat_box "$(L "Log stdout" "stdout logs")" "$NLOGS" "info")"
+    finish_report "linux_containers" "Linux Container Forensics" "CNT" "/var/lib/docker · /var/lib/containers" "$STATS" \
+        "${NOTE}<div class='cards'>$(generic_card_html "$(L "Inventario container" "Container inventory")" "${DOCKER:-$PODMAN}" "$TOTAL" "$TABLE" "▣")</div>"
+}
+
 # ================================================================
 #  MODULI macOS
 # ================================================================
@@ -11373,6 +12017,284 @@ module_macos_recent() {
     finish_report "macos_recent" "macOS Recent Items" "RCN" "SFL · .Trash · recent items" "$STATS" "<div class='cards'>$BODY</div>"
 }
 
+# --- macOS 11 — FSEvents (/.fseventsd) ---
+#
+# FSEvents e' il registro delle modifiche al filesystem tenuto da macOS: l'analogo
+# dello USN Journal di NTFS, e la fonte piu' ricca per ricostruire creazione,
+# rinomina e cancellazione di file — comprese quelle di file non piu' presenti.
+#
+# Formato: file gzip in /.fseventsd, ciascuno con una o piu' pagine DLS1/DLS2.
+# Ogni record e' path NUL-terminato + event id (u64 LE) + flag (u32 LE), piu'
+# un node id (u64 LE) nelle pagine DLS2/DLS3.
+#
+# ATTENZIONE sui tempi: i record NON contengono un timestamp. L'event id e' un
+# contatore monotono. L'unico riferimento temporale e' l'intervallo coperto dal
+# file che li contiene, quindi le date qui sono un LIMITE SUPERIORE approssimato
+# (mtime del file di log), non l'istante dell'evento. Il report lo dichiara.
+module_macos_fsevents() {
+    section_header "macOS — FSEvents" "$MAGENTA"
+    check_target_root || return 1
+
+    local FSEDIR; FSEDIR=$(ci_find_dir "$WIN_ROOT" ".fseventsd")
+    [[ -z "$FSEDIR" ]] && { warn "$(L "Directory /.fseventsd non trovata." "/.fseventsd directory not found.")"; return 0; }
+
+    mapfile -t FSEFILES < <(find "$FSEDIR" -maxdepth 1 -type f ! -name 'fseventsd-uuid' -print0 2>/dev/null | xargs -0 ls -t 2>/dev/null)
+    if [[ ${#FSEFILES[@]} -eq 0 ]]; then
+        warn "$(L "Nessun log FSEvents presente." "No FSEvents log present.")"
+        return 0
+    fi
+    info "$(L "File FSEvents trovati:" "FSEvents logs found:") ${BOLD}${#FSEFILES[@]}"
+
+    local KW="${IOC_LIST[*]:-}"
+    local OUT; OUT=$(mktemp); register_tmp "$OUT"
+    "$PY3" - "$OUT" "${FSEFILES[@]}" << 'PYEOF' 2>/dev/null
+import sys, gzip, struct, os, datetime
+
+out_path = sys.argv[1]
+files = sys.argv[2:]
+
+# Bitmask degli eventi FSEvents.
+FLAGS = [
+    (0x00000001, "FolderEvent"),      (0x00000002, "Mount"),
+    (0x00000004, "Unmount"),          (0x00000020, "EndOfTransaction"),
+    (0x00000800, "LastHardLinkRemoved"), (0x00001000, "HardLink"),
+    (0x00004000, "SymbolicLink"),     (0x00008000, "FileEvent"),
+    (0x00010000, "PermissionChange"), (0x00020000, "XattrModified"),
+    (0x00040000, "XattrRemoved"),     (0x00100000, "DocumentRevision"),
+    (0x00400000, "ItemCloned"),       (0x01000000, "Created"),
+    (0x02000000, "Removed"),          (0x04000000, "InodeMetaMod"),
+    (0x08000000, "Renamed"),          (0x10000000, "Modified"),
+    (0x20000000, "Exchange"),         (0x40000000, "FinderInfoMod"),
+    (0x80000000, "FolderCreated"),
+]
+
+# Eventi che meritano attenzione in un'indagine: cancellazioni e rinomine
+# sono il segnale tipico di anti-forensics e di stage/esfiltrazione.
+NOTABLE = {"Removed", "Renamed", "LastHardLinkRemoved", "PermissionChange", "XattrRemoved"}
+
+def decode_flags(v):
+    names = [n for bit, n in FLAGS if v & bit]
+    return ";".join(names) if names else f"0x{v:08x}"
+
+def parse(data):
+    """Genera (path, event_id, flags) per ogni record delle pagine del file."""
+    off = 0
+    total = len(data)
+    while off + 12 <= total:
+        magic = data[off:off + 4]
+        if magic not in (b"1SLD", b"2SLD", b"3SLD"):
+            break
+        # header: magic(4) + unknown(4) + page_size(4)
+        page_size = struct.unpack_from("<I", data, off + 8)[0]
+        if page_size < 12 or off + page_size > total:
+            break
+        # DLS2 e DLS3 aggiungono un node id da 8 byte per record
+        extra = 8 if magic in (b"2SLD", b"3SLD") else 0
+        p = off + 12
+        end = off + page_size
+        while p < end:
+            nul = data.find(b"\x00", p, end)
+            if nul < 0:
+                break
+            path = data[p:nul].decode("utf-8", "replace")
+            p = nul + 1
+            if p + 12 + extra > end:
+                break
+            event_id, flags = struct.unpack_from("<QI", data, p)
+            p += 12 + extra
+            if path:
+                yield path, event_id, flags
+        off = end
+
+rows = []
+for fp in files:
+    try:
+        with gzip.open(fp, "rb") as fh:
+            data = fh.read()
+    except Exception:
+        continue
+    # Unico ancoraggio temporale disponibile: il mtime del file di log.
+    try:
+        approx = datetime.datetime.utcfromtimestamp(os.path.getmtime(fp)).strftime("%Y-%m-%d %H:%M:%S")
+    except Exception:
+        approx = ""
+    src = os.path.basename(fp)
+    for path, event_id, flags in parse(data):
+        names = decode_flags(flags)
+        notable = "1" if any(n in NOTABLE for n in names.split(";")) else "0"
+        rows.append((approx, path, names, str(event_id), src, notable))
+
+with open(out_path, "w", encoding="utf-8") as fh:
+    for r in rows:
+        fh.write("\t".join(x.replace("\t", " ") for x in r) + "\n")
+PYEOF
+
+    local TOTAL=0
+    [[ -s "$OUT" ]] && TOTAL=$(wc -l < "$OUT")
+    if [[ "$TOTAL" -eq 0 ]]; then
+        warn "$(L "Nessun record FSEvents decodificato (log vuoti o formato non riconosciuto)." \
+                 "No FSEvents record decoded (empty logs or unrecognised format).")"
+        return 0
+    fi
+
+    local NOTABLE; NOTABLE=$(awk -F'\t' '$6=="1"' "$OUT" | wc -l)
+    ok "$(L "Record FSEvents decodificati:" "FSEvents records decoded:") ${BOLD}$TOTAL"
+    info "$(L "Eventi di cancellazione/rinomina:" "Delete/rename events:") ${BOLD}$NOTABLE"
+
+    # Anteprima a console: solo gli eventi rilevanti, altrimenti e' illeggibile.
+    awk -F'\t' '$6=="1"{print $1"  "$3"  "$2}' "$OUT" | head -40 | while IFS= read -r LN; do
+        echo -e "      ${DIM}${LN}${RESET}"
+    done
+
+    ask_yn "Generare report HTML?" || return 0
+
+    # Il report completo puo' contenere milioni di record: si limita a un
+    # volume gestibile dal browser, privilegiando gli eventi rilevanti.
+    local LIMIT=20000
+    local ROWS; ROWS=$( { awk -F'\t' '$6=="1"{print $1"\t"$3"\t"$2"\t"$4"\t"$5}' "$OUT";
+                          awk -F'\t' '$6=="0"{print $1"\t"$3"\t"$2"\t"$4"\t"$5}' "$OUT"; } | head -$LIMIT )
+    local TABLE; TABLE=$(_rows_to_table "$ROWS" \
+        "$(L "Data (approx.)" "Date (approx.)")" "$(L "Evento" "Event")" "Path" "Event ID" "$(L "File di log" "Log file")")
+
+    local NOTE
+    NOTE="<div class='card' style='margin-bottom:1rem'><div style='padding:1rem 1.5rem;font-size:.8rem;line-height:1.7'>"
+    NOTE+="<b>$(L "Nota sui tempi" "Note on timestamps")</b><br>"
+    NOTE+="$(L "I record FSEvents non contengono un timestamp: l'event ID e' un contatore monotono. La colonna data riporta il mtime del file di log che contiene il record, cioe' un LIMITE SUPERIORE approssimato dell'istante dell'evento — non la sua ora esatta. Per una datazione precisa va correlato con altri artefatti." \
+        "FSEvents records carry no timestamp: the event ID is a monotonic counter. The date column shows the mtime of the log file containing the record, i.e. an approximate UPPER BOUND of when the event happened — not its exact time. Precise dating requires correlation with other artefacts.")"
+    NOTE+="</div></div>"
+
+    local STATS
+    STATS="$(stat_box "$(L "Record" "Records")" "$TOTAL")"
+    STATS+="$(stat_box "$(L "Cancellazioni/rinomine" "Deletes/renames")" "$NOTABLE" "warn")"
+    STATS+="$(stat_box "$(L "File di log" "Log files")" "${#FSEFILES[@]}" "info")"
+    [[ "$TOTAL" -gt "$LIMIT" ]] && STATS+="$(stat_box "$(L "Mostrati" "Shown")" "$LIMIT" "info")"
+
+    finish_report "macos_fsevents" "macOS FSEvents" "FSE" "/.fseventsd" "$STATS" \
+        "${NOTE}<div class='cards'>$(generic_card_html "FSEvents" "$FSEDIR" "$TOTAL" "$TABLE" "⟳")</div>"
+}
+
+# --- macOS 12 — Spotlight (provenienza download e metadati) ---
+#
+# Lo store Spotlight indicizza attributi che sopravvivono al file indicizzato,
+# fra cui kMDItemWhereFroms — l'URL da cui un file e' stato scaricato — e i nomi
+# di file poi cancellati.
+#
+# Il formato di store.db e' proprietario, compresso a blocchi, e un parser
+# completo esula da un tool senza dipendenze: qui si fa un'estrazione EURISTICA
+# delle stringhe leggibili (URL e percorsi). Il report lo dichiara apertamente e
+# rimanda a spotlight_parser per l'analisi strutturata.
+module_macos_spotlight() {
+    section_header "macOS — Spotlight" "$CYAN"
+    check_target_root || return 1
+
+    local -a STORES=()
+    local D
+    while IFS= read -r D; do
+        [[ -n "$D" ]] && STORES+=("$D")
+    done < <(find "$WIN_ROOT" -maxdepth 6 -type d -name "Store-V2" 2>/dev/null
+             find "$WIN_ROOT" -maxdepth 6 -type d -name ".Spotlight-V100" 2>/dev/null)
+
+    mapfile -t DBS < <(find "$WIN_ROOT" -maxdepth 8 -type f \( -name "store.db" -o -name ".store.db" \) 2>/dev/null)
+    if [[ ${#DBS[@]} -eq 0 ]]; then
+        warn "$(L "Nessuno store Spotlight trovato." "No Spotlight store found.")"
+        return 0
+    fi
+    info "$(L "Store Spotlight trovati:" "Spotlight stores found:") ${BOLD}${#DBS[@]}"
+
+    local OUT; OUT=$(mktemp); register_tmp "$OUT"
+    "$PY3" - "$OUT" "${DBS[@]}" << 'PYEOF' 2>/dev/null
+import sys, re, os
+
+out_path = sys.argv[1]
+dbs = sys.argv[2:]
+
+# Estrazione euristica: si cercano URL e percorsi nelle stringhe leggibili.
+URL = re.compile(rb'(?:https?|ftp)://[!-~]{4,300}')
+# Percorsi utente: evitano il rumore dei path di sistema.
+PATH = re.compile(rb'/Users/[A-Za-z0-9._-]{1,40}/[!-~]{3,200}')
+
+rows = []
+seen = set()
+for db in dbs:
+    try:
+        size = os.path.getsize(db)
+        with open(db, 'rb') as fh:
+            data = fh.read(256 * 1024 * 1024)   # tetto di sicurezza: 256 MB
+    except Exception:
+        continue
+    src = db
+    for kind, rx in (("URL", URL), ("path", PATH)):
+        for m in rx.finditer(data):
+            try:
+                val = m.group(0).decode('utf-8', 'strict')
+            except Exception:
+                continue
+            # Scarta stringhe con caratteri di controllo residui
+            if any(ord(c) < 32 for c in val):
+                continue
+            key = (kind, val)
+            if key in seen:
+                continue
+            seen.add(key)
+            rows.append((kind, val, src))
+
+with open(out_path, 'w', encoding='utf-8') as fh:
+    for r in rows:
+        fh.write("\t".join(x.replace("\t", " ") for x in r) + "\n")
+PYEOF
+
+    local TOTAL=0
+    [[ -s "$OUT" ]] && TOTAL=$(wc -l < "$OUT")
+    local NURL=0 NPATH=0
+    if [[ "$TOTAL" -gt 0 ]]; then
+        NURL=$(awk -F'\t' '$1=="URL"' "$OUT" | wc -l)
+        NPATH=$(awk -F'\t' '$1=="path"' "$OUT" | wc -l)
+    fi
+
+    # Inventario degli store, utile anche quando l'estrazione non produce nulla.
+    local INV="" 
+    local DB
+    for DB in "${DBS[@]}"; do
+        local SZ MT
+        SZ=$(stat -c %s "$DB" 2>/dev/null || echo "?")
+        MT=$(stat -c %y "$DB" 2>/dev/null | cut -d. -f1 || echo "?")
+        INV+="$(html_esc "$DB")	${SZ}	${MT}
+"
+    done
+    local INVTABLE; INVTABLE=$(_rows_to_table "$INV" "store.db" "$(L "Byte" "Bytes")" "$(L "Ultima modifica" "Last modified")")
+
+    separator
+    ok "$(L "Stringhe estratte:" "Strings extracted:") ${BOLD}$TOTAL"
+    info "URL: ${BOLD}${NURL}${RESET}  ·  path: ${BOLD}${NPATH}"
+
+    if [[ "$TOTAL" -eq 0 ]]; then
+        warn "$(L "Nessuna stringa utile estratta dagli store Spotlight." "No useful string extracted from the Spotlight stores.")"
+    fi
+    ask_yn "Generare report HTML?" || return 0
+
+    local BODY=""
+    BODY+="<div class='card' style='margin-bottom:1rem'><div style='padding:1rem 1.5rem;font-size:.8rem;line-height:1.7'>"
+    BODY+="<b>$(L "Metodo" "Method")</b><br>"
+    BODY+="$(L "store.db ha un formato proprietario compresso a blocchi. Questo modulo NON lo decodifica: esegue un'estrazione euristica delle stringhe leggibili (URL e percorsi utente), utile per recuperare provenienza dei download e nomi di file poi cancellati. I risultati vanno considerati indizi da confermare, non un dump strutturato dell'indice." \
+        "store.db uses a proprietary block-compressed format. This module does NOT decode it: it performs a heuristic extraction of readable strings (URLs and user paths), useful to recover download provenance and names of later-deleted files. Treat results as leads to confirm, not as a structured index dump.")<br><br>"
+    BODY+="$(L "Per un'analisi strutturata (kMDItemWhereFroms, date, attributi completi) usa" "For structured analysis (kMDItemWhereFroms, dates, full attributes) use") "
+    BODY+="<code>spotlight_parser</code> (Yogesh Khatri)."
+    BODY+="</div></div>"
+    BODY+="<div class='cards'>$(generic_card_html "$(L "Store trovati" "Stores found")" "$WIN_ROOT" "${#DBS[@]}" "$INVTABLE" "▤")</div>"
+
+    if [[ "$TOTAL" -gt 0 ]]; then
+        local ROWS; ROWS=$( { awk -F'\t' '$1=="URL"' "$OUT"; awk -F'\t' '$1=="path"' "$OUT"; } | head -20000 )
+        local TABLE; TABLE=$(_rows_to_table "$ROWS" "$(L "Tipo" "Type")" "$(L "Valore" "Value")" "store.db")
+        BODY+="<div class='cards'>$(generic_card_html "$(L "Stringhe estratte" "Extracted strings")" "$(L "estrazione euristica" "heuristic extraction")" "$TOTAL" "$TABLE" "⌕")</div>"
+    fi
+
+    local STATS
+    STATS="$(stat_box "URL" "$NURL" "warn")"
+    STATS+="$(stat_box "$(L "Percorsi" "Paths")" "$NPATH")"
+    STATS+="$(stat_box "Store" "${#DBS[@]}" "info")"
+    finish_report "macos_spotlight" "macOS Spotlight" "SPT" ".Spotlight-V100 / store.db" "$STATS" "$BODY"
+}
+
 # ================================================================
 #  MASTER TIMELINE CROSS-MODULO (Linux/macOS)
 #  Aggrega tutte le evidenze con timestamp dai report generati in sessione.
@@ -11511,6 +12433,8 @@ MODULES_LINUX=(
     "module_linux_packages|Installed Packages|GREEN|dpkg / rpm / apt history / snap"
     "module_linux_trash|Trash & Recent|GREEN|~/.local/share/Trash + recently-used"
     "module_linux_timeline|Filesystem Timeline|YELLOW|MAC times aggregati (find/stat)"
+    "module_linux_auditd|auditd|RED|/var/log/audit — syscall, auth, EXECVE"
+    "module_linux_containers|Container|BLUE|Docker/Podman — inventario e fughe"
     "module_xplat_master_timeline|Master Timeline|YELLOW|aggrega le evidenze degli altri moduli"
 )
 
@@ -11525,6 +12449,8 @@ MODULES_MACOS=(
     "module_macos_browser|Browser History|CYAN|Safari / Chrome / Firefox"
     "module_macos_shell_ai_history|Shell & AI History|MAGENTA|zsh/bash + AI CLI"
     "module_macos_recent|Recent Items|GREEN|SFL / .Trash / recent items"
+    "module_macos_fsevents|FSEvents|MAGENTA|/.fseventsd — modifiche al filesystem"
+    "module_macos_spotlight|Spotlight|CYAN|store.db — provenienza download"
     "module_xplat_master_timeline|Master Timeline|YELLOW|aggrega le evidenze degli altri moduli"
 )
 
@@ -11832,6 +12758,12 @@ run_module_by_number() {
 main() {
     SCAN_DATE=$(date "+%d/%m/%Y %H:%M:%S")
 
+    # La directory degli hive ricostruiti viene creata da subshell, che non
+    # possono registrarla per il cleanup: la si registra qui, nel processo
+    # padre. rm -rf ignora i percorsi inesistenti, quindi registrarla anche
+    # quando non verra' mai creata e' innocuo.
+    register_tmp "${TMPDIR:-/tmp}/fiuto_hives_$$"
+
     # Always ask for language at the very start (unless --help is passed)
     if [[ "${1:-}" != "-h" && "${1:-}" != "--help" ]]; then
         select_language
@@ -11858,6 +12790,12 @@ main() {
                     echo -e "    ./fiuto.sh /mnt/windows --module 3    # esegui modulo specifico"
                     echo -e "    ./fiuto.sh /mnt/windows --modules 1,3,5-8  # esegui selezione"
                     echo -e "    ./fiuto.sh /mnt/windows --all --ioc /path/to/ioc.txt  # con IoC"
+                    echo -e "    ./fiuto.sh /mnt/windows --all --no-log-replay  # non applicare i .LOG1/.LOG2"
+                    echo -e "    ./fiuto.sh /mnt/windows --all --jsonl  # esporta anche JSONL per Timesketch"
+                    echo ""
+                    echo -e "  ${DIM}Di default i transaction log del registro (.LOG1/.LOG2) vengono"
+                    echo -e "    riapplicati su una copia temporanea: senza questo passaggio le"
+                    echo -e "    scritture piu' recenti dell'hive non sono visibili.${RESET}"
                     echo ""
                     echo -e "  ${BOLD}Moduli disponibili (1-39):${RESET}"
                 else
@@ -11870,6 +12808,12 @@ main() {
                     echo -e "    ./fiuto.sh /mnt/windows --module 3    # run specific module"
                     echo -e "    ./fiuto.sh /mnt/windows --modules 1,3,5-8  # run selection"
                     echo -e "    ./fiuto.sh /mnt/windows --all --ioc /path/to/ioc.txt  # with IoCs"
+                    echo -e "    ./fiuto.sh /mnt/windows --all --no-log-replay  # skip .LOG1/.LOG2 replay"
+                    echo -e "    ./fiuto.sh /mnt/windows --all --jsonl  # also export JSONL for Timesketch"
+                    echo ""
+                    echo -e "  ${DIM}By default registry transaction logs (.LOG1/.LOG2) are replayed"
+                    echo -e "    onto a temporary copy: without this step the most recent hive"
+                    echo -e "    writes are not visible.${RESET}"
                     echo ""
                     echo -e "  ${BOLD}Available modules (1-39):${RESET}"
                 fi
@@ -11900,6 +12844,9 @@ main() {
             --module)    ARG_MODULE="$2"; shift ;;
             --modules)   ARG_MODULES="$2"; shift ;;
             --ioc)       ARG_IOC="$2"; shift ;;
+            --no-log-replay) HIVE_REPLAY=false ;;
+            --jsonl)     EXPORT_JSONL=true ;;
+            --format)    [[ "${2:-}" == "jsonl" ]] && EXPORT_JSONL=true; shift ;;
             -*)          local UNKNOWN_OPT="$([ "$LANG" = "it" ] && echo "Opzione sconosciuta:" || echo "Unknown option:")"; warn "$UNKNOWN_OPT $1" ;;
             *)           [[ -z "$ARG_ROOT" ]] && ARG_ROOT="$1" ;;
         esac
@@ -12095,4 +13042,6 @@ main() {
     done
 }
 
-main "$@"
+# FIUTO_LIB_ONLY=1 carica le funzioni senza avviare l'interfaccia:
+# usato dalla suite di test per fare unit test degli helper.
+[[ -n "${FIUTO_LIB_ONLY:-}" ]] || main "$@"
