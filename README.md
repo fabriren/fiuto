@@ -53,6 +53,11 @@ On Linux volumes FIUTO collects and analyzes:
 - **Filesystem MAC-time timeline** of forensically sensitive areas
 - **auditd** (`/var/log/audit`) — syscalls, authentications, EXECVE with hex-decoded arguments, policy violations
 - **Containers** (Docker/Podman) — offline inventory from on-disk metadata, with detection of escape-prone configurations (privileged, host root or Docker socket bind-mounted, `CAP_SYS_ADMIN`, host PID/network namespace)
+- **PAM** — authentication backdoors: suspicious directives and `.so` modules owned by no package
+- **Kernel modules** — LKM rootkits, `install` directives in `modprobe.d`, unpackaged `.ko`
+- **Web server logs** — nginx/apache, ranked by HTTP status so a successful attack stands out from the background noise
+- **Cloud and development credentials** — `~/.aws`, `~/.kube`, `~/.docker`, `~/.ssh`: presence and non-secret identifiers, never the secrets themselves
+- **SUID/SGID, capabilities and world-writable files** — the privilege escalation surface
 
 ### macOS Artifact Coverage — *new in v2.0*
 
@@ -184,7 +189,7 @@ The script uses internal bash helpers for:
 ./fiuto.sh /mnt/disk
 ```
 
-The script detects the volume's OS and presents a numbered menu with the relevant modules (50 for Windows, 16 for Linux, 13 for macOS). Select the module number or type `--all` to run them all.
+The script detects the volume's OS and presents a numbered menu with the relevant modules (50 for Windows, 21 for Linux, 13 for macOS). Select the module number or type `--all` to run them all.
 
 ### Automated Batch Analysis
 
@@ -274,7 +279,7 @@ fiuto_reports/
 
 ---
 
-## 🐧 The 16 Linux analysis modules
+## 🐧 The 21 Linux analysis modules
 
 | #  | Module Name         | Linux Artifact                                                     | Usage                                                           |
 | -- | ------------------- | ------------------------------------------------------------------ | --------------------------------------------------------------- |
@@ -293,7 +298,12 @@ fiuto_reports/
 | 13 | Filesystem Timeline | MAC times of sensitive areas (`find`/`stat`)                   | Cross-area chronological timeline                               |
 | 14 | auditd              | `/var/log/audit/audit.log*`                                      | Syscall, authentication, EXECVE, policy violations              |
 | 15 | Container           | `/var/lib/docker`, `/var/lib/containers`                        | Docker/Podman inventory + container-escape indicators           |
-| 16 | Master Timeline     | (Aggregated)                                                       | Cross-module chronological timeline of all collected evidence   |
+| 16 | Master Timeline     | (Aggregated)                                                       | Cross-module chronological timeline (runs last with `--all`)    |
+| 17 | PAM                 | `/etc/pam.d`, `security/*.so`                                    | Authentication backdoors, unpackaged modules                    |
+| 18 | Kernel Modules      | `lib/modules`, `modprobe.d`, initramfs                           | LKM rootkits, `install` directives, unpackaged `.ko`            |
+| 19 | Web Server Logs     | nginx / apache access+error                                        | Webshell, traversal, SQLi — ranked by HTTP status               |
+| 20 | Cloud Credentials   | `~/.aws`, `~/.kube`, `~/.docker`, `~/.ssh`                     | Keys granting access to the wider infrastructure                |
+| 21 | SUID & Capabilities | filesystem scan                                                    | Privilege escalation surface, unexpected SUID                   |
 
 ---
 
@@ -685,7 +695,7 @@ Lo script utilizza internamente helper bash per:
 ./fiuto.sh /mnt/disk
 ```
 
-Lo script rileva l'OS del volume e presenta un menu numerato con i moduli pertinenti (50 per Windows, 16 per Linux, 13 per macOS). Seleziona il numero del modulo o digita `--all` per eseguirli tutti.
+Lo script rileva l'OS del volume e presenta un menu numerato con i moduli pertinenti (50 per Windows, 21 per Linux, 13 per macOS). Seleziona il numero del modulo o digita `--all` per eseguirli tutti.
 
 ### Analisi Batch Automatica
 
@@ -775,7 +785,7 @@ fiuto_reports/
 
 ---
 
-## 🐧 I 16 Moduli di Analisi Linux
+## 🐧 I 21 Moduli di Analisi Linux
 
 | #  | Nome Modulo         | Artefatto Linux                                                    | Utilizzo                                                        |
 | -- | ------------------- | ------------------------------------------------------------------ | --------------------------------------------------------------- |
@@ -794,7 +804,12 @@ fiuto_reports/
 | 13 | Filesystem Timeline | MAC times aree sensibili (`find`/`stat`)                       | Timeline cronologica cross-area                                 |
 | 14 | auditd              | `/var/log/audit/audit.log*`                                      | Syscall, autenticazioni, EXECVE, violazioni di policy           |
 | 15 | Container           | `/var/lib/docker`, `/var/lib/containers`                        | Inventario Docker/Podman + indicatori di fuga dal container     |
-| 16 | Master Timeline     | (Aggregato)                                                        | Timeline cronologica cross-modulo di tutte le evidenze raccolte |
+| 16 | Master Timeline     | (Aggregato)                                                        | Timeline cronologica cross-modulo (con `--all` gira per ultima) |
+| 17 | PAM                 | `/etc/pam.d`, `security/*.so`                                    | Backdoor di autenticazione, moduli non pacchettizzati           |
+| 18 | Kernel Modules      | `lib/modules`, `modprobe.d`, initramfs                           | Rootkit LKM, direttive `install`, `.ko` non pacchettizzati      |
+| 19 | Web Server Logs     | nginx / apache access+error                                        | Webshell, traversal, SQLi — ordinati per stato HTTP             |
+| 20 | Cloud Credentials   | `~/.aws`, `~/.kube`, `~/.docker`, `~/.ssh`                     | Chiavi che danno accesso all'infrastruttura                     |
+| 21 | SUID & Capabilities | scansione filesystem                                               | Superficie di privilege escalation, SUID inattesi               |
 
 ---
 
@@ -1037,9 +1052,13 @@ FIUTO è uno strumento per velocizzare le analisi forensi digitale legittimo, da
 
 **Date:** 2026-07-30 | **Version:** 2.2
 
-**Eleven new Windows modules.** **SetupAPI Device Log** — the only source dating a USB device's *first* connection (the USBSTOR registry keeps the last one). **PowerShell Transcript** — full sessions including command output, invisible to PSReadLine (module 1) when commands come from scripts, `-EncodedCommand` or remoting. **LSA Secrets & DCC2** — cleartext service-account passwords and cached domain credentials from the SECURITY hive, complementing SAM (module 20). **Volume Shadow Copies** — inventory and differential-analysis workflow; their *absence* is reported as an indicator, since deleting them is a standard ransomware step. **Outlook PST/OST** — first local-mail coverage, with risky-attachment and IoC flagging. **Cloud Sync** — OneDrive/Dropbox/Google Drive accounts and synced files: the modern exfiltration path, which leaves no USB artefact. **BITS Jobs** — background downloads abused as a LOLBin (T1197), flagging non-Microsoft hosts, cleartext HTTP and risky targets. **Thumbcache** — thumbnails of deleted files, recovered by signature carving and shown as a gallery beside the report. **Chat Desktop** — Slack/Teams/Discord message fragments carved from LevelDB, flagging sensitive terms. **WebCacheV01** — IE/Edge Legacy history and, more importantly, everything routed through the WinINET APIs, including non-browser code. **Windows Search Index** — indexed paths and content excerpts, which survive file deletion.
+**Sixteen new modules.** Windows: eleven. **SetupAPI Device Log** — the only source dating a USB device's *first* connection (the USBSTOR registry keeps the last one). **PowerShell Transcript** — full sessions including command output, invisible to PSReadLine (module 1) when commands come from scripts, `-EncodedCommand` or remoting. **LSA Secrets & DCC2** — cleartext service-account passwords and cached domain credentials from the SECURITY hive, complementing SAM (module 20). **Volume Shadow Copies** — inventory and differential-analysis workflow; their *absence* is reported as an indicator, since deleting them is a standard ransomware step. **Outlook PST/OST** — first local-mail coverage, with risky-attachment and IoC flagging. **Cloud Sync** — OneDrive/Dropbox/Google Drive accounts and synced files: the modern exfiltration path, which leaves no USB artefact. **BITS Jobs** — background downloads abused as a LOLBin (T1197), flagging non-Microsoft hosts, cleartext HTTP and risky targets. **Thumbcache** — thumbnails of deleted files, recovered by signature carving and shown as a gallery beside the report. **Chat Desktop** — Slack/Teams/Discord message fragments carved from LevelDB, flagging sensitive terms. **WebCacheV01** — IE/Edge Legacy history and, more importantly, everything routed through the WinINET APIs, including non-browser code. **Windows Search Index** — indexed paths and content excerpts, which survive file deletion.
 
 Both ESE-based modules fall back to string extraction when libesedb cannot open the database — the normal case for a file acquired from a running machine — and state in the report which parser actually produced the data.
+
+**Linux: five new modules** — PAM (authentication backdoors), kernel modules and LKM rootkits, web server logs, cloud/development credentials, SUID/capabilities.
+
+**Note on Linux module numbering.** Adding auditd and Containers in this release shifted the Linux Master Timeline from 14 to 16. Scripts pinning `--module 14` on Linux volumes need updating. The registry now supports a `defer` flag so the Master Timeline keeps its number while still running last under `--all`: further modules can be appended without renumbering anything again.
 
 **Internals.** Module dispatch is now data-driven for Windows too: three parallel dispatchers were removed (a hand-written menu and two separate 39-branch `case` statements). Registry entries support bilingual labels and optional guards. Module numbering is unchanged — `--module N` keeps invoking the same modules.
 

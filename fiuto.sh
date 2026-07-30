@@ -2285,9 +2285,30 @@ run_all_from_registry() {
     BATCH_MODE=true
     SUMMARY_TABLE=()
     echo ""
-    local _total=${#_REG[@]} _i=1 _entry _f _name _color _desc _guard
+    local _total=${#_REG[@]} _entry _f _name _color _desc _guard _flags
+
+    # I moduli marcati "defer" (la Master Timeline) aggregano il lavoro degli
+    # altri, quindi devono girare per ultimi anche se stanno a meta' elenco.
+    # Cosi' si possono aggiungere moduli in coda senza rinumerare la Master
+    # Timeline: la numerazione e' un contratto con chi usa --module N.
+    local -a _order=() _deferred=()
+    local _n=1
     for _entry in "${_REG[@]}"; do
-        IFS='|' read -r _f _name _color _desc _guard <<< "$_entry"
+        IFS='|' read -r _f _name _color _desc _guard _flags <<< "$_entry"
+        if [[ "${_flags:-}" == *defer* ]]; then
+            _deferred+=("${_n}|${_entry}")
+        else
+            _order+=("${_n}|${_entry}")
+        fi
+        _n=$((_n + 1))
+    done
+    _order+=("${_deferred[@]}")
+
+    local _item _i
+    for _item in "${_order[@]}"; do
+        _i="${_item%%|*}"
+        _entry="${_item#*|}"
+        IFS='|' read -r _f _name _color _desc _guard _flags <<< "$_entry"
         local _label; _label=$(reg_text "$_name")
         # Guardia facoltativa: se fallisce il modulo viene saltato con motivo.
         if [[ -n "${_guard:-}" ]] && declare -F "$_guard" > /dev/null; then
@@ -2295,12 +2316,10 @@ run_all_from_registry() {
             if ! _reason=$("$_guard"); then
                 echo -e "  ${DIM}[i] [$_i/$_total] ${_label} — $(L "saltato" "skipped") (${_reason})${RESET}"
                 SUMMARY_TABLE+=("$_i|$_label|SKIP|$_reason")
-                _i=$((_i + 1))
                 continue
             fi
         fi
         run_batch_module "$_i" "$_f" "$_label" "$_total"
-        _i=$((_i + 1))
     done
     BATCH_MODE=false
     echo ""
@@ -12332,7 +12351,7 @@ module_linux_logins() {
         [[ -z "$FILE" || ! -s "$FILE" ]] && continue
         echo -e "  ${BOLD}${LABEL}${RESET}  ${DIM}($FILE)${RESET}"
         local OUT; OUT=$(_parse_utmp "$FILE")
-        local N; N=$(printf '%s\n' "$OUT" | grep -c . || echo 0)
+        local N; N=$(printf '%s\n' "$OUT" | grep -c . || true)
         TOTAL=$((TOTAL + N))
         printf '%s\n' "$OUT" | head -40 | while IFS= read -r R; do echo -e "      ${DIM}$R${RESET}"; done
         local TMPF; TMPF=$(mktemp); printf '%s\n' "$OUT" > "$TMPF"
@@ -12520,7 +12539,7 @@ print("</table>")
 PYEOF
 )
     rm -f "$_RTMP"
-    local N; N=$(printf '%s\n' "$ROWS" | grep -c . || echo 0)
+    local N; N=$(printf '%s\n' "$ROWS" | grep -c . || true)
     generic_card_html "$(basename "$(dirname "$DB")")" "$DB" "$N URL" "$TABLE" "◐"
 }
 
@@ -13179,6 +13198,670 @@ PYEOF
     STATS+="$(stat_box "$(L "Log stdout" "stdout logs")" "$NLOGS" "info")"
     finish_report "linux_containers" "Linux Container Forensics" "CNT" "/var/lib/docker · /var/lib/containers" "$STATS" \
         "${NOTE}<div class='cards'>$(generic_card_html "$(L "Inventario container" "Container inventory")" "${DOCKER:-$PODMAN}" "$TOTAL" "$TABLE" "▣")</div>"
+}
+
+# ================================================================
+#  LINUX 17 — PAM (Pluggable Authentication Modules)
+#
+#  PAM decide chi puo' autenticarsi e come. Una backdoor PAM e' fra le
+#  persistenze piu' efficaci su Linux: aggiungendo una riga a /etc/pam.d/sshd
+#  o sostituendo pam_unix.so con una versione modificata, l'attaccante ottiene
+#  accesso con una password universale che nessun log segnala come anomala —
+#  l'autenticazione risulta semplicemente riuscita.
+#
+#  Il modulo Persistence copre cron, systemd e autostart, ma non tocca PAM.
+#  Qui si guardano tre cose: righe di configurazione sospette, moduli .so che
+#  non appartengono a nessun pacchetto, e moduli con data di modifica
+#  disallineata rispetto ai vicini.
+# ================================================================
+module_linux_pam() {
+    section_header "Linux — PAM" "$RED"
+    check_target_root || return 1
+
+    local PAMD; PAMD=$(ci_find_dir "$WIN_ROOT" "etc/pam.d")
+    local PAMCONF; PAMCONF=$(ci_find_file "$WIN_ROOT" "etc/pam.conf")
+    if [[ -z "$PAMD" && -z "$PAMCONF" ]]; then
+        warn "$(L "Configurazione PAM non trovata." "PAM configuration not found.")"
+        return 0
+    fi
+
+    # Righe che meritano attenzione in una configurazione PAM.
+    #  pam_exec      esegue un comando esterno a ogni autenticazione
+    #  pam_permit    concede l'accesso incondizionatamente
+    #  nullok        accetta password vuote
+    #  pam_python /
+    #  percorsi non standard  moduli caricati da fuori la directory di sistema
+    local KW="pam_exec|pam_permit|nullok|pam_python|pam_script|/tmp/|/dev/shm|/home/|pam_succeed_if.*quiet.*uid|debug"
+
+    local BODY="" NFILE=0 NSUSP=0 SUSPROWS=""
+    local F
+    if [[ -n "$PAMD" ]]; then
+        while IFS= read -r F; do
+            [[ -s "$F" ]] || continue
+            NFILE=$((NFILE + 1))
+            local N; N=$(grep -cE "$KW" "$F" 2>/dev/null || echo 0)
+            if [[ "$N" -gt 0 ]]; then
+                NSUSP=$((NSUSP + 1))
+                ok "$(basename "$F") — ${BOLD}${N}${RESET} $(L "righe da verificare" "lines to check")"
+                local LN
+                while IFS= read -r LN; do
+                    SUSPROWS+="$(basename "$F")	${LN}
+"
+                done < <(grep -nE "$KW" "$F" 2>/dev/null | head -20)
+            fi
+            BODY+=$(file_card_html "$F" "$KW" "PAM")
+        done < <(find "$PAMD" -maxdepth 1 -type f 2>/dev/null | sort)
+    fi
+    if [[ -n "$PAMCONF" && -s "$PAMCONF" ]]; then
+        NFILE=$((NFILE + 1))
+        BODY+=$(file_card_html "$PAMCONF" "$KW" "PAM")
+    fi
+
+    # Moduli PAM sul disco: un .so non pacchettizzato o con mtime fuori linea
+    # rispetto ai vicini e' il segnale piu' concreto di manomissione.
+    local SOROWS="" NSO=0 NORPH=0
+    local D
+    for D in "lib/x86_64-linux-gnu/security" "lib64/security" "lib/security" \
+             "usr/lib/x86_64-linux-gnu/security" "usr/lib64/security" "usr/lib/security"; do
+        local SD; SD=$(ci_find_dir "$WIN_ROOT" "$D")
+        [[ -z "$SD" ]] && continue
+        while IFS= read -r F; do
+            [[ -s "$F" ]] || continue
+            NSO=$((NSO + 1))
+            local MT SZ OWN
+            MT=$(stat -c %y "$F" 2>/dev/null | cut -d. -f1)
+            SZ=$(stat -c %s "$F" 2>/dev/null)
+            # Appartenenza a un pacchetto: si verifica offline nei database
+            # di dpkg (list dei file) e rpm non e' interrogabile senza il DB,
+            # quindi qui si usa solo dpkg quando presente.
+            OWN="?"
+            local DPKGINFO; DPKGINFO=$(ci_find_dir "$WIN_ROOT" "var/lib/dpkg/info")
+            if [[ -n "$DPKGINFO" ]]; then
+                local REL="${F#$WIN_ROOT}"
+                if grep -rqsF "$REL" "$DPKGINFO"/*.list 2>/dev/null; then
+                    OWN="$(L "pacchetto" "package")"
+                else
+                    OWN="$(L "NON PACCHETTIZZATO" "NOT PACKAGED")"
+                    NORPH=$((NORPH + 1))
+                fi
+            fi
+            SOROWS+="${MT}	$(basename "$F")	${SZ}	${OWN}	${F}
+"
+        done < <(find "$SD" -maxdepth 1 -type f -name '*.so' 2>/dev/null | sort)
+    done
+
+    separator
+    info "$(L "File di configurazione PAM:" "PAM configuration files:") ${BOLD}$NFILE"
+    [[ $NSUSP -gt 0 ]] && warn "$(L "File con righe da verificare:" "Files with lines to check:") ${BOLD}$NSUSP"
+    info "$(L "Moduli PAM (.so):" "PAM modules (.so):") ${BOLD}$NSO"
+    if [[ "$NORPH" -gt 0 ]]; then
+        warn "$(L "Moduli non appartenenti ad alcun pacchetto:" "Modules not owned by any package:") ${BOLD}$NORPH"
+    fi
+    [[ $NFILE -eq 0 && $NSO -eq 0 ]] && return 0
+
+    ask_yn "Generare report HTML?" || return 0
+
+    local NOTE="<div class='card' style='margin-bottom:1rem'><div style='padding:1rem 1.5rem;font-size:.8rem;line-height:1.7'>"
+    NOTE+="<b>$(L "Come leggere le segnalazioni" "How to read the flags")</b><br>"
+    NOTE+="$(L "Le parole chiave evidenziate non sono di per se' malevole: pam_exec e nullok hanno usi legittimi. Vanno lette come 'questa riga cambia chi puo' entrare e come, quindi va giustificata'. Il segnale piu' forte e' invece un modulo .so che non appartiene a nessun pacchetto, o la cui data di modifica e' isolata rispetto agli altri moduli della stessa directory." \
+        "The highlighted keywords are not malicious in themselves: pam_exec and nullok have legitimate uses. Read them as 'this line changes who can log in and how, so it needs justifying'. The stronger signal is a .so module owned by no package, or whose modification date stands alone among the other modules in the same directory.")<br><br>"
+    NOTE+="$(L "Una backdoor PAM non lascia tracce nei log di autenticazione: l'accesso risulta semplicemente riuscito." \
+        "A PAM backdoor leaves no trace in authentication logs: the login simply succeeds.")"
+    NOTE+="</div></div>"
+
+    local CARDS=""
+    if [[ -n "$SUSPROWS" ]]; then
+        CARDS+="<div class='cards'>$(generic_card_html "$(L "Righe da verificare" "Lines to check")" "/etc/pam.d" "$NSUSP" \
+            "$(_rows_to_table "$SUSPROWS" "$(L "File" "File")" "$(L "Riga" "Line")")" "⚑")</div>"
+    fi
+    if [[ -n "$SOROWS" ]]; then
+        CARDS+="<div class='cards'>$(generic_card_html "$(L "Moduli PAM installati" "Installed PAM modules")" "security/*.so" "$NSO" \
+            "$(_rows_to_table "$SOROWS" "$(L "Ultima modifica" "Last modified")" "$(L "Modulo" "Module")" "$(L "Byte" "Bytes")" "$(L "Origine" "Origin")" "$(L "Percorso" "Path")")" "◧")</div>"
+    fi
+
+    local STATS
+    STATS="$(stat_box "$(L "Config" "Config")" "$NFILE")"
+    STATS+="$(stat_box "$(L "Da verificare" "To check")" "$NSUSP" "$([[ $NSUSP -gt 0 ]] && echo warn || echo info)")"
+    STATS+="$(stat_box "$(L "Moduli .so" "Modules .so")" "$NSO" "info")"
+    STATS+="$(stat_box "$(L "Non pacchettizzati" "Not packaged")" "$NORPH" "$([[ $NORPH -gt 0 ]] && echo warn || echo info)")"
+    finish_report "linux_pam" "Linux PAM" "PAM" "/etc/pam.d · security/*.so" "$STATS" \
+        "${NOTE}${CARDS}<div class='cards'>${BODY}</div>"
+}
+
+# ================================================================
+#  LINUX 18 — Moduli kernel e rootkit
+#
+#  Un LKM rootkit gira in kernel space: puo' nascondere processi, file,
+#  connessioni e se stesso agli strumenti in user space. Nessun modulo che
+#  legge /proc o esegue comandi sulla macchina viva puo' vederlo — l'analisi
+#  offline del filesystem, invece, si'.
+#
+#  Il modulo Persistence copre solo ld.so.preload. Qui si guardano i punti da
+#  cui un modulo viene caricato all'avvio e i .ko presenti sul disco che non
+#  appartengono a nessun pacchetto.
+# ================================================================
+module_linux_kernel_modules() {
+    section_header "Linux — $(L "Moduli kernel e rootkit" "Kernel modules and rootkits")" "$RED"
+    check_target_root || return 1
+
+    local BODY="" ROWS="" NCFG=0 NSUSP=0
+    local F D
+
+    # --- Punti di caricamento automatico ---------------------------------
+    local KW="^[a-zA-Z0-9_-]+"
+    for D in "etc/modules-load.d" "etc/modprobe.d" "usr/lib/modules-load.d" "lib/modules-load.d"; do
+        local DIR; DIR=$(ci_find_dir "$WIN_ROOT" "$D")
+        [[ -z "$DIR" ]] && continue
+        while IFS= read -r F; do
+            [[ -s "$F" ]] || continue
+            NCFG=$((NCFG + 1))
+            BODY+=$(file_card_html "$F" "install |^blacklist|/tmp/|/dev/shm|insmod|modprobe" "KO")
+        done < <(find "$DIR" -maxdepth 1 -type f 2>/dev/null | sort)
+    done
+    F=$(ci_find_file "$WIN_ROOT" "etc/modules")
+    if [[ -s "$F" ]]; then
+        NCFG=$((NCFG + 1))
+        BODY+=$(file_card_html "$F" "$KW" "KO")
+    fi
+
+    # "install <modulo> <comando>" in modprobe.d esegue un comando arbitrario
+    # al caricamento del modulo: e' una persistenza poco nota e molto efficace.
+    local INSTROWS=""
+    for D in "etc/modprobe.d" "usr/lib/modprobe.d" "lib/modprobe.d"; do
+        local DIR; DIR=$(ci_find_dir "$WIN_ROOT" "$D")
+        [[ -z "$DIR" ]] && continue
+        while IFS= read -r LN; do
+            [[ -n "$LN" ]] && { INSTROWS+="${LN}
+"; NSUSP=$((NSUSP + 1)); }
+        done < <(grep -rhnE '^[[:space:]]*install[[:space:]]+\S+[[:space:]]+\S' "$DIR" 2>/dev/null | grep -vE '/bin/(true|false)[[:space:]]*$' | head -50)
+    done
+
+    # --- Moduli .ko sul disco --------------------------------------------
+    local NKO=0 NORPH=0 KOROWS=""
+    local MODDIR; MODDIR=$(ci_find_dir "$WIN_ROOT" "lib/modules")
+    [[ -z "$MODDIR" ]] && MODDIR=$(ci_find_dir "$WIN_ROOT" "usr/lib/modules")
+    if [[ -n "$MODDIR" ]]; then
+        local DPKGINFO; DPKGINFO=$(ci_find_dir "$WIN_ROOT" "var/lib/dpkg/info")
+        # Un rootkit installato a mano finisce quasi sempre in extra/ o misc/,
+        # o direttamente nella radice della versione del kernel.
+        while IFS= read -r F; do
+            NKO=$((NKO + 1))
+            local MT SZ OWN REL
+            MT=$(stat -c %y "$F" 2>/dev/null | cut -d. -f1)
+            SZ=$(stat -c %s "$F" 2>/dev/null)
+            REL="${F#$WIN_ROOT}"
+            OWN="?"
+            if [[ -n "$DPKGINFO" ]]; then
+                if grep -rqsF "$REL" "$DPKGINFO"/*.list 2>/dev/null; then
+                    OWN="$(L "pacchetto" "package")"
+                else
+                    OWN="$(L "NON PACCHETTIZZATO" "NOT PACKAGED")"
+                    NORPH=$((NORPH + 1))
+                    KOROWS+="${MT}	$(basename "$F")	${SZ}	${OWN}	${REL}
+"
+                fi
+            fi
+        done < <(find "$MODDIR" -type f \( -name '*.ko' -o -name '*.ko.xz' -o -name '*.ko.zst' -o -name '*.ko.gz' \) 2>/dev/null)
+    fi
+
+    # --- initramfs --------------------------------------------------------
+    local NINIT=0 INITROWS=""
+    local BOOT; BOOT=$(ci_find_dir "$WIN_ROOT" "boot")
+    if [[ -n "$BOOT" ]]; then
+        while IFS= read -r F; do
+            NINIT=$((NINIT + 1))
+            INITROWS+="$(stat -c %y "$F" 2>/dev/null | cut -d. -f1)	$(basename "$F")	$(stat -c %s "$F" 2>/dev/null)
+"
+        done < <(find "$BOOT" -maxdepth 1 -type f \( -iname 'initrd*' -o -iname 'initramfs*' \) 2>/dev/null | sort)
+    fi
+
+    separator
+    info "$(L "Configurazioni di caricamento:" "Load configurations:") ${BOLD}$NCFG"
+    [[ "$NSUSP" -gt 0 ]] && warn "$(L "Direttive 'install' con comando:" "'install' directives with a command:") ${BOLD}$NSUSP"
+    info "$(L "Moduli .ko sul disco:" "Kernel modules on disk:") ${BOLD}$NKO"
+    if [[ "$NORPH" -gt 0 ]]; then
+        warn "$(L "Moduli non appartenenti ad alcun pacchetto:" "Modules owned by no package:") ${BOLD}$NORPH"
+        printf '%s' "$KOROWS" | head -15 | while IFS=$'\t' read -r MT NM SZ OWN P; do
+            echo -e "      ${RED}${MT}  ${NM}  ${P}${RESET}"
+        done
+    fi
+    info "initramfs: ${BOLD}$NINIT"
+
+    if [[ $NCFG -eq 0 && $NKO -eq 0 && $NINIT -eq 0 ]]; then
+        warn "$(L "Nessun artefatto relativo ai moduli kernel trovato." "No kernel-module artefact found.")"
+        return 0
+    fi
+    ask_yn "Generare report HTML?" || return 0
+
+    local NOTE="<div class='card' style='margin-bottom:1rem'><div style='padding:1rem 1.5rem;font-size:.8rem;line-height:1.7'>"
+    NOTE+="<b>$(L "Perche' l'analisi offline conta qui" "Why offline analysis matters here")</b><br>"
+    NOTE+="$(L "Un rootkit LKM gira in kernel space e puo' nascondersi a qualunque strumento eseguito sulla macchina compromessa, incluso lsmod. Sul filesystem montato da fuori non ha modo di mentire: i .ko ci sono o non ci sono." \
+        "An LKM rootkit runs in kernel space and can hide from any tool executed on the compromised machine, lsmod included. On a filesystem mounted from outside it has no way to lie: the .ko files are either there or not.")<br><br>"
+    NOTE+="<b>$(L "La direttiva install" "The install directive")</b><br>"
+    NOTE+="$(L "In modprobe.d, 'install &lt;modulo&gt; &lt;comando&gt;' esegue quel comando quando il modulo viene caricato. E' una persistenza poco nota: non compare in cron, systemd o autostart, e scatta al primo uso di un dispositivo qualsiasi." \
+        "In modprobe.d, 'install &lt;module&gt; &lt;command&gt;' runs that command when the module is loaded. It is a little-known persistence: it appears in no cron, systemd or autostart list, and triggers on the first use of any device.")"
+    NOTE+="</div></div>"
+
+    local CARDS=""
+    [[ -n "$INSTROWS" ]] && CARDS+="<div class='cards'>$(generic_card_html "$(L "Direttive install" "install directives")" "modprobe.d" "$NSUSP" "$(_rows_to_table "$INSTROWS" "$(L "Riga" "Line")")" "⚑")</div>"
+    [[ -n "$KOROWS" ]] && CARDS+="<div class='cards'>$(generic_card_html "$(L "Moduli non pacchettizzati" "Modules not packaged")" "$MODDIR" "$NORPH" "$(_rows_to_table "$KOROWS" "$(L "Ultima modifica" "Last modified")" "$(L "Modulo" "Module")" "$(L "Byte" "Bytes")" "$(L "Origine" "Origin")" "$(L "Percorso" "Path")")" "◧")</div>"
+    [[ -n "$INITROWS" ]] && CARDS+="<div class='cards'>$(generic_card_html "initramfs" "$BOOT" "$NINIT" "$(_rows_to_table "$INITROWS" "$(L "Ultima modifica" "Last modified")" "$(L "File" "File")" "$(L "Byte" "Bytes")")" "▤")</div>"
+
+    local STATS
+    STATS="$(stat_box "$(L "Moduli .ko" "Modules .ko")" "$NKO")"
+    STATS+="$(stat_box "$(L "Non pacchettizzati" "Not packaged")" "$NORPH" "$([[ "$NORPH" -gt 0 ]] && echo warn || echo info)")"
+    STATS+="$(stat_box "install" "$NSUSP" "$([[ "$NSUSP" -gt 0 ]] && echo warn || echo info)")"
+    STATS+="$(stat_box "initramfs" "$NINIT" "info")"
+    finish_report "linux_kernel_modules" "Linux Kernel Modules" "KRN" "lib/modules · modprobe.d · initramfs" "$STATS" \
+        "${NOTE}${CARDS}<div class='cards'>${BODY}</div>"
+}
+
+# ================================================================
+#  LINUX 19 — Log dei web server
+#
+#  Su un server esposto la compromissione iniziale passa quasi sempre da qui.
+#  Il modulo System Logs legge /var/log testuali generici, ma non tocca gli
+#  access log di nginx e Apache, che hanno un formato proprio e un volume tale
+#  da richiedere un'analisi mirata.
+#
+#  Cosa cerca: richieste verso webshell note, path traversal, tentativi di
+#  SQL injection, upload, User-Agent di strumenti offensivi, e i codici di
+#  risposta che distinguono un tentativo fallito da uno riuscito.
+# ================================================================
+module_linux_webserver_logs() {
+    section_header "Linux — $(L "Log web server" "Web server logs")" "$ORANGE"
+    check_target_root || return 1
+
+    local -a LOGS=()
+    local D F
+    for D in "var/log/nginx" "var/log/apache2" "var/log/httpd" "var/log/lighttpd" "var/log/caddy"; do
+        local DIR; DIR=$(ci_find_dir "$WIN_ROOT" "$D")
+        [[ -z "$DIR" ]] && continue
+        while IFS= read -r F; do
+            [[ -s "$F" ]] && LOGS+=("$F")
+        done < <(find "$DIR" -maxdepth 2 -type f \( -name '*access*' -o -name '*error*' \) ! -name '*.gz' 2>/dev/null | sort)
+    done
+    if [[ ${#LOGS[@]} -eq 0 ]]; then
+        warn "$(L "Nessun log di web server trovato." "No web server log found.")"
+        return 0
+    fi
+    info "$(L "Log trovati:" "Logs found:") ${BOLD}${#LOGS[@]}"
+
+    local IOCTMP; IOCTMP=$(mktemp); register_tmp "$IOCTMP"
+    printf '%s\n' "${IOC_LIST[@]:-}" > "$IOCTMP"
+    local OUT; OUT=$(mktemp); register_tmp "$OUT"
+    local SUM; SUM=$(mktemp); register_tmp "$SUM"
+
+    "$PY3" - "$OUT" "$SUM" "$IOCTMP" "${LOGS[@]}" << 'PYEOF' 2>/dev/null
+import sys, re, os, collections
+
+out_path, sum_path, ioc_path = sys.argv[1], sys.argv[2], sys.argv[3]
+logs = sys.argv[4:]
+
+try:
+    iocs = [l.strip().lower() for l in open(ioc_path, encoding='utf-8', errors='replace') if l.strip()]
+except Exception:
+    iocs = []
+
+# Combined log format: IP - user [data] "METODO path proto" status size "ref" "ua"
+CLF = re.compile(
+    r'^(?P<ip>\S+)\s+\S+\s+(?P<user>\S+)\s+\[(?P<ts>[^\]]+)\]\s+'
+    r'"(?P<method>[A-Z]+)\s+(?P<path>[^"\s]*)[^"]*"\s+(?P<status>\d{3})\s+(?P<size>\S+)'
+    r'(?:\s+"(?P<ref>[^"]*)"\s+"(?P<ua>[^"]*)")?')
+
+MONTHS = {'Jan':'01','Feb':'02','Mar':'03','Apr':'04','May':'05','Jun':'06',
+          'Jul':'07','Aug':'08','Sep':'09','Oct':'10','Nov':'11','Dec':'12'}
+
+def iso(ts):
+    # 10/Oct/2024:13:55:36 +0000
+    try:
+        d, t = ts.split(':', 1)
+        day, mon, year = d.split('/')
+        return f"{year}-{MONTHS.get(mon,'01')}-{int(day):02d} {t.split()[0]}"
+    except Exception:
+        return ''
+
+# Pattern di attacco: il nome del gruppo diventa l'etichetta nel report.
+ATTACKS = [
+    ('WEBSHELL',   re.compile(r'(?i)(c99|r57|b374k|wso\.php|shell\.php|cmd\.php|adminer\.php|alfa\.php|tiny\.php|/\.well-known/[^ ]*\.php)')),
+    ('TRAVERSAL',  re.compile(r'(?i)(\.\./|%2e%2e[/%]|/etc/passwd|/proc/self/environ|\\\.\\\.)')),
+    ('SQLI',       re.compile(r"(?i)(union[\s+]+select|' or '1'='1|sleep\(\d|benchmark\(|information_schema|xp_cmdshell)")),
+    ('RCE',        re.compile(r'(?i)(\bwget\b|\bcurl\b.+http|/bin/(ba)?sh|nc\s+-e|python\s+-c|base64\s+-d|\$\(.*\)|%24%28)')),
+    ('UPLOAD',     re.compile(r'(?i)(multipart/form-data|\.php[3457]?(\?|$)|\.jsp(\?|$)|\.aspx?(\?|$)).*(POST|PUT)')),
+    ('LOG4J',      re.compile(r'(?i)\$\{jndi:')),
+    ('SCANNER_UA', re.compile(r'(?i)(sqlmap|nikto|nmap|masscan|dirbuster|gobuster|wpscan|acunetix|nuclei|feroxbuster|zgrab)')),
+]
+
+rows = []
+per_ip = collections.Counter()
+per_attack = collections.Counter()
+status_of_attack = collections.Counter()
+
+for path in logs:
+    src = os.path.basename(path)
+    try:
+        fh = open(path, encoding='utf-8', errors='replace')
+    except Exception:
+        continue
+    with fh:
+        for line in fh:
+            line = line.rstrip('\n')
+            if not line:
+                continue
+            m = CLF.match(line)
+            ip = m.group('ip') if m else ''
+            status = m.group('status') if m else ''
+            when = iso(m.group('ts')) if m else ''
+            req = (m.group('path') if m else line)
+            ua = (m.group('ua') or '') if m else ''
+            hay = line
+            hits = [name for name, rx in ATTACKS if rx.search(hay)]
+            if iocs and any(i in hay.lower() for i in iocs):
+                hits.append('IOC')
+            if not hits:
+                continue
+            for h in hits:
+                per_attack[h] += 1
+            if ip:
+                per_ip[ip] += 1
+            # Uno status 200/500 su una richiesta di attacco vale molto piu' di
+            # un 404: distingue il tentativo dall'esito.
+            if status.startswith(('2', '5')) or status == '301':
+                status_of_attack['riuscita_o_errore_server'] += 1
+            rows.append((when, ip, status, ';'.join(hits), req[:300], ua[:150], src))
+
+rows.sort(key=lambda r: r[0])
+with open(out_path, 'w', encoding='utf-8') as fh:
+    for r in rows:
+        fh.write('\t'.join(str(x).replace('\t', ' ') for x in r) + '\n')
+
+with open(sum_path, 'w', encoding='utf-8') as fh:
+    for name, n in per_attack.most_common():
+        fh.write(f"attacco\t{name}\t{n}\n")
+    for ip, n in per_ip.most_common(40):
+        fh.write(f"ip\t{ip}\t{n}\n")
+PYEOF
+
+    local TOTAL=0
+    [[ -s "$OUT" ]] && TOTAL=$(wc -l < "$OUT")
+    if [[ "$TOTAL" -eq 0 ]]; then
+        ok "$(L "Nessuna richiesta sospetta rilevata nei log analizzati." "No suspicious request found in the analysed logs.")"
+        return 0
+    fi
+    local NHIT2XX; NHIT2XX=$(awk -F'\t' '$3 ~ /^[25]/' "$OUT" | wc -l)
+
+    warn "$(L "Richieste sospette:" "Suspicious requests:") ${BOLD}$TOTAL"
+    warn "$(L "Di cui con risposta 2xx/5xx (possibile successo):" "Of which answered 2xx/5xx (possible success):") ${BOLD}$NHIT2XX"
+    echo ""
+    info "$(L "Per tipo:" "By type:")"
+    awk -F'\t' '$1=="attacco"{printf "      %-14s %6s\n", $2, $3}' "$SUM" | head -10
+    echo ""
+    info "$(L "IP piu' attivi:" "Most active IPs:")"
+    awk -F'\t' '$1=="ip"{printf "      %-40s %6s\n", $2, $3}' "$SUM" | head -8
+
+    ask_yn "Generare report HTML?" || return 0
+
+    local ROWS; ROWS=$( { awk -F'\t' '$3 ~ /^[25]/' "$OUT"; awk -F'\t' '$3 !~ /^[25]/' "$OUT"; } | head -20000 )
+    local TABLE; TABLE=$(_rows_to_table "$ROWS" \
+        "$(L "Data" "Date")" "IP" "$(L "Stato" "Status")" "$(L "Tipo" "Type")" \
+        "$(L "Richiesta" "Request")" "User-Agent" "Log")
+    local ATABLE; ATABLE=$(_rows_to_table "$(awk -F'\t' '$1=="attacco"{print $2"\t"$3}' "$SUM")" "$(L "Tipo" "Type")" "$(L "Occorrenze" "Occurrences")")
+    local ITABLE; ITABLE=$(_rows_to_table "$(awk -F'\t' '$1=="ip"{print $2"\t"$3}' "$SUM")" "IP" "$(L "Richieste sospette" "Suspicious requests")")
+
+    local NOTE="<div class='card' style='margin-bottom:1rem'><div style='padding:1rem 1.5rem;font-size:.8rem;line-height:1.7'>"
+    NOTE+="<b>$(L "Lo stato HTTP e' la parte che conta" "The HTTP status is the part that matters")</b><br>"
+    NOTE+="$(L "Un log esposto su Internet contiene sempre migliaia di tentativi automatici: la loro presenza non e' un incidente. Cio' che distingue un tentativo da una compromissione e' la risposta: un 404 su una webshell e' rumore di fondo, un 200 sulla stessa richiesta significa che la webshell esiste. Le righe con risposta 2xx e 5xx sono messe in cima per questo motivo." \
+        "A log exposed to the Internet always contains thousands of automated attempts: their presence is not an incident. What separates an attempt from a compromise is the response: a 404 on a webshell is background noise, a 200 on the same request means the webshell is there. Rows answered 2xx and 5xx are listed first for this reason.")"
+    NOTE+="</div></div>"
+
+    local STATS
+    STATS="$(stat_box "$(L "Richieste sospette" "Suspicious requests")" "$TOTAL" "warn")"
+    STATS+="$(stat_box "2xx/5xx" "$NHIT2XX" "$([[ "$NHIT2XX" -gt 0 ]] && echo warn || echo info)")"
+    STATS+="$(stat_box "Log" "${#LOGS[@]}" "info")"
+    finish_report "linux_webserver" "Linux Web Server Logs" "WWW" "nginx · apache · lighttpd" "$STATS" \
+        "${NOTE}<div class='cards'>$(generic_card_html "$(L "Per tipo di attacco" "By attack type")" "$(L "riepilogo" "summary")" "$TOTAL" "$ATABLE" "∑")$(generic_card_html "$(L "IP piu' attivi" "Most active IPs")" "$(L "riepilogo" "summary")" "$TOTAL" "$ITABLE" "◉")</div><div class='cards'>$(generic_card_html "$(L "Richieste" "Requests")" "$(L "risposte 2xx/5xx in testa" "2xx/5xx responses first")" "$TOTAL" "$TABLE" "⚑")</div>"
+}
+
+# ================================================================
+#  LINUX 20 — Credenziali cloud e di sviluppo
+#
+#  Su una workstation di sviluppo o su un server di build, il bottino non e'
+#  la password dell'utente: sono le chiavi che danno accesso all'infrastruttura.
+#  Un file ~/.aws/credentials o un ~/.kube/config permettono di passare dal
+#  singolo host compromesso all'intero ambiente cloud, e non sono coperti da
+#  nessun altro modulo.
+#
+#  Il modulo rileva la PRESENZA e i metadati di questi file, e mostra gli
+#  identificativi non segreti (nome del profilo, access key ID, cluster,
+#  registry). NON stampa mai il materiale segreto: la sua esistenza e' il dato
+#  che serve all'analista, il valore in chiaro sarebbe solo un rischio in piu'
+#  dentro il report.
+# ================================================================
+module_linux_cloud_credentials() {
+    section_header "Linux — $(L "Credenziali cloud e sviluppo" "Cloud and development credentials")" "$RED"
+    check_target_root || return 1
+
+    local ROWS="" NFILE=0 NSECRET=0
+    local HOME_DIR
+
+    # spec: percorso relativo alla home | etichetta | tipo
+    local -a SPECS=(
+        ".aws/credentials|AWS|secret"
+        ".aws/config|AWS|config"
+        ".kube/config|Kubernetes|secret"
+        ".docker/config.json|Docker Registry|secret"
+        ".config/gcloud/credentials.db|Google Cloud|secret"
+        ".config/gcloud/application_default_credentials.json|Google Cloud|secret"
+        ".azure/accessTokens.json|Azure|secret"
+        ".azure/azureProfile.json|Azure|config"
+        ".netrc|netrc|secret"
+        ".git-credentials|Git|secret"
+        ".npmrc|npm|secret"
+        ".pypirc|PyPI|secret"
+        ".config/rclone/rclone.conf|rclone|secret"
+        ".s3cfg|S3|secret"
+        ".terraformrc|Terraform|secret"
+        ".config/gh/hosts.yml|GitHub CLI|secret"
+        ".ssh/id_rsa|SSH|key"
+        ".ssh/id_ed25519|SSH|key"
+        ".ssh/id_ecdsa|SSH|key"
+    )
+
+    while IFS= read -r HOME_DIR; do
+        local U; U=$(basename "$HOME_DIR")
+        local SPEC REL LABEL KIND
+        for SPEC in "${SPECS[@]}"; do
+            IFS='|' read -r REL LABEL KIND <<< "$SPEC"
+            local F; F=$(ci_find_file "$HOME_DIR" "$REL")
+            [[ -s "$F" ]] || continue
+            NFILE=$((NFILE + 1))
+            [[ "$KIND" != "config" ]] && NSECRET=$((NSECRET + 1))
+
+            local MT PERM SZ IDENT
+            MT=$(stat -c %y "$F" 2>/dev/null | cut -d. -f1)
+            PERM=$(stat -c %a "$F" 2>/dev/null)
+            SZ=$(stat -c %s "$F" 2>/dev/null)
+
+            # Identificativi NON segreti, utili a capire a cosa da' accesso.
+            IDENT=""
+            case "$LABEL" in
+                AWS)
+                    IDENT=$(grep -aoE '^\[[^]]+\]|aws_access_key_id[[:space:]]*=[[:space:]]*[A-Z0-9]{16,}' "$F" 2>/dev/null \
+                            | sed 's/.*=[[:space:]]*//' | tr '\n' ' ' | cut -c1-160) ;;
+                Kubernetes)
+                    IDENT=$(grep -aoE 'server:[[:space:]]*\S+|name:[[:space:]]*\S+' "$F" 2>/dev/null | head -6 | tr '\n' ' ' | cut -c1-160) ;;
+                "Docker Registry")
+                    IDENT=$(grep -aoE '"[a-z0-9.-]+\.[a-z]{2,}(:[0-9]+)?"' "$F" 2>/dev/null | sort -u | tr '\n' ' ' | cut -c1-160) ;;
+                Git|netrc)
+                    # Solo host e utente: la password viene esclusa.
+                    IDENT=$(grep -aoE 'https://[^:/@]+@[^/]+|machine[[:space:]]+\S+|login[[:space:]]+\S+' "$F" 2>/dev/null \
+                            | sed -E 's#https://([^:@]+):[^@]*@#https://\1@#' | head -6 | tr '\n' ' ' | cut -c1-160) ;;
+                SSH)
+                    IDENT=$(head -1 "$F" 2>/dev/null | grep -aoE 'BEGIN [A-Z ]+PRIVATE KEY' || echo "$(L "chiave privata" "private key")")
+                    grep -aq 'ENCRYPTED' "$F" 2>/dev/null && IDENT+=" ($(L "protetta da passphrase" "passphrase protected"))" \
+                        || IDENT+=" ($(L "SENZA passphrase" "NO passphrase"))" ;;
+                *)
+                    IDENT=$(grep -aoE '^\[[^]]+\]|^[a-z_]+[[:space:]]*=' "$F" 2>/dev/null | head -5 | tr '\n' ' ' | cut -c1-120) ;;
+            esac
+
+            local WARNP=""
+            # Un file di credenziali leggibile da altri utenti e' un problema
+            # a prescindere dall'incidente in corso.
+            [[ -n "$PERM" && "${PERM: -2}" != "00" ]] && WARNP="$(L "permessi larghi" "loose permissions")"
+
+            ROWS+="${MT}	${U}	${LABEL}	${REL}	${PERM} ${WARNP}	${SZ}	${IDENT}
+"
+            if [[ -n "$WARNP" ]]; then
+                warn "$U — $REL ($PERM) — $WARNP"
+            else
+                ok "$U — ${BOLD}${LABEL}${RESET} ${DIM}${REL}${RESET}"
+            fi
+        done
+    done < <(get_target_user_homes)
+
+    separator
+    if [[ "$NFILE" -eq 0 ]]; then
+        info "$(L "Nessun file di credenziali cloud o di sviluppo trovato." "No cloud or development credential file found.")"
+        return 0
+    fi
+    ok "$(L "File di credenziali trovati:" "Credential files found:") ${BOLD}$NFILE"
+    warn "$(L "Di cui contenenti materiale segreto:" "Of which holding secret material:") ${BOLD}$NSECRET"
+
+    ask_yn "Generare report HTML?" || return 0
+
+    local TABLE; TABLE=$(_rows_to_table "$ROWS" \
+        "$(L "Ultima modifica" "Last modified")" "$(L "Utente" "User")" "$(L "Servizio" "Service")" \
+        "$(L "File" "File")" "$(L "Permessi" "Permissions")" "$(L "Byte" "Bytes")" "$(L "Identificativi" "Identifiers")")
+
+    local NOTE="<div class='card' style='margin-bottom:1rem;border-color:rgba(255,123,114,.5)'><div style='padding:1rem 1.5rem;font-size:.8rem;line-height:1.7'>"
+    NOTE+="<b>$(L "Cosa mostra e cosa no" "What is shown and what is not")</b><br>"
+    NOTE+="$(L "La tabella riporta identificativi non segreti — profilo, access key ID, endpoint del cluster, registry, host — perche' servono a capire a cosa quelle credenziali davano accesso. Il materiale segreto (secret key, token, password, contenuto delle chiavi private) NON viene mai stampato: e' la sua esistenza a essere il dato utile, riprodurlo qui aggiungerebbe solo un altro posto da cui puo' trapelare." \
+        "The table shows non-secret identifiers — profile, access key ID, cluster endpoint, registry, host — because they establish what those credentials granted access to. Secret material (secret keys, tokens, passwords, private key contents) is never printed: its existence is the useful fact, reproducing it here would only add one more place it can leak from.")<br><br>"
+    NOTE+="<b>$(L "Priorita' di risposta" "Response priority")</b><br>"
+    NOTE+="$(L "Ogni credenziale elencata va considerata compromessa e ruotata. Le chiavi SSH senza passphrase e i file con permessi larghi vanno per primi." \
+        "Every credential listed must be treated as compromised and rotated. SSH keys without a passphrase and files with loose permissions come first.")"
+    NOTE+="</div></div>"
+
+    local STATS
+    STATS="$(stat_box "$(L "File" "Files")" "$NFILE")"
+    STATS+="$(stat_box "$(L "Con segreti" "With secrets")" "$NSECRET" "warn")"
+    finish_report "linux_cloud_credentials" "Linux Cloud & Dev Credentials" "KEY" "~/.aws · ~/.kube · ~/.docker · ~/.ssh" "$STATS" \
+        "${NOTE}<div class='cards'>$(generic_card_html "$(L "Credenziali rilevate" "Credentials found")" "$(L "home utenti" "user homes")" "$NFILE" "$TABLE" "⚿")</div>"
+}
+
+# ================================================================
+#  LINUX 21 — SUID/SGID, capabilities e file scrivibili da tutti
+#
+#  E' la superficie di privilege escalation del sistema. Conta in due momenti
+#  diversi dell'indagine:
+#
+#  - come CAUSA: un binario SUID inatteso (o un /bin/bash con il bit SUID)
+#    spiega come l'attaccante e' passato da utente a root;
+#  - come EFFETTO: molti attaccanti lasciano dietro di se' un SUID come
+#    backdoor di riserva, piu' discreta di un utente aggiuntivo.
+#
+#  L'analisi offline e' l'unico modo affidabile di farla: su una macchina
+#  compromessa find puo' essere sostituito o un rootkit puo' nascondere i file.
+# ================================================================
+module_linux_suid_caps() {
+    section_header "Linux — SUID/SGID $(L "e capabilities" "and capabilities")" "$ORANGE"
+    check_target_root || return 1
+
+    info "$(L "Scansione del filesystem in corso..." "Scanning the filesystem...")"
+
+    # Binari SUID/SGID considerati normali su una distribuzione: servono a
+    # separare il rumore dal segnale, NON a dichiarare sicuro cio' che vi
+    # corrisponde (un /usr/bin/passwd modificato resta in questa lista).
+    local EXPECTED="/(passwd|chsh|chfn|newgrp|gpasswd|su|sudo|mount|umount|ping|ping6|fusermount|fusermount3|pkexec|crontab|at|ssh-agent|unix_chkpwd|expiry|chage|wall|write|dotlockfile|dbus-daemon-launch-helper|polkit-agent-helper-1|sg|staprun|Xorg|snap-confine|utempter|screen|mount\.nfs|pam_timestamp_check|cockpit-session|vmware-user-suid-wrapper)$"
+
+    local OUT; OUT=$(mktemp); register_tmp "$OUT"
+    # -xdev: resta sul volume montato, non segue mount annidati o /proc.
+    find "$WIN_ROOT" -xdev \( -perm -4000 -o -perm -2000 \) -type f -printf '%M\t%u\t%g\t%s\t%TY-%Tm-%Td %TH:%TM:%TS\t%p\n' 2>/dev/null \
+        | sed 's/\.[0-9]*\t/\t/' > "$OUT" || true
+
+    # NB: `grep -c` stampa 0 ma esce con stato 1 quando non trova nulla, quindi
+    # un `|| echo 0` produrrebbe due zeri. Si usa wc -l.
+    local NSUID NUNEXP
+    NSUID=$(wc -l < "$OUT" 2>/dev/null || echo 0)
+    local UNEXP; UNEXP=$(mktemp); register_tmp "$UNEXP"
+    grep -vE "$EXPECTED" "$OUT" > "$UNEXP" 2>/dev/null || true
+    NUNEXP=$(wc -l < "$UNEXP" 2>/dev/null || echo 0)
+
+    # File con capabilities: alternativa moderna al SUID, spesso trascurata.
+    # getcap non funziona su un volume montato senza supporto xattr, quindi si
+    # tenta e si dichiara l'esito invece di far finta di aver guardato.
+    local CAPOUT; CAPOUT=$(mktemp); register_tmp "$CAPOUT"
+    local CAPS_OK=false NCAP=0
+    if command -v getcap > /dev/null 2>&1; then
+        CAPS_OK=true
+        getcap -r "$WIN_ROOT" 2>/dev/null | head -500 > "$CAPOUT" || true
+        NCAP=$(wc -l < "$CAPOUT" 2>/dev/null || echo 0)
+    fi
+
+    # Directory e file scrivibili da tutti fuori dalle aree temporanee attese.
+    local WWOUT; WWOUT=$(mktemp); register_tmp "$WWOUT"
+    find "$WIN_ROOT" -xdev -perm -0002 ! -type l \
+         ! -path "*/tmp/*" ! -path "*/var/tmp/*" ! -path "*/dev/shm/*" ! -path "*/proc/*" \
+         -printf '%M\t%u\t%s\t%TY-%Tm-%Td %TH:%TM\t%p\n' 2>/dev/null | head -400 > "$WWOUT" || true
+    local NWW; NWW=$(wc -l < "$WWOUT" 2>/dev/null || echo 0)
+
+    separator
+    ok "$(L "Binari SUID/SGID:" "SUID/SGID binaries:") ${BOLD}$NSUID"
+    if [[ "$NUNEXP" -gt 0 ]]; then
+        warn "$(L "Fuori dall'elenco atteso:" "Outside the expected set:") ${BOLD}$NUNEXP"
+        awk -F'\t' '{printf "      %s  %-8s %s\n", $1, $2, $6}' "$UNEXP" | head -20 | while IFS= read -r LN; do
+            echo -e "      ${RED}${LN}${RESET}"
+        done
+    fi
+    if $CAPS_OK; then
+        info "$(L "File con capabilities:" "Files with capabilities:") ${BOLD}$NCAP"
+    else
+        info "$(L "getcap non disponibile: capabilities non verificate." "getcap unavailable: capabilities not checked.")"
+    fi
+    info "$(L "Scrivibili da tutti (fuori da tmp):" "World-writable (outside tmp):") ${BOLD}$NWW"
+
+    if [[ "$NSUID" -eq 0 && "$NCAP" -eq 0 && "$NWW" -eq 0 ]]; then
+        warn "$(L "Nessun risultato: il volume potrebbe essere montato senza supporto ai permessi." \
+                 "No result: the volume may be mounted without permission support.")"
+        return 0
+    fi
+    ask_yn "Generare report HTML?" || return 0
+
+    local BODY=""
+    BODY+="<div class='card' style='margin-bottom:1rem'><div style='padding:1rem 1.5rem;font-size:.8rem;line-height:1.7'>"
+    BODY+="<b>$(L "Come leggere l'elenco atteso" "How to read the expected set")</b><br>"
+    BODY+="$(L "I binari SUID di sistema (passwd, sudo, mount...) sono separati dagli altri solo per ridurre il rumore. Non sono dichiarati sicuri: un /usr/bin/passwd sostituito resta nell'elenco atteso, e va confrontato con l'hash del pacchetto. Il segnale forte e' un SUID FUORI dall'elenco — soprattutto una shell, un interprete o un binario in /tmp, /home o /var." \
+        "System SUID binaries (passwd, sudo, mount...) are separated from the rest only to cut noise. They are not declared safe: a replaced /usr/bin/passwd still sits in the expected set and must be checked against the package hash. The strong signal is a SUID OUTSIDE the set — especially a shell, an interpreter, or a binary under /tmp, /home or /var.")<br><br>"
+    BODY+="$(L "Le capabilities sono l'alternativa moderna al SUID e vengono spesso dimenticate in fase di audit: CAP_SETUID, CAP_SYS_ADMIN e CAP_DAC_OVERRIDE su un binario arbitrario equivalgono di fatto a root." \
+        "Capabilities are the modern alternative to SUID and are often overlooked during audits: CAP_SETUID, CAP_SYS_ADMIN and CAP_DAC_OVERRIDE on an arbitrary binary are effectively root.")"
+    if ! $CAPS_OK; then
+        BODY+="<br><br><b>$(L "Capabilities non verificate" "Capabilities not checked")</b><br>"
+        BODY+="$(L "getcap non era disponibile sull'host di analisi: questa parte del controllo non e' stata eseguita e va rifatta a parte." \
+            "getcap was unavailable on the analysis host: this part of the check was not performed and must be repeated separately.")"
+    fi
+    BODY+="</div></div>"
+
+    if [[ "$NUNEXP" -gt 0 ]]; then
+        BODY+="<div class='cards'>$(generic_card_html "$(L "SUID/SGID fuori dall'elenco atteso" "SUID/SGID outside the expected set")" "$WIN_ROOT" "$NUNEXP" \
+            "$(_rows_to_table "$(cat "$UNEXP")" "$(L "Permessi" "Mode")" "$(L "Utente" "Owner")" "$(L "Gruppo" "Group")" "$(L "Byte" "Bytes")" "$(L "Ultima modifica" "Last modified")" "$(L "Percorso" "Path")")" "⚑")</div>"
+    fi
+    BODY+="<div class='cards'>$(generic_card_html "$(L "Tutti i SUID/SGID" "All SUID/SGID")" "$WIN_ROOT" "$NSUID" \
+        "$(_rows_to_table "$(head -2000 "$OUT")" "$(L "Permessi" "Mode")" "$(L "Utente" "Owner")" "$(L "Gruppo" "Group")" "$(L "Byte" "Bytes")" "$(L "Ultima modifica" "Last modified")" "$(L "Percorso" "Path")")" "◧")</div>"
+    if [[ "$NCAP" -gt 0 ]]; then
+        BODY+="<div class='cards'>$(generic_card_html "Capabilities" "getcap -r" "$NCAP" \
+            "$(_rows_to_table "$(sed 's/ /\t/' "$CAPOUT")" "$(L "Percorso" "Path")" "Capabilities")" "⚙")</div>"
+    fi
+    if [[ "$NWW" -gt 0 ]]; then
+        BODY+="<div class='cards'>$(generic_card_html "$(L "Scrivibili da tutti" "World-writable")" "$(L "fuori da tmp" "outside tmp")" "$NWW" \
+            "$(_rows_to_table "$(cat "$WWOUT")" "$(L "Permessi" "Mode")" "$(L "Utente" "Owner")" "$(L "Byte" "Bytes")" "$(L "Ultima modifica" "Last modified")" "$(L "Percorso" "Path")")" "◔")</div>"
+    fi
+
+    local STATS
+    STATS="$(stat_box "SUID/SGID" "$NSUID")"
+    STATS+="$(stat_box "$(L "Inattesi" "Unexpected")" "$NUNEXP" "$([[ "$NUNEXP" -gt 0 ]] && echo warn || echo info)")"
+    STATS+="$(stat_box "Capabilities" "$($CAPS_OK && echo "$NCAP" || echo "n/d")" "info")"
+    STATS+="$(stat_box "$(L "Scrivibili da tutti" "World-writable")" "$NWW" "$([[ "$NWW" -gt 0 ]] && echo warn || echo info)")"
+    finish_report "linux_suid_caps" "Linux SUID & Capabilities" "SUID" "$(L "superficie di privilege escalation" "privilege escalation surface")" "$STATS" "$BODY"
 }
 
 # --- macOS 1 — System Logs ---
@@ -14333,7 +15016,7 @@ run_py_with_lib() {
 #  REGISTRO MODULI PER OS (data-driven)
 #
 #  Formato entry:
-#     "funzione|Nome|VARIABILE_COLORE|descrizione[|guardia]"
+#     "funzione|Nome|VARIABILE_COLORE|descrizione[|guardia][|flag]"
 #
 #  L'ordine determina la numerazione mostrata a menu e accettata da
 #  --module / --modules: NON riordinare senza aggiornare il README, o si
@@ -14345,6 +15028,11 @@ run_py_with_lib() {
 #  La guardia e' facoltativa: e' il nome di una funzione che ritorna 0 se il
 #  modulo va eseguito, oppure stampa il motivo e ritorna non-zero per farlo
 #  saltare in modalita' batch.
+#
+#  Flag riconosciuti (sesto campo):
+#    defer  il modulo gira per ultimo con --all, pur mantenendo il suo numero
+#           di menu. Serve alla Master Timeline, che aggrega gli altri: cosi'
+#           si possono aggiungere moduli in coda senza rinumerarla.
 # ================================================================
 
 # Guardia del modulo PAD Offline: ha senso solo su un Domain Controller.
@@ -14393,7 +15081,7 @@ MODULES_WIN=(
     "module_ps_scriptblock|PS ScriptBlock Logging|MAGENTA|Event ID 4104 — PS Operational.evtx"
     "module_jumplists|JumpLists|GREEN|AutomaticDestinations · CustomDestinations"
     "module_network_artifacts|Network Artifacts|CYAN|Profili rete · Interfacce TCP/IP (registry)§Network profiles · TCP/IP interfaces (registry)"
-    "module_master_timeline|Master Timeline|YELLOW|Aggregazione cross-moduli con filtri§Cross-module aggregation with filters"
+    "module_master_timeline|Master Timeline|YELLOW|Aggregazione cross-moduli con filtri (con --all gira per ultima)§Cross-module aggregation with filters (runs last with --all)||defer"
     "module_pad_offline|PAD Offline AD Analysis|RED|NTDS.dit offline — utenti privilegiati, ACL, GPO§NTDS.dit offline — privileged users, ACL, GPO|_guard_pad_offline"
     "module_ai_chat|AI Chat History|MAGENTA|Claude · ChatGPT · Copilot · Cursor · Gemini · Codex"
     "module_setupapi|SetupAPI Device Log|BLUE|Prima installazione dispositivi (USB)§Device first install (USB)"
@@ -14425,7 +15113,12 @@ MODULES_LINUX=(
     "module_linux_timeline|Filesystem Timeline|YELLOW|MAC times aggregati (find/stat)"
     "module_linux_auditd|auditd|RED|/var/log/audit — syscall, auth, EXECVE"
     "module_linux_containers|Container|BLUE|Docker/Podman — inventario e fughe"
-    "module_xplat_master_timeline|Master Timeline|YELLOW|aggrega le evidenze degli altri moduli"
+    "module_xplat_master_timeline|Master Timeline|YELLOW|aggrega le evidenze degli altri moduli (con --all gira per ultimo)§aggregates the other modules' findings (runs last with --all)||defer"
+    "module_linux_pam|PAM|RED|Backdoor di autenticazione§Authentication backdoors"
+    "module_linux_kernel_modules|Kernel Modules|RED|LKM rootkit, modprobe.d, initramfs§LKM rootkits, modprobe.d, initramfs"
+    "module_linux_webserver_logs|Web Server Logs|ORANGE|nginx/apache — webshell, traversal, SQLi§nginx/apache — webshell, traversal, SQLi"
+    "module_linux_cloud_credentials|Cloud Credentials|RED|~/.aws ~/.kube ~/.docker ~/.ssh§~/.aws ~/.kube ~/.docker ~/.ssh"
+    "module_linux_suid_caps|SUID & Capabilities|ORANGE|Superficie di privilege escalation§Privilege escalation surface"
 )
 
 MODULES_MACOS=(
@@ -14441,7 +15134,7 @@ MODULES_MACOS=(
     "module_macos_recent|Recent Items|GREEN|SFL / .Trash / recent items"
     "module_macos_fsevents|FSEvents|MAGENTA|/.fseventsd — modifiche al filesystem"
     "module_macos_spotlight|Spotlight|CYAN|store.db — provenienza download"
-    "module_xplat_master_timeline|Master Timeline|YELLOW|aggrega le evidenze degli altri moduli"
+    "module_xplat_master_timeline|Master Timeline|YELLOW|aggrega le evidenze degli altri moduli (con --all gira per ultimo)§aggregates the other modules' findings (runs last with --all)||defer"
 )
 
 # Restituisce il NOME dell'array registro per l'OS corrente (vuoto per windows/unknown)

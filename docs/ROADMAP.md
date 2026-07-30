@@ -4,7 +4,7 @@ Documento di lavoro per portare FIUTO da 2.1 a 3.0. È pensato per essere
 ripreso a distanza di tempo, anche da un'altra sessione o da un'altra persona:
 ogni fase dichiara **cosa fare**, **dove**, **come verificarlo** e **perché**.
 
-Stato aggiornato al: **2026-07-30** (versione 2.2, Fasi 1 e 2 completate).
+Stato aggiornato al: **2026-07-30** (versione 2.2, Fasi 1, 2 e 3 completate).
 
 ---
 
@@ -42,6 +42,8 @@ Stato aggiornato al: **2026-07-30** (versione 2.2, Fasi 1 e 2 completate).
 | Fase 1 — split `src/` + `build.sh` (file singolo generato) | ✅ |
 | Fase 1 — registro moduli data-driven anche per Windows | ✅ |
 | Fase 2 — 11 moduli Windows nuovi (40-50) | ✅ |
+| Fase 3 — 5 moduli Linux nuovi (17-21) | ✅ |
+| Flag `defer` nel registro (numerazione stabile) | ✅ |
 | Libreria Python condivisa LevelDB/Snappy (`src/lib/13-pylib-leveldb.sh`) | ✅ |
 
 Bug corretti in v2.1, da non reintrodurre:
@@ -189,7 +191,10 @@ questa strada anche per i restanti.
 
 ---
 
-## Fase 3 — Moduli Linux
+## Fase 3 — Moduli Linux ✅ (completata in v2.2)
+
+Tutti e cinque implementati come moduli 17-21.
+
 
 | Modulo | Fonte | Perché |
 |---|---|---|
@@ -268,6 +273,10 @@ Ordinati per rapporto valore/costo.
 
 ## Debito noto, da chiudere quando si passa di lì
 
+- **Numerazione Linux:** l'aggiunta di auditd e Container ha spostato la Master
+  Timeline da 14 a 16. È stato introdotto il flag `defer` proprio per non
+  ripetere l'errore: i moduli nuovi si accodano e la Master Timeline mantiene
+  il suo numero girando comunque per ultima con `--all`.
 - **`--user` e `--silent` sono documentati nel README storico ma non esistono**
   nel parsing argomenti. In v2.1 sono stati tolti dal README. Vanno
   implementati (`--user` è utile davvero: filtra i moduli per-utente) oppure

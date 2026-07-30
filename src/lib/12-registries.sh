@@ -3,7 +3,7 @@
 #  REGISTRO MODULI PER OS (data-driven)
 #
 #  Formato entry:
-#     "funzione|Nome|VARIABILE_COLORE|descrizione[|guardia]"
+#     "funzione|Nome|VARIABILE_COLORE|descrizione[|guardia][|flag]"
 #
 #  L'ordine determina la numerazione mostrata a menu e accettata da
 #  --module / --modules: NON riordinare senza aggiornare il README, o si
@@ -15,6 +15,11 @@
 #  La guardia e' facoltativa: e' il nome di una funzione che ritorna 0 se il
 #  modulo va eseguito, oppure stampa il motivo e ritorna non-zero per farlo
 #  saltare in modalita' batch.
+#
+#  Flag riconosciuti (sesto campo):
+#    defer  il modulo gira per ultimo con --all, pur mantenendo il suo numero
+#           di menu. Serve alla Master Timeline, che aggrega gli altri: cosi'
+#           si possono aggiungere moduli in coda senza rinumerarla.
 # ================================================================
 
 # Guardia del modulo PAD Offline: ha senso solo su un Domain Controller.
@@ -63,7 +68,7 @@ MODULES_WIN=(
     "module_ps_scriptblock|PS ScriptBlock Logging|MAGENTA|Event ID 4104 — PS Operational.evtx"
     "module_jumplists|JumpLists|GREEN|AutomaticDestinations · CustomDestinations"
     "module_network_artifacts|Network Artifacts|CYAN|Profili rete · Interfacce TCP/IP (registry)§Network profiles · TCP/IP interfaces (registry)"
-    "module_master_timeline|Master Timeline|YELLOW|Aggregazione cross-moduli con filtri§Cross-module aggregation with filters"
+    "module_master_timeline|Master Timeline|YELLOW|Aggregazione cross-moduli con filtri (con --all gira per ultima)§Cross-module aggregation with filters (runs last with --all)||defer"
     "module_pad_offline|PAD Offline AD Analysis|RED|NTDS.dit offline — utenti privilegiati, ACL, GPO§NTDS.dit offline — privileged users, ACL, GPO|_guard_pad_offline"
     "module_ai_chat|AI Chat History|MAGENTA|Claude · ChatGPT · Copilot · Cursor · Gemini · Codex"
     "module_setupapi|SetupAPI Device Log|BLUE|Prima installazione dispositivi (USB)§Device first install (USB)"
@@ -95,7 +100,12 @@ MODULES_LINUX=(
     "module_linux_timeline|Filesystem Timeline|YELLOW|MAC times aggregati (find/stat)"
     "module_linux_auditd|auditd|RED|/var/log/audit — syscall, auth, EXECVE"
     "module_linux_containers|Container|BLUE|Docker/Podman — inventario e fughe"
-    "module_xplat_master_timeline|Master Timeline|YELLOW|aggrega le evidenze degli altri moduli"
+    "module_xplat_master_timeline|Master Timeline|YELLOW|aggrega le evidenze degli altri moduli (con --all gira per ultimo)§aggregates the other modules' findings (runs last with --all)||defer"
+    "module_linux_pam|PAM|RED|Backdoor di autenticazione§Authentication backdoors"
+    "module_linux_kernel_modules|Kernel Modules|RED|LKM rootkit, modprobe.d, initramfs§LKM rootkits, modprobe.d, initramfs"
+    "module_linux_webserver_logs|Web Server Logs|ORANGE|nginx/apache — webshell, traversal, SQLi§nginx/apache — webshell, traversal, SQLi"
+    "module_linux_cloud_credentials|Cloud Credentials|RED|~/.aws ~/.kube ~/.docker ~/.ssh§~/.aws ~/.kube ~/.docker ~/.ssh"
+    "module_linux_suid_caps|SUID & Capabilities|ORANGE|Superficie di privilege escalation§Privilege escalation surface"
 )
 
 MODULES_MACOS=(
@@ -111,7 +121,7 @@ MODULES_MACOS=(
     "module_macos_recent|Recent Items|GREEN|SFL / .Trash / recent items"
     "module_macos_fsevents|FSEvents|MAGENTA|/.fseventsd — modifiche al filesystem"
     "module_macos_spotlight|Spotlight|CYAN|store.db — provenienza download"
-    "module_xplat_master_timeline|Master Timeline|YELLOW|aggrega le evidenze degli altri moduli"
+    "module_xplat_master_timeline|Master Timeline|YELLOW|aggrega le evidenze degli altri moduli (con --all gira per ultimo)§aggregates the other modules' findings (runs last with --all)||defer"
 )
 
 # Restituisce il NOME dell'array registro per l'OS corrente (vuoto per windows/unknown)

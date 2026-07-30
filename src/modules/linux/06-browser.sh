@@ -61,6 +61,6 @@ print("</table>")
 PYEOF
 )
     rm -f "$_RTMP"
-    local N; N=$(printf '%s\n' "$ROWS" | grep -c . || echo 0)
+    local N; N=$(printf '%s\n' "$ROWS" | grep -c . || true)
     generic_card_html "$(basename "$(dirname "$DB")")" "$DB" "$N URL" "$TABLE" "◐"
 }

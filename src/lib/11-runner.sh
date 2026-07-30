@@ -306,9 +306,30 @@ run_all_from_registry() {
     BATCH_MODE=true
     SUMMARY_TABLE=()
     echo ""
-    local _total=${#_REG[@]} _i=1 _entry _f _name _color _desc _guard
+    local _total=${#_REG[@]} _entry _f _name _color _desc _guard _flags
+
+    # I moduli marcati "defer" (la Master Timeline) aggregano il lavoro degli
+    # altri, quindi devono girare per ultimi anche se stanno a meta' elenco.
+    # Cosi' si possono aggiungere moduli in coda senza rinumerare la Master
+    # Timeline: la numerazione e' un contratto con chi usa --module N.
+    local -a _order=() _deferred=()
+    local _n=1
     for _entry in "${_REG[@]}"; do
-        IFS='|' read -r _f _name _color _desc _guard <<< "$_entry"
+        IFS='|' read -r _f _name _color _desc _guard _flags <<< "$_entry"
+        if [[ "${_flags:-}" == *defer* ]]; then
+            _deferred+=("${_n}|${_entry}")
+        else
+            _order+=("${_n}|${_entry}")
+        fi
+        _n=$((_n + 1))
+    done
+    _order+=("${_deferred[@]}")
+
+    local _item _i
+    for _item in "${_order[@]}"; do
+        _i="${_item%%|*}"
+        _entry="${_item#*|}"
+        IFS='|' read -r _f _name _color _desc _guard _flags <<< "$_entry"
         local _label; _label=$(reg_text "$_name")
         # Guardia facoltativa: se fallisce il modulo viene saltato con motivo.
         if [[ -n "${_guard:-}" ]] && declare -F "$_guard" > /dev/null; then
@@ -316,12 +337,10 @@ run_all_from_registry() {
             if ! _reason=$("$_guard"); then
                 echo -e "  ${DIM}[i] [$_i/$_total] ${_label} — $(L "saltato" "skipped") (${_reason})${RESET}"
                 SUMMARY_TABLE+=("$_i|$_label|SKIP|$_reason")
-                _i=$((_i + 1))
                 continue
             fi
         fi
         run_batch_module "$_i" "$_f" "$_label" "$_total"
-        _i=$((_i + 1))
     done
     BATCH_MODE=false
     echo ""

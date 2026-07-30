@@ -16,7 +16,7 @@ module_linux_logins() {
         [[ -z "$FILE" || ! -s "$FILE" ]] && continue
         echo -e "  ${BOLD}${LABEL}${RESET}  ${DIM}($FILE)${RESET}"
         local OUT; OUT=$(_parse_utmp "$FILE")
-        local N; N=$(printf '%s\n' "$OUT" | grep -c . || echo 0)
+        local N; N=$(printf '%s\n' "$OUT" | grep -c . || true)
         TOTAL=$((TOTAL + N))
         printf '%s\n' "$OUT" | head -40 | while IFS= read -r R; do echo -e "      ${DIM}$R${RESET}"; done
         local TMPF; TMPF=$(mktemp); printf '%s\n' "$OUT" > "$TMPF"

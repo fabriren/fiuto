@@ -76,6 +76,11 @@ src/modules/linux/12-trash.sh
 src/modules/linux/13-timeline.sh
 src/modules/linux/14-auditd.sh
 src/modules/linux/15-containers.sh
+src/modules/linux/17-pam.sh
+src/modules/linux/18-kernel-modules.sh
+src/modules/linux/19-webserver-logs.sh
+src/modules/linux/20-cloud-credentials.sh
+src/modules/linux/21-suid-capabilities.sh
 src/modules/macos/01-logs.sh
 src/modules/macos/02-accounts.sh
 src/modules/macos/03-persistence.sh

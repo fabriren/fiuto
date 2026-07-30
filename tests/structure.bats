@@ -58,15 +58,55 @@ setup() {
     done
 }
 
+# NB: read deve leggere TUTTI i campi. Con una variabile in meno l'ultima
+# assorbe il resto della riga, quindi una voce "...|desc||defer" darebbe
+# guard="|defer" invece di guard vuota.
 @test "le guardie dichiarate nei registri esistono" {
+    fail=0
     for entry in "${MODULES_WIN[@]}" "${MODULES_LINUX[@]}" "${MODULES_MACOS[@]}"; do
-        IFS='|' read -r _fn _name _color _desc guard <<< "$entry"
+        IFS='|' read -r _fn _name _color _desc guard _flags <<< "$entry"
         [ -z "${guard:-}" ] && continue
-        declare -F "$guard" > /dev/null || {
-            echo "Guardia mancante: $guard"
-            false
-        }
+        if ! declare -F "$guard" > /dev/null; then
+            echo "Guardia inesistente: '$guard' nella voce: $entry"
+            fail=1
+        fi
     done
+    [ "$fail" -eq 0 ]
+}
+
+@test "i flag dichiarati nei registri sono riconosciuti" {
+    fail=0
+    for entry in "${MODULES_WIN[@]}" "${MODULES_LINUX[@]}" "${MODULES_MACOS[@]}"; do
+        IFS='|' read -r _fn _name _color _desc _guard flags <<< "$entry"
+        [ -z "${flags:-}" ] && continue
+        case "$flags" in
+            defer) ;;
+            *) echo "Flag sconosciuto: '$flags' nella voce: $entry"; fail=1 ;;
+        esac
+    done
+    [ "$fail" -eq 0 ]
+}
+
+# La Master Timeline aggrega gli altri moduli: se girasse a meta' elenco
+# produrrebbe una timeline incompleta senza segnalare nulla.
+@test "la Master Timeline e' marcata defer in ogni registro che la contiene" {
+    fail=0
+    for reg in MODULES_WIN MODULES_LINUX MODULES_MACOS; do
+        declare -n _r="$reg"
+        for entry in "${_r[@]}"; do
+            IFS='|' read -r fn _name _color _desc _guard flags <<< "$entry"
+            case "$fn" in
+                *master_timeline*)
+                    if [[ "${flags:-}" != *defer* ]]; then
+                        echo "$reg: $fn non e' marcata defer"
+                        fail=1
+                    fi
+                    ;;
+            esac
+        done
+        unset -n _r
+    done
+    [ "$fail" -eq 0 ]
 }
 
 @test "i nomi dei moduli sono univoci dentro ogni registro" {
