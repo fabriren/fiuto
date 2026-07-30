@@ -324,7 +324,7 @@ Ordinati per rapporto valore/costo.
    **Correlazione:** cluster temporali di 30 minuti su tutti gli eventi, con
    scenari in `correlation_scenarios_tsv`. Sono ipotesi, e il report le
    presenta come tali. Ogni riscontro porta la sua tecnica MITRE: il punto 8
-   resta aperto solo per l'export del layer Navigator.
+   copre gia' il punto 8; l'export del layer Navigator e' escluso per decisione.
 
    **Punteggio:** somma dei pesi (40/15/5/1) limitata a 100, con formula
    stampata nel report. Ordina la coda di lavoro, non misura la
@@ -462,7 +462,10 @@ Ordinati per rapporto valore/costo.
    Aggiunto anche un `flock` sull'append alla timeline unica: con `--jobs` le
    righe JSON superano PIPE_BUF e si intreccerebbero, producendo JSON non
    parsabile proprio nel file destinato a un altro strumento.
-8. **Mapping MITRE ATT&CK.** Le tecniche sono già sui riscontri (Fase 6.3): resta l'export del layer Navigator.
+8. **Mapping MITRE ATT&CK.** Le tecniche sono già sui riscontri (Fase 6.3).
+   L'export del layer Navigator è **escluso per decisione** (2026-07-30): era
+   stato implementato e poi rimosso. **Non reimplementarlo** senza che la
+   richiesta arrivi di nuovo esplicitamente.
 9. **Immagini senza mount manuale.** `ewfmount` per E01, `losetup` per raw/dd,
    volumi cifrati (BitLocker/`dislocker`, LUKS, FileVault).
 
