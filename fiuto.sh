@@ -15445,6 +15445,330 @@ PYEOF
 }
 
 # ================================================================
+#  CROSS-OS — Recupero da spazio libero SQLite
+#
+#  Praticamente ogni artefatto moderno e' un database SQLite: cronologia dei
+#  browser, TCC, KnowledgeC, quarantena, Messages, cookie di Chrome, chat.
+#  Tutti i moduli che li leggono vedono pero' solo i record VIVI.
+#
+#  Un record cancellato non sparisce dal file: la pagina finisce nella
+#  freelist, o lo spazio che occupava diventa un freeblock. Il contenuto resta
+#  leggibile finche' non viene sovrascritto. Quando l'utente "ha cancellato la
+#  cronologia", questo e' spesso l'unico posto dove quella cronologia esiste
+#  ancora.
+#
+#  Il modulo attraversa i database del volume e ne estrae le stringhe dallo
+#  spazio non allocato. Vale per tutti e tre i sistemi operativi.
+# ================================================================
+module_xplat_sqlite_recovery() {
+    section_header "$(L "Recupero record cancellati — SQLite" "Deleted record recovery — SQLite")" "$MAGENTA"
+    check_target_root || return 1
+
+    # Database che valgono la pena in un'indagine, per OS.
+    local -a PATTERNS=(
+        "History" "places.sqlite" "cookies.sqlite" "Cookies" "Web Data" "Login Data"
+        "chat.db" "TCC.db" "knowledgeC.db" "QuarantineEventsV2*" "Downloads.sqlite"
+        "ActivitiesCache.db" "SRUDB.dat" "index.sqlite" "Extension Cookies"
+        "History.db" "*.sqlite" "*.db"
+    )
+
+    info "$(L "Ricerca dei database SQLite..." "Searching for SQLite databases...")"
+    local MANIFEST; MANIFEST=$(mktemp); register_tmp "$MANIFEST"
+
+    # Si limita alle aree utente e alle directory applicative: una scansione
+    # dell'intero volume su un disco reale richiederebbe ore e restituirebbe
+    # soprattutto database di sistema senza interesse.
+    local -a ROOTS=()
+    local HOME_DIR
+    while IFS= read -r HOME_DIR; do
+        [[ -n "$HOME_DIR" ]] && ROOTS+=("$HOME_DIR")
+    done < <(get_target_user_homes)
+    local D
+    for D in "ProgramData" "private/var/db" "var/db" "var/lib"; do
+        local R; R=$(ci_find_dir "$WIN_ROOT" "$D")
+        [[ -n "$R" ]] && ROOTS+=("$R")
+    done
+    [[ ${#ROOTS[@]} -eq 0 ]] && ROOTS=("$WIN_ROOT")
+
+    local R F
+    for R in "${ROOTS[@]}"; do
+        while IFS= read -r F; do
+            # Il magic e' l'unico criterio affidabile: molti database SQLite
+            # non hanno estensione .db o .sqlite (Chrome li chiama "History").
+            [[ -s "$F" ]] || continue
+            if [[ "$(head -c 15 "$F" 2>/dev/null)" == "SQLite format 3" ]]; then
+                printf '%s\n' "$F" >> "$MANIFEST"
+            fi
+        done < <(find "$R" -maxdepth 8 -type f -size +1k -size -512M 2>/dev/null | head -4000)
+    done
+
+    if [[ ! -s "$MANIFEST" ]]; then
+        warn "$(L "Nessun database SQLite trovato." "No SQLite database found.")"
+        return 0
+    fi
+    sort -u "$MANIFEST" -o "$MANIFEST"
+    local NDB; NDB=$(wc -l < "$MANIFEST")
+    info "$(L "Database SQLite individuati:" "SQLite databases found:") ${BOLD}$NDB"
+    info "$(L "Carving dello spazio non allocato..." "Carving unallocated space...")"
+
+    local IOCTMP; IOCTMP=$(mktemp); register_tmp "$IOCTMP"
+    printf '%s\n' "${IOC_LIST[@]:-}" > "$IOCTMP"
+    local OUT; OUT=$(mktemp); register_tmp "$OUT"
+    local SUM; SUM=$(mktemp); register_tmp "$SUM"
+
+    run_py_with_lib pylib_sqlite_recover "$MANIFEST" "$IOCTMP" "$OUT" "$SUM" << 'PYEOF' 2>/dev/null
+import sys, os, re
+
+manifest, ioc_path, out_path, sum_path = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+
+try:
+    iocs = [l.strip().lower() for l in open(ioc_path, encoding='utf-8', errors='replace') if l.strip()]
+except Exception:
+    iocs = []
+
+# Un flag binario "rilevante" non aiuta: su una cronologia cancellata ogni
+# stringa contiene un URL e finirebbe marcata, azzerando il valore di triage.
+# Si classifica invece per tipo, e si ordina mettendo per prime le categorie
+# rare (credenziali, eseguibili) rispetto a quelle abbondanti (URL).
+CAT_CRED = re.compile(r'(?i)(password|passwd|token|secret|api[_-]?key|bearer |authorization|BEGIN [A-Z ]*PRIVATE KEY)')
+CAT_EXE  = re.compile(r'(?i)\.(exe|dll|ps1|vbs|js|bat|cmd|scr|sh|jar|apk|dmg|pkg)\b')
+CAT_DOC  = re.compile(r'(?i)\.(docx?|xlsx?|pptx?|pdf|zip|7z|rar|csv|sql|bak)\b')
+CAT_PATH = re.compile(r'(?i)(/Users/|/home/|[A-Z]:\\\\)')
+CAT_URL  = re.compile(r'(?i)(https?://|ftp://)')
+
+def classify(t):
+    if CAT_CRED.search(t):
+        return 'credenziale'
+    if CAT_EXE.search(t):
+        return 'eseguibile'
+    if CAT_DOC.search(t):
+        return 'documento'
+    if CAT_PATH.search(t):
+        return 'percorso'
+    if CAT_URL.search(t):
+        return 'url'
+    return ''
+
+# Ordine di priorita' per il triage: le categorie rare prima.
+PRIORITY = {'credenziale': 0, 'eseguibile': 1, 'documento': 2, 'percorso': 3, 'url': 4, '': 5}
+
+rows = []
+per_db = []
+for line in open(manifest, encoding='utf-8', errors='replace'):
+    path = line.rstrip('\n')
+    if not path:
+        continue
+    try:
+        found = sqlite_carve(path, cap=4000)
+    except Exception:
+        continue
+    if not found:
+        continue
+    name = os.path.basename(path)
+    nnot = 0
+    for origin, text in found:
+        cat = classify(text)
+        if iocs and any(i in text.lower() for i in iocs):
+            cat = (cat + ';IOC') if cat else 'IOC'
+        if cat.split(';')[0] in ('credenziale', 'eseguibile', 'documento') or 'IOC' in cat:
+            nnot += 1
+        rows.append((name, origin, cat, text, path))
+    per_db.append((name, str(len(found)), str(nnot), path))
+
+rows.sort(key=lambda r: (0 if 'IOC' in r[2] else 1,
+                         PRIORITY.get(r[2].split(';')[0], 5), r[0]))
+with open(out_path, 'w', encoding='utf-8') as fh:
+    for r in rows:
+        fh.write('\t'.join(x.replace('\t', ' ').replace('\n', ' ') for x in r) + '\n')
+with open(sum_path, 'w', encoding='utf-8') as fh:
+    for r in sorted(per_db, key=lambda x: -int(x[1])):
+        fh.write('\t'.join(r) + '\n')
+PYEOF
+
+    local TOTAL=0 NDBHIT=0
+    [[ -s "$OUT" ]] && TOTAL=$(wc -l < "$OUT")
+    [[ -s "$SUM" ]] && NDBHIT=$(wc -l < "$SUM")
+    if [[ "$TOTAL" -eq 0 ]]; then
+        ok "$(L "Nessun contenuto recuperabile dallo spazio libero dei database." "No recoverable content in the databases' free space.")"
+        return 0
+    fi
+    local NNOT NIOC
+    # "Prioritarie" = credenziali, eseguibili, documenti. Gli URL sono esclusi
+    # di proposito: su una cronologia cancellata sono la norma, non il segnale.
+    NNOT=$(awk -F'\t' '$3 ~ /credenziale|eseguibile|documento/' "$OUT" | wc -l)
+    NIOC=$(awk -F'\t' '$3 ~ /IOC/' "$OUT" | wc -l)
+
+    ok "$(L "Stringhe recuperate:" "Strings recovered:") ${BOLD}$TOTAL"
+    info "$(L "Da" "From") ${BOLD}${NDBHIT}${RESET} $(L "database su" "databases out of") ${NDB}"
+    [[ "$NNOT" -gt 0 ]] && warn "$(L "Prioritarie (credenziali, eseguibili, documenti):" "Priority (credentials, executables, documents):") ${BOLD}$NNOT"
+    [[ "$NIOC" -gt 0 ]] && warn "$(L "Con match IoC:" "With IoC match:") ${BOLD}$NIOC"
+    echo ""
+    awk -F'\t' '$3 ~ /credenziale|eseguibile|documento|IOC/{printf "      %-14s %-12s %s\n", $1, $3, substr($4,1,70)}' "$OUT" | head -15 | while IFS= read -r LN; do
+        echo -e "      ${MAGENTA}${LN}${RESET}"
+    done
+
+    ask_yn "Generare report HTML?" || return 0
+
+    local ROWS; ROWS=$(head -25000 "$OUT" | awk -F'\t' '{print $1"\t"$2"\t"$3"\t"$4}')
+    local TABLE; TABLE=$(_rows_to_table "$ROWS" \
+        "Database" "$(L "Origine" "Origin")" "$(L "Categoria" "Category")" "$(L "Contenuto recuperato" "Recovered content")")
+    local STABLE; STABLE=$(_rows_to_table "$(cat "$SUM")" \
+        "Database" "$(L "Stringhe" "Strings")" "$(L "Prioritarie" "Priority")" "$(L "Percorso" "Path")")
+
+    local NOTE="<div class='card' style='margin-bottom:1rem'><div style='padding:1rem 1.5rem;font-size:.8rem;line-height:1.7'>"
+    NOTE+="<b>$(L "Che cosa sono queste stringhe" "What these strings are")</b><br>"
+    NOTE+="$(L "Provengono dallo spazio che SQLite considera libero: pagine finite nella freelist (colonna 'freelist') e spazio non allocato dentro pagine ancora in uso (colonna 'unallocated'). In pratica sono i resti di record CANCELLATI, ancora presenti perche' non sovrascritti." \
+        "They come from space SQLite considers free: pages moved to the freelist (origin 'freelist') and unallocated space inside pages still in use (origin 'unallocated'). In practice they are the remains of DELETED records, still present because not yet overwritten.")<br><br>"
+    NOTE+="<b>$(L "Limite: sono frammenti, non record" "Limitation: fragments, not records")</b><br>"
+    NOTE+="$(L "Il modulo estrae stringhe, non ricostruisce righe di tabella: campi adiacenti possono comparire concatenati e all'inizio puo' esserci qualche byte di intestazione del record. Ricostruire un record cancellato richiede lo schema e l'interpretazione dei serial type, ed e' un'operazione fragile: un record ricomposto male in una perizia e' peggio di nessun record. Va quindi trattato come indizio da corroborare, non come contenuto autoritativo." \
+        "The module extracts strings, it does not rebuild table rows: adjacent fields may appear concatenated and a few record-header bytes may prefix the text. Rebuilding a deleted record requires the schema and serial-type interpretation, and is fragile: a badly reassembled record in an expert report is worse than none. Treat this as a lead to corroborate, not as authoritative content.")<br><br>"
+    NOTE+="<b>$(L "Le categorie" "The categories")</b><br>"
+    NOTE+="$(L "Le stringhe sono classificate per tipo e ordinate mettendo per prime le categorie rare. Gli URL sono deliberatamente in fondo: recuperare una cronologia cancellata produce migliaia di URL, quindi marcarli tutti come rilevanti non aiuterebbe a decidere da dove iniziare." \
+        "Strings are classified by type and ordered with the rare categories first. URLs are deliberately last: recovering a deleted history yields thousands of URLs, so flagging them all as notable would not help decide where to start.")<br><br>"
+    NOTE+="$(L "Non trovare nulla non significa che l'utente non abbia cancellato: significa che lo spazio e' stato riutilizzato, o che il database e' stato compattato con VACUUM — operazione che azzera proprio questo tipo di recupero ed e' essa stessa degna di nota." \
+        "Finding nothing does not mean the user deleted nothing: it means the space was reused, or the database was compacted with VACUUM — an operation that wipes exactly this kind of recovery and is itself worth noting.")"
+    NOTE+="</div></div>"
+
+    local STATS
+    STATS="$(stat_box "$(L "Stringhe" "Strings")" "$TOTAL")"
+    STATS+="$(stat_box "$(L "Prioritarie" "Priority")" "$NNOT" "$([[ "$NNOT" -gt 0 ]] && echo warn || echo info)")"
+    STATS+="$(stat_box "Database" "${NDBHIT}/${NDB}" "info")"
+    STATS+="$(stat_box "IoC" "$NIOC" "$([[ "$NIOC" -gt 0 ]] && echo warn || echo info)")"
+    finish_report "xplat_sqlite_recovery" "SQLite — $(L "record cancellati" "deleted records")" "SQL" \
+        "$(L "freelist e spazio non allocato" "freelist and unallocated space")" "$STATS" \
+        "${NOTE}<div class='cards'>$(generic_card_html "$(L "Resa per database" "Yield per database")" "$(L "riepilogo" "summary")" "$NDBHIT" "$STABLE" "∑")</div><div class='cards'>$(generic_card_html "$(L "Contenuto recuperato" "Recovered content")" "$(L "segnalati in testa" "flagged first")" "$TOTAL" "$TABLE" "♺")</div>"
+}
+
+# ================================================================
+#  CROSS-OS — EFI System Partition e bootkit
+#
+#  La ESP e' una piccola partizione FAT che il firmware legge all'accensione
+#  per trovare il bootloader. Il codice che sta li' viene eseguito PRIMA del
+#  sistema operativo, del kernel e di qualunque agente EDR: e' la posizione di
+#  persistenza piu' ambita, e sopravvive alla reinstallazione del sistema e
+#  alla formattazione della partizione di sistema.
+#
+#  I bootkit noti (ESPecter, BlackLotus, Bootkitty, CosmicStrand) agiscono
+#  sostituendo o affiancando i loader legittimi. Il modulo inventaria la ESP,
+#  calcola gli hash di tutto cio' che vi trova e segnala le anomalie
+#  strutturali: file non-EFI, loader in posizioni inattese, date isolate.
+#
+#  Vale per tutti e tre i sistemi: la ESP e' condivisa fra gli OS installati.
+# ================================================================
+module_xplat_esp_bootkit() {
+    section_header "EFI System Partition — bootkit" "$RED"
+    check_target_root || return 1
+
+    # La ESP puo' essere il volume stesso (montata a parte) oppure trovarsi
+    # sotto /boot/efi, /efi o /Volumes/EFI del volume in analisi.
+    local -a ESPS=()
+    local D
+    for D in "EFI" "boot/efi/EFI" "efi/EFI" "Volumes/EFI/EFI" "boot/EFI"; do
+        local R; R=$(ci_find_dir "$WIN_ROOT" "$D")
+        [[ -n "$R" ]] && ESPS+=("$R")
+    done
+
+    if [[ ${#ESPS[@]} -eq 0 ]]; then
+        warn "$(L "Nessuna EFI System Partition raggiungibile da questo volume." \
+                 "No EFI System Partition reachable from this volume.")"
+        info "$(L "La ESP e' una partizione separata: se non e' montata, va montata a parte (di norma la prima partizione FAT32 del disco) e analizzata indicandola come root." \
+                 "The ESP is a separate partition: if not mounted, mount it separately (usually the disk's first FAT32 partition) and analyse it as the root.")"
+        return 0
+    fi
+
+    local ESP; ESP="${ESPS[0]}"
+    info "ESP: ${BOLD}${ESP}"
+
+    # Loader legittimi attesi. Un nome fuori da questo elenco non e' di per se'
+    # malevolo (molte distribuzioni ne aggiungono di propri), ma va giustificato.
+    local KNOWN="bootx64.efi|bootia32.efi|bootaa64.efi|bootmgfw.efi|bootmgr.efi|memtest.efi|shimx64.efi|shimaa64.efi|shim.efi|grubx64.efi|grubaa64.efi|mmx64.efi|fbx64.efi|mokmanager.efi|systemd-bootx64.efi|fwupdx64.efi|kernel.efi|vmlinuz.efi|refind_x64.efi|BOOT.EFI|apfs.efi|boot.efi|firmware.scap|immutablekernel"
+
+    # Nomi ricorrenti nei bootkit documentati e nei loro payload.
+    local BADNAMES="grubx64_real|bootmgfw_original|bootmgfw\.efi\.bak|winload\.efi|bootkit|especter|blacklotus|bootlicker|cosmicstrand|\.sys$|\.dll$|\.ps1$|\.bat$|\.vbs$|\.exe$"
+
+    local OUT; OUT=$(mktemp); register_tmp "$OUT"
+    local NFILE=0 NEFI=0 NNONEFI=0 NUNKNOWN=0 NSUSP=0
+    local F
+    while IFS= read -r F; do
+        [[ -f "$F" ]] || continue
+        NFILE=$((NFILE + 1))
+        local BASE REL SZ MT HASH FLAGS
+        BASE=$(basename "$F")
+        REL="${F#$ESP}"
+        SZ=$(stat -c %s "$F" 2>/dev/null || echo 0)
+        MT=$(stat -c %y "$F" 2>/dev/null | cut -d. -f1)
+        HASH=$(sha256_file "$F")
+        FLAGS=""
+
+        # Un binario EFI e' un PE: inizia con MZ. Un file nella ESP che non lo
+        # e' — e non e' un file di configurazione noto — non ha motivo di stare li'.
+        local MAGIC; MAGIC=$(head -c 2 "$F" 2>/dev/null)
+        if [[ "$MAGIC" == "MZ" ]]; then
+            NEFI=$((NEFI + 1))
+        else
+            case "${BASE,,}" in
+                *.efi) FLAGS+="EFI_SENZA_HEADER_PE;"; NSUSP=$((NSUSP + 1)) ;;
+                *.cfg|*.conf|*.ini|*.json|*.txt|bcd|*.crt|*.cer|*.esl|*.auth|*.scap|*.dat) : ;;
+                *) FLAGS+="NON_EFI;"; NNONEFI=$((NNONEFI + 1)) ;;
+            esac
+        fi
+        if ! printf '%s' "${BASE,,}" | grep -qiE "^(${KNOWN})$"; then
+            case "${BASE,,}" in
+                *.efi) FLAGS+="LOADER_NON_STANDARD;"; NUNKNOWN=$((NUNKNOWN + 1)) ;;
+            esac
+        fi
+        if printf '%s' "${BASE,,}" | grep -qiE "$BADNAMES"; then
+            FLAGS+="NOME_SOSPETTO;"
+            NSUSP=$((NSUSP + 1))
+        fi
+        printf '%s\t%s\t%s\t%s\t%s\n' "$MT" "${REL#/}" "$SZ" "${FLAGS%;}" "$HASH" >> "$OUT"
+    done < <(find "$ESP" -type f 2>/dev/null | sort)
+
+    separator
+    ok "$(L "File nella ESP:" "Files in the ESP:") ${BOLD}$NFILE"
+    info "$(L "Binari EFI (header PE):" "EFI binaries (PE header):") ${BOLD}$NEFI"
+    [[ "$NUNKNOWN" -gt 0 ]] && warn "$(L "Loader non standard:" "Non-standard loaders:") ${BOLD}$NUNKNOWN"
+    [[ "$NNONEFI" -gt 0 ]] && warn "$(L "File non-EFI nella ESP:" "Non-EFI files in the ESP:") ${BOLD}$NNONEFI"
+    [[ "$NSUSP" -gt 0 ]] && warn "$(L "Segnalazioni forti:" "Strong flags:") ${BOLD}$NSUSP"
+    if [[ "$NUNKNOWN" -gt 0 || "$NNONEFI" -gt 0 || "$NSUSP" -gt 0 ]]; then
+        echo ""
+        awk -F'\t' '$4!=""{printf "      [%s] %s\n", $4, $2}' "$OUT" | head -20 | while IFS= read -r LN; do
+            echo -e "      ${RED}${LN}${RESET}"
+        done
+    fi
+    [[ "$NFILE" -eq 0 ]] && { warn "$(L "ESP vuota o illeggibile." "ESP empty or unreadable.")"; return 0; }
+
+    ask_yn "Generare report HTML?" || return 0
+
+    local ROWS; ROWS=$( { awk -F'\t' '$4!=""' "$OUT"; awk -F'\t' '$4==""' "$OUT"; } )
+    local TABLE; TABLE=$(_rows_to_table "$ROWS" \
+        "$(L "Ultima modifica" "Last modified")" "$(L "Percorso nella ESP" "Path in ESP")" \
+        "$(L "Byte" "Bytes")" "$(L "Segnalazioni" "Flags")" "SHA256")
+
+    local NOTE="<div class='card' style='margin-bottom:1rem;border-color:rgba(255,123,114,.5)'><div style='padding:1rem 1.5rem;font-size:.8rem;line-height:1.7'>"
+    NOTE+="<b>$(L "Perche' la ESP conta piu' di quanto sembri" "Why the ESP matters more than it looks")</b><br>"
+    NOTE+="$(L "Il codice nella ESP viene eseguito prima del sistema operativo, del kernel e di qualunque agente EDR. Una persistenza qui sopravvive alla reinstallazione del sistema e alla formattazione della partizione di sistema: se un incidente si ripresenta dopo un ripristino completo, questo e' il primo posto da guardare." \
+        "Code in the ESP runs before the operating system, the kernel and any EDR agent. Persistence here survives OS reinstallation and formatting of the system partition: if an incident recurs after a full rebuild, this is the first place to look.")<br><br>"
+    NOTE+="<b>$(L "Come usare gli hash" "How to use the hashes")</b><br>"
+    NOTE+="$(L "Gli SHA256 in tabella vanno confrontati con quelli dei loader legittimi della distribuzione o della versione di Windows installata, e cercati nelle basi di reputazione. Un bootx64.efi con un hash che non corrisponde a nessuna build ufficiale e' il reperto." \
+        "The SHA256 values in the table should be compared against the legitimate loaders of the installed distribution or Windows build, and looked up in reputation databases. A bootx64.efi whose hash matches no official build is the finding.")<br><br>"
+    NOTE+="<b>$(L "Le segnalazioni" "The flags")</b><br>"
+    NOTE+="$(L "LOADER_NON_STANDARD significa 'nome non nell'elenco dei loader noti': molte distribuzioni ne aggiungono di legittimi, quindi va giustificato, non temuto. NON_EFI e EFI_SENZA_HEADER_PE sono piu' pesanti: un file nella ESP che non e' un binario EFI ne' una configurazione nota non ha una ragione ovvia per stare li'." \
+        "NON_STANDARD_LOADER means 'name not in the known-loader list': many distributions add legitimate ones, so it needs justifying, not fearing. NON_EFI and EFI_WITHOUT_PE_HEADER are heavier: a file in the ESP that is neither an EFI binary nor a known configuration has no obvious reason to be there.")<br><br>"
+    NOTE+="$(L "Per un controllo mirato sulle famiglie note serve YARA con regole aggiornate: questo modulo non ne include, perche' regole ferme al momento del rilascio darebbero una falsa sensazione di copertura." \
+        "For targeted checks against known families use YARA with current rules: this module ships none, because rules frozen at release time would give a false sense of coverage.")"
+    NOTE+="</div></div>"
+
+    local STATS
+    STATS="$(stat_box "$(L "File" "Files")" "$NFILE")"
+    STATS+="$(stat_box "$(L "Binari EFI" "EFI binaries")" "$NEFI" "info")"
+    STATS+="$(stat_box "$(L "Non standard" "Non-standard")" "$NUNKNOWN" "$([[ "$NUNKNOWN" -gt 0 ]] && echo warn || echo info)")"
+    STATS+="$(stat_box "$(L "Segnalati" "Flagged")" "$((NNONEFI + NSUSP))" "$([[ $((NNONEFI + NSUSP)) -gt 0 ]] && echo warn || echo info)")"
+    finish_report "xplat_esp_bootkit" "EFI System Partition" "ESP" "$(L "bootkit e persistenza pre-boot" "bootkits and pre-boot persistence")" "$STATS" \
+        "${NOTE}<div class='cards'>$(generic_card_html "$(L "Contenuto della ESP" "ESP contents")" "$ESP" "$NFILE" "$TABLE" "⏻")</div>"
+}
+
+# ================================================================
 #  LIBRERIA PYTHON CONDIVISA — LevelDB / Snappy
 #
 #  Le app Electron (ChatGPT Desktop, Slack, Discord, Teams) memorizzano i
@@ -15844,6 +16168,195 @@ run_py_with_lib() {
 }
 
 # ================================================================
+#  LIBRERIA PYTHON CONDIVISA — recupero da spazio libero SQLite
+#
+#  query_sqlite() legge i record vivi (e copia il -wal per vedere le
+#  transazioni non consolidate), ma un record CANCELLATO non sparisce dal
+#  file: la sua pagina finisce nella freelist, o lo spazio che occupava
+#  diventa un freeblock dentro la pagina. Il contenuto resta li' finche' non
+#  viene sovrascritto.
+#
+#  Su un artefatto come la cronologia del browser, TCC.db o chat.db questo e'
+#  spesso l'unico modo di vedere cio' che l'utente ha cancellato.
+#
+#  Livello di supporto: si estraggono le STRINGHE dallo spazio non allocato,
+#  non i record ricostruiti. Ricostruire un record cancellato richiede lo
+#  schema e l'interpretazione dei serial type: e' possibile ma fragile, e un
+#  record ricomposto male in un report forense e' peggio di nessun record.
+#
+#  Uso:
+#      run_py_with_lib pylib_sqlite_recover "$DB" << 'PYEOF'
+#      import sys
+#      for kind, text in sqlite_carve(sys.argv[1]):
+#          ...
+#      PYEOF
+# ================================================================
+
+pylib_sqlite_recover() {
+    cat << 'FIUTO_SQLPY_EOF'
+import re
+import struct
+
+# Lunghezza minima di una stringa perche' valga la pena riportarla.
+SQLITE_MIN_STR = 5
+
+_PRINTABLE = re.compile(rb'[\x20-\x7e\xc0-\xf4][\x20-\x7e\x80-\xbf]{%d,}' % (SQLITE_MIN_STR - 1))
+
+
+def _pages(data):
+    """Genera (numero_pagina, byte) per ogni pagina del database."""
+    if len(data) < 100 or data[:15] != b'SQLite format 3':
+        return
+    page_size = struct.unpack_from('>H', data, 16)[0]
+    # 1 significa 65536 (il campo e' a 16 bit).
+    if page_size == 1:
+        page_size = 65536
+    if page_size < 512 or page_size & (page_size - 1):
+        return
+    total = len(data) // page_size
+    for i in range(total):
+        yield i + 1, data[i * page_size:(i + 1) * page_size]
+
+
+def _freelist_pages(data):
+    """Numeri delle pagine nella freelist, seguendo la catena dei trunk."""
+    out = set()
+    if len(data) < 100:
+        return out
+    page_size = struct.unpack_from('>H', data, 16)[0]
+    if page_size == 1:
+        page_size = 65536
+    try:
+        trunk = struct.unpack_from('>I', data, 32)[0]
+        count = struct.unpack_from('>I', data, 36)[0]
+    except Exception:
+        return out
+    seen = set()
+    guard = 0
+    while trunk and trunk not in seen and guard < 100000:
+        guard += 1
+        seen.add(trunk)
+        off = (trunk - 1) * page_size
+        if off < 0 or off + 8 > len(data):
+            break
+        out.add(trunk)
+        try:
+            nxt, n = struct.unpack_from('>II', data, off)
+        except Exception:
+            break
+        n = min(n, (page_size - 8) // 4)
+        for i in range(n):
+            try:
+                leaf = struct.unpack_from('>I', data, off + 8 + 4 * i)[0]
+            except Exception:
+                break
+            if leaf:
+                out.add(leaf)
+        trunk = nxt
+    return out
+
+
+def _unallocated(page, is_first):
+    """Spazio non allocato e freeblock di una pagina b-tree.
+
+    Layout: header, array dei puntatori alle celle, spazio libero, contenuto
+    delle celle. Cio' che sta fra la fine dell'array e l'inizio del contenuto
+    non e' in uso — ed e' li' che restano i record cancellati.
+    """
+    base = 100 if is_first else 0
+    if len(page) < base + 8:
+        return b''
+    ptype = page[base]
+    if ptype not in (0x02, 0x05, 0x0a, 0x0d):
+        return b''
+    hdr = 12 if ptype in (0x02, 0x05) else 8
+    try:
+        ncells = struct.unpack_from('>H', page, base + 3)[0]
+        content = struct.unpack_from('>H', page, base + 5)[0]
+        freeblk = struct.unpack_from('>H', page, base + 1)[0]
+    except Exception:
+        return b''
+    if content == 0:
+        content = 65536
+    start = base + hdr + 2 * ncells
+    out = bytearray()
+    if 0 < start < content <= len(page):
+        out += page[start:content]
+    # Catena dei freeblock: spazio liberato dentro l'area del contenuto.
+    guard = 0
+    while freeblk and freeblk + 4 <= len(page) and guard < 10000:
+        guard += 1
+        try:
+            nxt, size = struct.unpack_from('>HH', page, freeblk)
+        except Exception:
+            break
+        if size and freeblk + size <= len(page):
+            out += page[freeblk:freeblk + size]
+        if nxt <= freeblk:
+            break
+        freeblk = nxt
+    return bytes(out)
+
+
+def sqlite_carve(path, cap=20000):
+    """Ritorna [(origine, stringa)] recuperate dallo spazio non allocato.
+
+    origine: 'freelist' per le pagine liberate per intero, 'unallocated' per
+    lo spazio non usato dentro pagine ancora in uso.
+    """
+    try:
+        with open(path, 'rb') as fh:
+            data = fh.read(512 * 1024 * 1024)
+    except Exception:
+        return []
+    if data[:15] != b'SQLite format 3':
+        return []
+
+    free = _freelist_pages(data)
+    out = []
+    seen = set()
+
+    def harvest(blob, origin):
+        for m in _PRINTABLE.finditer(blob):
+            # errors='ignore' e non 'strict': il pattern ammette i byte di
+            # continuazione UTF-8 (\x80-\xbf) per non spezzare i caratteri
+            # accentati, ma in una pagina SQLite l'header del record segue il
+            # payload, quindi il match finisce quasi sempre con un byte di
+            # continuazione isolato. Con 'strict' l'intera stringa veniva
+            # scartata in silenzio — e sono proprio quelle interessanti.
+            s = m.group(0).decode('utf-8', 'ignore')
+            # Via i residui di controllo dell'header del record.
+            s = ''.join(ch for ch in s if ch >= ' ' and ch != '\x7f').strip()
+            if len(s) < SQLITE_MIN_STR:
+                continue
+            # Scarta le sequenze senza alcuna lettera: sono quasi sempre
+            # residui binari che capitano nell'intervallo stampabile.
+            if not re.search(r'[A-Za-z]{3}', s):
+                continue
+            k = s.lower()
+            if k in seen:
+                continue
+            seen.add(k)
+            out.append((origin, s[:500]))
+            if len(out) >= cap:
+                return True
+        return False
+
+    for num, page in _pages(data):
+        if len(out) >= cap:
+            break
+        if num in free:
+            if harvest(page, 'freelist'):
+                break
+        else:
+            blob = _unallocated(page, num == 1)
+            if blob and harvest(blob, 'unallocated'):
+                break
+    return out
+FIUTO_SQLPY_EOF
+}
+
+# ================================================================
 #  REGISTRO MODULI PER OS (data-driven)
 #
 #  Formato entry:
@@ -15926,6 +16439,8 @@ MODULES_WIN=(
     "module_chat_desktop|Chat Desktop|MAGENTA|Slack/Teams/Discord — LevelDB§Slack/Teams/Discord — LevelDB"
     "module_webcache|WebCacheV01|CYAN|IE/Edge Legacy + WinINET§IE/Edge Legacy + WinINET"
     "module_search_index|Search Index|YELLOW|Windows.edb — file indicizzati§Windows.edb — indexed files"
+    "module_xplat_sqlite_recovery|SQLite Recovery|MAGENTA|Record cancellati da freelist e spazio libero§Deleted records from freelist and free space"
+    "module_xplat_esp_bootkit|EFI System Partition|RED|Bootkit e persistenza pre-boot§Bootkits and pre-boot persistence"
 )
 
 MODULES_LINUX=(
@@ -15950,6 +16465,8 @@ MODULES_LINUX=(
     "module_linux_webserver_logs|Web Server Logs|ORANGE|nginx/apache — webshell, traversal, SQLi§nginx/apache — webshell, traversal, SQLi"
     "module_linux_cloud_credentials|Cloud Credentials|RED|~/.aws ~/.kube ~/.docker ~/.ssh§~/.aws ~/.kube ~/.docker ~/.ssh"
     "module_linux_suid_caps|SUID & Capabilities|ORANGE|Superficie di privilege escalation§Privilege escalation surface"
+    "module_xplat_sqlite_recovery|SQLite Recovery|MAGENTA|Record cancellati da freelist e spazio libero§Deleted records from freelist and free space"
+    "module_xplat_esp_bootkit|EFI System Partition|RED|Bootkit e persistenza pre-boot§Bootkits and pre-boot persistence"
 )
 
 MODULES_MACOS=(
@@ -15972,6 +16489,8 @@ MODULES_MACOS=(
     "module_macos_applications|Applications|GREEN|Inventario app, firma e posizione§App inventory, signature and location"
     "module_macos_backups|Time Machine / Snapshot|BLUE|Versioni precedenti dei file§Earlier versions of files"
     "module_macos_unified_logs|Unified Logs|MAGENTA|.tracev3 — estrazione parziale§.tracev3 — partial extraction"
+    "module_xplat_sqlite_recovery|SQLite Recovery|MAGENTA|Record cancellati da freelist e spazio libero§Deleted records from freelist and free space"
+    "module_xplat_esp_bootkit|EFI System Partition|RED|Bootkit e persistenza pre-boot§Bootkits and pre-boot persistence"
 )
 
 # Restituisce il NOME dell'array registro per l'OS corrente (vuoto per windows/unknown)

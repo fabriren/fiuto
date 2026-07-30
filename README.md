@@ -195,7 +195,7 @@ The script uses internal bash helpers for:
 ./fiuto.sh /mnt/disk
 ```
 
-The script detects the volume's OS and presents a numbered menu with the relevant modules (50 for Windows, 21 for Linux, 19 for macOS). Select the module number or type `--all` to run them all.
+The script detects the volume's OS and presents a numbered menu with the relevant modules (52 for Windows, 23 for Linux, 21 for macOS). Select the module number or type `--all` to run them all.
 
 ### Automated Batch Analysis
 
@@ -228,7 +228,7 @@ fiuto_reports/
 
 ---
 
-## 📊 The 50 Windows analysis modules
+## 📊 The 52 Windows analysis modules
 
 | #  | Module Name                   | Windows Artifact                    | Usage                                                           |
 | -- | ----------------------------- | ----------------------------------- | --------------------------------------------------------------- |
@@ -282,10 +282,12 @@ fiuto_reports/
 | 48 | Chat Desktop                  | Slack / Teams / Discord (LevelDB)   | Internal social engineering, files shared in private chats      |
 | 49 | WebCacheV01                   | WebCacheV01.dat (ESE)               | IE/Edge Legacy **and everything using WinINET**                 |
 | 50 | Windows Search Index          | Windows.edb (ESE)                   | Paths and content excerpts of **deleted** files                 |
+| 51 | SQLite Recovery *(cross-OS)*  | freelist, unallocated space         | Content of **deleted** records still on disk                    |
+| 52 | EFI System Partition *(cross-OS)* | ESP                             | Bootkits: code running **before** the OS and any EDR            |
 
 ---
 
-## 🐧 The 21 Linux analysis modules
+## 🐧 The 23 Linux analysis modules
 
 | #  | Module Name         | Linux Artifact                                                     | Usage                                                           |
 | -- | ------------------- | ------------------------------------------------------------------ | --------------------------------------------------------------- |
@@ -310,10 +312,12 @@ fiuto_reports/
 | 19 | Web Server Logs     | nginx / apache access+error                                        | Webshell, traversal, SQLi — ranked by HTTP status               |
 | 20 | Cloud Credentials   | `~/.aws`, `~/.kube`, `~/.docker`, `~/.ssh`                     | Keys granting access to the wider infrastructure                |
 | 21 | SUID & Capabilities | filesystem scan                                                    | Privilege escalation surface, unexpected SUID                   |
+| 22 | SQLite Recovery *(cross-OS)* | freelist, unallocated space                               | Content of **deleted** records still on disk                    |
+| 23 | EFI System Partition *(cross-OS)* | ESP                                                  | Bootkits: code running **before** the OS                        |
 
 ---
 
-## 🍎 The 19 macOS analysis modules
+## 🍎 The 21 macOS analysis modules
 
 | #  | Module Name            | macOS Artifact                                                 | Usage                                                         |
 | -- | ---------------------- | -------------------------------------------------------------- | ------------------------------------------------------------- |
@@ -336,6 +340,8 @@ fiuto_reports/
 | 17 | Applications           | `/Applications`, user homes                                  | Inventory, signature presence, non-standard locations         |
 | 18 | Time Machine / Snapshot| `com.apple.TimeMachine.plist`, `Backups.backupdb`          | Earlier versions of files; absence as an indicator            |
 | 19 | Unified Logs           | `*.tracev3`                                                  | LZ4 chunk decompression + string extraction (**partial**)     |
+| 20 | SQLite Recovery *(cross-OS)* | freelist, unallocated space                            | Content of **deleted** records still on disk                  |
+| 21 | EFI System Partition *(cross-OS)* | ESP                                               | Bootkits: code running **before** the OS                      |
 
 ---
 
@@ -707,7 +713,7 @@ Lo script utilizza internamente helper bash per:
 ./fiuto.sh /mnt/disk
 ```
 
-Lo script rileva l'OS del volume e presenta un menu numerato con i moduli pertinenti (50 per Windows, 21 per Linux, 19 per macOS). Seleziona il numero del modulo o digita `--all` per eseguirli tutti.
+Lo script rileva l'OS del volume e presenta un menu numerato con i moduli pertinenti (52 per Windows, 23 per Linux, 21 per macOS). Seleziona il numero del modulo o digita `--all` per eseguirli tutti.
 
 ### Analisi Batch Automatica
 
@@ -740,7 +746,7 @@ fiuto_reports/
 
 ---
 
-## 📊 I 50 Moduli di Analisi Windows
+## 📊 I 52 Moduli di Analisi Windows
 
 | #  | Nome Modulo                   | Artefatto Windows                   | Utilizzo                                                              |
 | -- | ----------------------------- | ----------------------------------- | --------------------------------------------------------------------- |
@@ -794,10 +800,12 @@ fiuto_reports/
 | 48 | Chat Desktop                  | Slack / Teams / Discord (LevelDB)   | Social engineering interno, file condivisi in chat private            |
 | 49 | WebCacheV01                   | WebCacheV01.dat (ESE)               | IE/Edge Legacy **e tutto cio' che usa WinINET**                       |
 | 50 | Windows Search Index          | Windows.edb (ESE)                   | Percorsi ed estratti di contenuto di file **cancellati**              |
+| 51 | SQLite Recovery *(cross-OS)*  | freelist, spazio non allocato       | Contenuto di record **cancellati** ancora sul disco                   |
+| 52 | EFI System Partition *(cross-OS)* | ESP                             | Bootkit: codice eseguito **prima** del sistema e di ogni EDR          |
 
 ---
 
-## 🐧 I 21 Moduli di Analisi Linux
+## 🐧 I 23 Moduli di Analisi Linux
 
 | #  | Nome Modulo         | Artefatto Linux                                                    | Utilizzo                                                        |
 | -- | ------------------- | ------------------------------------------------------------------ | --------------------------------------------------------------- |
@@ -822,10 +830,12 @@ fiuto_reports/
 | 19 | Web Server Logs     | nginx / apache access+error                                        | Webshell, traversal, SQLi — ordinati per stato HTTP             |
 | 20 | Cloud Credentials   | `~/.aws`, `~/.kube`, `~/.docker`, `~/.ssh`                     | Chiavi che danno accesso all'infrastruttura                     |
 | 21 | SUID & Capabilities | scansione filesystem                                               | Superficie di privilege escalation, SUID inattesi               |
+| 22 | SQLite Recovery *(cross-OS)* | freelist, spazio non allocato                             | Contenuto di record **cancellati** ancora sul disco             |
+| 23 | EFI System Partition *(cross-OS)* | ESP                                                  | Bootkit: codice eseguito **prima** del sistema                  |
 
 ---
 
-## 🍎 I 19 Moduli di Analisi macOS
+## 🍎 I 21 Moduli di Analisi macOS
 
 | #  | Nome Modulo            | Artefatto macOS                                                   | Utilizzo                                                        |
 | -- | ---------------------- | ----------------------------------------------------------------- | --------------------------------------------------------------- |
@@ -848,6 +858,8 @@ fiuto_reports/
 | 17 | Applications           | `/Applications`, home utenti                                    | Inventario, presenza firma, posizioni non standard              |
 | 18 | Time Machine / Snapshot| `com.apple.TimeMachine.plist`, `Backups.backupdb`             | Versioni precedenti dei file; l'assenza come indicatore         |
 | 19 | Unified Logs           | `*.tracev3`                                                     | Decompressione chunk LZ4 + estrazione stringhe (**parziale**)   |
+| 20 | SQLite Recovery *(cross-OS)* | freelist, spazio non allocato                             | Contenuto di record **cancellati** ancora sul disco             |
+| 21 | EFI System Partition *(cross-OS)* | ESP                                                  | Bootkit: codice eseguito **prima** del sistema                  |
 
 ---
 
@@ -1070,13 +1082,15 @@ FIUTO è uno strumento per velocizzare le analisi forensi digitale legittimo, da
 
 **Date:** 2026-07-30 | **Version:** 2.2
 
-**Twenty-two new modules.** Windows: eleven. **SetupAPI Device Log** — the only source dating a USB device's *first* connection (the USBSTOR registry keeps the last one). **PowerShell Transcript** — full sessions including command output, invisible to PSReadLine (module 1) when commands come from scripts, `-EncodedCommand` or remoting. **LSA Secrets & DCC2** — cleartext service-account passwords and cached domain credentials from the SECURITY hive, complementing SAM (module 20). **Volume Shadow Copies** — inventory and differential-analysis workflow; their *absence* is reported as an indicator, since deleting them is a standard ransomware step. **Outlook PST/OST** — first local-mail coverage, with risky-attachment and IoC flagging. **Cloud Sync** — OneDrive/Dropbox/Google Drive accounts and synced files: the modern exfiltration path, which leaves no USB artefact. **BITS Jobs** — background downloads abused as a LOLBin (T1197), flagging non-Microsoft hosts, cleartext HTTP and risky targets. **Thumbcache** — thumbnails of deleted files, recovered by signature carving and shown as a gallery beside the report. **Chat Desktop** — Slack/Teams/Discord message fragments carved from LevelDB, flagging sensitive terms. **WebCacheV01** — IE/Edge Legacy history and, more importantly, everything routed through the WinINET APIs, including non-browser code. **Windows Search Index** — indexed paths and content excerpts, which survive file deletion.
+**Twenty-four new modules.** Windows: eleven. **SetupAPI Device Log** — the only source dating a USB device's *first* connection (the USBSTOR registry keeps the last one). **PowerShell Transcript** — full sessions including command output, invisible to PSReadLine (module 1) when commands come from scripts, `-EncodedCommand` or remoting. **LSA Secrets & DCC2** — cleartext service-account passwords and cached domain credentials from the SECURITY hive, complementing SAM (module 20). **Volume Shadow Copies** — inventory and differential-analysis workflow; their *absence* is reported as an indicator, since deleting them is a standard ransomware step. **Outlook PST/OST** — first local-mail coverage, with risky-attachment and IoC flagging. **Cloud Sync** — OneDrive/Dropbox/Google Drive accounts and synced files: the modern exfiltration path, which leaves no USB artefact. **BITS Jobs** — background downloads abused as a LOLBin (T1197), flagging non-Microsoft hosts, cleartext HTTP and risky targets. **Thumbcache** — thumbnails of deleted files, recovered by signature carving and shown as a gallery beside the report. **Chat Desktop** — Slack/Teams/Discord message fragments carved from LevelDB, flagging sensitive terms. **WebCacheV01** — IE/Edge Legacy history and, more importantly, everything routed through the WinINET APIs, including non-browser code. **Windows Search Index** — indexed paths and content excerpts, which survive file deletion.
 
 Both ESE-based modules fall back to string extraction when libesedb cannot open the database — the normal case for a file acquired from a running machine — and state in the report which parser actually produced the data.
 
 **Linux: five new modules** — PAM (authentication backdoors), kernel modules and LKM rootkits, web server logs, cloud/development credentials, SUID/capabilities.
 
 **macOS: six new modules** — Messages, Safari cookies and downloads, XProtect/Gatekeeper, application inventory, Time Machine/snapshots, and unified logs.
+
+**Two cross-OS modules**, available on all three systems. **SQLite Recovery** — nearly every modern artefact is a SQLite database, and every module reading one sees only the *live* records; a deleted record stays in the file until overwritten, in the freelist or in a page's unallocated space. This module carves it back, which is often the only place a "cleared" history still exists. **EFI System Partition** — code in the ESP runs before the OS, the kernel and any EDR, and survives a full system reinstall; the module inventories it, hashes everything and flags structural anomalies.
 
 **On unified logs.** `.tracev3` was previously declared out of scope. The new module decompresses the LZ4 (`bv41`) chunks the format is built from and extracts the readable strings that emerge — paths, bundle ids, URLs. It does **not** reconstruct log messages: that requires interpreting the catalogue and resolving string references in `.uuidtext` and the dyld shared cache, which is a project of its own. The report states this rather than implying full support; for complete analysis use `log show --archive` on a Mac.
 

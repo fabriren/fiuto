@@ -82,6 +82,8 @@ MODULES_WIN=(
     "module_chat_desktop|Chat Desktop|MAGENTA|Slack/Teams/Discord — LevelDB§Slack/Teams/Discord — LevelDB"
     "module_webcache|WebCacheV01|CYAN|IE/Edge Legacy + WinINET§IE/Edge Legacy + WinINET"
     "module_search_index|Search Index|YELLOW|Windows.edb — file indicizzati§Windows.edb — indexed files"
+    "module_xplat_sqlite_recovery|SQLite Recovery|MAGENTA|Record cancellati da freelist e spazio libero§Deleted records from freelist and free space"
+    "module_xplat_esp_bootkit|EFI System Partition|RED|Bootkit e persistenza pre-boot§Bootkits and pre-boot persistence"
 )
 
 MODULES_LINUX=(
@@ -106,6 +108,8 @@ MODULES_LINUX=(
     "module_linux_webserver_logs|Web Server Logs|ORANGE|nginx/apache — webshell, traversal, SQLi§nginx/apache — webshell, traversal, SQLi"
     "module_linux_cloud_credentials|Cloud Credentials|RED|~/.aws ~/.kube ~/.docker ~/.ssh§~/.aws ~/.kube ~/.docker ~/.ssh"
     "module_linux_suid_caps|SUID & Capabilities|ORANGE|Superficie di privilege escalation§Privilege escalation surface"
+    "module_xplat_sqlite_recovery|SQLite Recovery|MAGENTA|Record cancellati da freelist e spazio libero§Deleted records from freelist and free space"
+    "module_xplat_esp_bootkit|EFI System Partition|RED|Bootkit e persistenza pre-boot§Bootkits and pre-boot persistence"
 )
 
 MODULES_MACOS=(
@@ -128,6 +132,8 @@ MODULES_MACOS=(
     "module_macos_applications|Applications|GREEN|Inventario app, firma e posizione§App inventory, signature and location"
     "module_macos_backups|Time Machine / Snapshot|BLUE|Versioni precedenti dei file§Earlier versions of files"
     "module_macos_unified_logs|Unified Logs|MAGENTA|.tracev3 — estrazione parziale§.tracev3 — partial extraction"
+    "module_xplat_sqlite_recovery|SQLite Recovery|MAGENTA|Record cancellati da freelist e spazio libero§Deleted records from freelist and free space"
+    "module_xplat_esp_bootkit|EFI System Partition|RED|Bootkit e persistenza pre-boot§Bootkits and pre-boot persistence"
 )
 
 # Restituisce il NOME dell'array registro per l'OS corrente (vuoto per windows/unknown)

@@ -4,7 +4,7 @@ Documento di lavoro per portare FIUTO da 2.1 a 3.0. È pensato per essere
 ripreso a distanza di tempo, anche da un'altra sessione o da un'altra persona:
 ogni fase dichiara **cosa fare**, **dove**, **come verificarlo** e **perché**.
 
-Stato aggiornato al: **2026-07-30** (versione 2.2, Fasi 1-4 completate).
+Stato aggiornato al: **2026-07-30** (versione 2.2, Fasi 1-5 completate).
 
 ---
 
@@ -44,6 +44,8 @@ Stato aggiornato al: **2026-07-30** (versione 2.2, Fasi 1-4 completate).
 | Fase 2 — 11 moduli Windows nuovi (40-50) | ✅ |
 | Fase 3 — 5 moduli Linux nuovi (17-21) | ✅ |
 | Fase 4 — 6 moduli macOS nuovi (14-19) | ✅ |
+| Fase 5 — 2 moduli cross-OS (SQLite recovery, ESP/bootkit) | ✅ |
+| Libreria Python condivisa SQLite (`src/lib/14-pylib-sqlite.sh`) | ✅ |
 | Flag `defer` nel registro (numerazione stabile) | ✅ |
 | Libreria Python condivisa LevelDB/Snappy (`src/lib/13-pylib-leveldb.sh`) | ✅ |
 
@@ -228,7 +230,21 @@ report invece di essere lasciato intendere.
 
 ---
 
-## Fase 5 — Moduli cross-OS
+## Fase 5 — Moduli cross-OS ✅ (completata in v2.2)
+
+Entrambi implementati e registrati nei tre registri. Sul recupero SQLite la
+scelta e' stata di estrarre **stringhe** dallo spazio non allocato, non di
+ricostruire i record: servirebbero lo schema e l'interpretazione dei serial
+type, e un record ricomposto male in una perizia e' peggio di nessun record.
+
+Insidia trovata durante i test, da non reintrodurre: il pattern di estrazione
+ammette i byte di continuazione UTF-8 per non spezzare gli accenti, ma in una
+pagina SQLite l'header del record segue il payload, quindi il match finisce
+quasi sempre con un byte di continuazione isolato. Con `decode(..., 'strict')`
+l'intera stringa veniva scartata in silenzio — e sono proprio quelle
+interessanti. Va usato `errors='ignore'` con pulizia dei caratteri di
+controllo.
+
 
 - **ESP / bootkit hunting** — hash e verifica dei bootloader nella partizione
   EFI, scan YARA (ESPecter, BlackLotus, Bootkitty), file non-EFI anomali.

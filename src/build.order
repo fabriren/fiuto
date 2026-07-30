@@ -100,6 +100,9 @@ src/modules/macos/17-applications.sh
 src/modules/macos/18-backups-snapshots.sh
 src/modules/macos/19-unified-logs.sh
 src/modules/xplat/01-master-timeline.sh
+src/modules/xplat/02-sqlite-recovery.sh
+src/modules/xplat/03-esp-bootkit.sh
 src/lib/13-pylib-leveldb.sh
+src/lib/14-pylib-sqlite.sh
 src/lib/12-registries.sh
 src/main.sh
