@@ -93,6 +93,12 @@ src/modules/macos/09-shell-ai-history.sh
 src/modules/macos/10-recent.sh
 src/modules/macos/11-fsevents.sh
 src/modules/macos/12-spotlight.sh
+src/modules/macos/14-messages.sh
+src/modules/macos/15-cookies-downloads.sh
+src/modules/macos/16-xprotect-gatekeeper.sh
+src/modules/macos/17-applications.sh
+src/modules/macos/18-backups-snapshots.sh
+src/modules/macos/19-unified-logs.sh
 src/modules/xplat/01-master-timeline.sh
 src/lib/13-pylib-leveldb.sh
 src/lib/12-registries.sh

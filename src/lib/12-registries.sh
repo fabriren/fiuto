@@ -122,6 +122,12 @@ MODULES_MACOS=(
     "module_macos_fsevents|FSEvents|MAGENTA|/.fseventsd — modifiche al filesystem"
     "module_macos_spotlight|Spotlight|CYAN|store.db — provenienza download"
     "module_xplat_master_timeline|Master Timeline|YELLOW|aggrega le evidenze degli altri moduli (con --all gira per ultimo)§aggregates the other modules' findings (runs last with --all)||defer"
+    "module_macos_messages|Messages|CYAN|chat.db — iMessage e SMS§chat.db — iMessage and SMS"
+    "module_macos_cookies_downloads|Cookie & Download|YELLOW|Cookies.binarycookies · Downloads.plist§Cookies.binarycookies · Downloads.plist"
+    "module_macos_xprotect|XProtect / Gatekeeper|RED|Difese native e autorizzazioni concesse§Native defences and granted authorisations"
+    "module_macos_applications|Applications|GREEN|Inventario app, firma e posizione§App inventory, signature and location"
+    "module_macos_backups|Time Machine / Snapshot|BLUE|Versioni precedenti dei file§Earlier versions of files"
+    "module_macos_unified_logs|Unified Logs|MAGENTA|.tracev3 — estrazione parziale§.tracev3 — partial extraction"
 )
 
 # Restituisce il NOME dell'array registro per l'OS corrente (vuoto per windows/unknown)

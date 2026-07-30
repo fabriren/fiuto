@@ -14495,6 +14495,837 @@ PYEOF
 }
 
 # ================================================================
+#  macOS 14 — Messages (chat.db)
+#
+#  iMessage e SMS inoltrati dall'iPhone finiscono in chat.db sul Mac. In
+#  un'indagine contano per lo smishing (il link arrivato via SMS che ha
+#  iniziato la compromissione), per i codici 2FA intercettati e per la
+#  corrispondenza scambiata fuori dai canali aziendali.
+#
+#  Il database conserva anche i messaggi con `is_deleted`, e gli allegati
+#  restano su disco in ~/Library/Messages/Attachments anche dopo la
+#  cancellazione della conversazione.
+# ================================================================
+module_macos_messages() {
+    section_header "macOS — Messages" "$CYAN"
+    check_target_root || return 1
+
+    local BODY="" TOTAL=0 NATT=0 NSUSP=0
+    local HOME_DIR
+    while IFS= read -r HOME_DIR; do
+        local U; U=$(basename "$HOME_DIR")
+        local DB; DB=$(ci_find_file "$HOME_DIR" "Library/Messages/chat.db")
+        [[ -s "$DB" ]] || continue
+
+        # La colonna date e' in nanosecondi dal 2001 su macOS recenti e in
+        # secondi su quelli vecchi: si normalizza in SQL guardando l'ordine di
+        # grandezza, altrimenti le date risultano nel futuro remoto.
+        local ROWS
+        ROWS=$(query_sqlite "$DB" "
+            SELECT datetime(CASE WHEN m.date > 100000000000
+                                 THEN m.date/1000000000 + 978307200
+                                 ELSE m.date + 978307200 END, 'unixepoch'),
+                   COALESCE(h.id,'?'),
+                   CASE m.is_from_me WHEN 1 THEN 'inviato' ELSE 'ricevuto' END,
+                   COALESCE(m.text,''),
+                   COALESCE(m.service,'')
+            FROM message m LEFT JOIN handle h ON m.handle_id = h.ROWID
+            WHERE m.text IS NOT NULL AND m.text <> ''
+            ORDER BY m.date DESC LIMIT 50000")
+        [[ -z "$ROWS" || "$ROWS" == ERROR* ]] && continue
+
+        local N; N=$(printf '%s\n' "$ROWS" | grep -c . || true)
+        TOTAL=$((TOTAL + N))
+        ok "$U — ${BOLD}${N}${RESET} $(L "messaggi" "messages")"
+
+        # Messaggi con link o riferimenti a credenziali: sono quelli che
+        # spiegano un accesso iniziale o una compromissione di account.
+        local SUSP
+        SUSP=$(printf '%s\n' "$ROWS" | grep -iE 'https?://|bit\.ly|tinyurl|codice|code|verifica|verif|otp|password|accedi|login|urgente|urgent|bloccat|blocked' || true)
+        local NS; NS=$(printf '%s\n' "$SUSP" | grep -c . || true)
+        NSUSP=$((NSUSP + NS))
+
+        local TABLE; TABLE=$(_rows_to_table "$ROWS" \
+            "$(L "Data" "Date")" "$(L "Interlocutore" "Handle")" "$(L "Direzione" "Direction")" \
+            "$(L "Testo" "Text")" "$(L "Servizio" "Service")")
+        BODY+=$(generic_card_html "$U" "$DB" "$N" "$TABLE" "✉")
+
+        if [[ "$NS" -gt 0 ]]; then
+            local STABLE; STABLE=$(_rows_to_table "$SUSP" \
+                "$(L "Data" "Date")" "$(L "Interlocutore" "Handle")" "$(L "Direzione" "Direction")" \
+                "$(L "Testo" "Text")" "$(L "Servizio" "Service")")
+            BODY="<div class='cards'>$(generic_card_html "$U — $(L "messaggi con link o credenziali" "messages with links or credentials")" "$DB" "$NS" "$STABLE" "⚑")</div>${BODY}"
+        fi
+
+        # Allegati: restano su disco anche dopo la cancellazione della chat.
+        local ATTDIR; ATTDIR=$(ci_find_dir "$HOME_DIR" "Library/Messages/Attachments")
+        if [[ -n "$ATTDIR" ]]; then
+            local NA; NA=$(find "$ATTDIR" -type f 2>/dev/null | wc -l)
+            NATT=$((NATT + NA))
+            [[ "$NA" -gt 0 ]] && info "  $(L "allegati su disco:" "attachments on disk:") ${BOLD}${NA}"
+        fi
+    done < <(get_macos_user_homes)
+
+    separator
+    info "$(L "Messaggi totali:" "Total messages:") ${BOLD}$TOTAL"
+    [[ "$NSUSP" -gt 0 ]] && warn "$(L "Con link o riferimenti a credenziali:" "With links or credential references:") ${BOLD}$NSUSP"
+    info "$(L "Allegati su disco:" "Attachments on disk:") ${BOLD}$NATT"
+    [[ "$TOTAL" -eq 0 ]] && { warn "$(L "Nessun database Messages leggibile." "No readable Messages database.")"; return 0; }
+
+    ask_yn "Generare report HTML?" || return 0
+
+    local NOTE="<div class='card' style='margin-bottom:1rem'><div style='padding:1rem 1.5rem;font-size:.8rem;line-height:1.7'>"
+    NOTE+="$(L "Gli allegati restano in ~/Library/Messages/Attachments anche dopo la cancellazione della conversazione: vanno esaminati a parte, non compaiono in questa tabella. La colonna data e' normalizzata dal formato Apple (riferimento 2001), che su macOS recenti e' in nanosecondi." \
+        "Attachments remain in ~/Library/Messages/Attachments even after the conversation is deleted: examine them separately, they are not in this table. The date column is normalised from the Apple epoch (2001 reference), which on recent macOS is in nanoseconds.")"
+    NOTE+="</div></div>"
+
+    local STATS
+    STATS="$(stat_box "$(L "Messaggi" "Messages")" "$TOTAL")"
+    STATS+="$(stat_box "$(L "Segnalati" "Flagged")" "$NSUSP" "$([[ "$NSUSP" -gt 0 ]] && echo warn || echo info)")"
+    STATS+="$(stat_box "$(L "Allegati" "Attachments")" "$NATT" "info")"
+    finish_report "macos_messages" "macOS Messages" "MSG" "Library/Messages/chat.db" "$STATS" "${NOTE}<div class='cards'>$BODY</div>"
+}
+
+# ================================================================
+#  macOS 15 — Cookie Safari e cronologia download
+#
+#  Due artefatti che il modulo Browser History non copre:
+#
+#  - Cookies.binarycookies: formato proprietario Safari. I cookie di sessione
+#    dicono a quali servizi l'utente era autenticato e quando; un cookie di un
+#    servizio mai usato dall'utente e' un indizio di sessione altrui.
+#  - Downloads.plist: la cronologia dei download di Safari, con l'URL DI
+#    ORIGINE oltre al nome del file. Il modulo Quarantine copre gli eventi di
+#    quarantena, ma non tutti i download vi finiscono.
+# ================================================================
+module_macos_cookies_downloads() {
+    section_header "macOS — Cookie & Download" "$YELLOW"
+    check_target_root || return 1
+
+    local -a COOKIES=() PLISTS=()
+    local HOME_DIR F
+    while IFS= read -r HOME_DIR; do
+        while IFS= read -r F; do
+            [[ -s "$F" ]] && COOKIES+=("$F")
+        done < <(find "$HOME_DIR" -maxdepth 6 -type f -name 'Cookies.binarycookies' 2>/dev/null)
+        while IFS= read -r F; do
+            [[ -s "$F" ]] && PLISTS+=("$F")
+        done < <(find "$HOME_DIR" -maxdepth 6 -type f -name 'Downloads.plist' 2>/dev/null)
+    done < <(get_macos_user_homes)
+
+    if [[ ${#COOKIES[@]} -eq 0 && ${#PLISTS[@]} -eq 0 ]]; then
+        warn "$(L "Nessun cookie Safari o Downloads.plist trovato." "No Safari cookies or Downloads.plist found.")"
+        return 0
+    fi
+
+    # ---------- Cookie ----------
+    local COUT; COUT=$(mktemp); register_tmp "$COUT"
+    local NCOOK=0
+    if [[ ${#COOKIES[@]} -gt 0 ]]; then
+        "$PY3" - "$COUT" "${COOKIES[@]}" << 'PYEOF' 2>/dev/null
+import sys, struct, os, datetime
+
+out_path = sys.argv[1]
+files = sys.argv[2:]
+
+def mac_time(v):
+    """Secondi dal 2001-01-01 (epoca Apple) -> stringa UTC."""
+    try:
+        if not v or v <= 0:
+            return ''
+        return (datetime.datetime(2001, 1, 1) + datetime.timedelta(seconds=float(v))).strftime('%Y-%m-%d %H:%M:%S')
+    except Exception:
+        return ''
+
+def cstr(buf, off):
+    end = buf.find(b'\x00', off)
+    return buf[off:end if end >= 0 else len(buf)].decode('utf-8', 'replace')
+
+rows = []
+for path in files:
+    src = os.path.basename(os.path.dirname(path)) or os.path.basename(path)
+    try:
+        with open(path, 'rb') as fh:
+            data = fh.read()
+    except Exception:
+        continue
+    if data[:4] != b'cook':
+        continue
+    try:
+        npages = struct.unpack_from('>I', data, 4)[0]
+        sizes = [struct.unpack_from('>I', data, 8 + 4 * i)[0] for i in range(npages)]
+    except Exception:
+        continue
+    off = 8 + 4 * npages
+    for psize in sizes:
+        page = data[off:off + psize]
+        off += psize
+        if len(page) < 12:
+            continue
+        try:
+            ncook = struct.unpack_from('<I', page, 4)[0]
+            offsets = [struct.unpack_from('<I', page, 8 + 4 * i)[0] for i in range(ncook)]
+        except Exception:
+            continue
+        for co in offsets:
+            if co + 56 > len(page):
+                continue
+            try:
+                (_size, _u1, flags, _u2, url_o, name_o, path_o, val_o) = struct.unpack_from('<8I', page, co)
+                expiry, creation = struct.unpack_from('<dd', page, co + 40)
+            except Exception:
+                continue
+            try:
+                dom  = cstr(page, co + url_o)
+                name = cstr(page, co + name_o)
+                cpath = cstr(page, co + path_o)
+                val  = cstr(page, co + val_o)
+            except Exception:
+                continue
+            if not dom:
+                continue
+            attrs = []
+            if flags & 0x1: attrs.append('Secure')
+            if flags & 0x4: attrs.append('HttpOnly')
+            # Il VALORE del cookie e' materiale di sessione: se ne riporta solo
+            # la lunghezza, perche' un cookie valido nel report e' una credenziale
+            # riutilizzabile da chiunque legga il report.
+            rows.append((mac_time(creation), dom, name, f"{len(val)} byte",
+                         mac_time(expiry), ';'.join(attrs), cpath, src))
+
+rows.sort(key=lambda r: r[0], reverse=True)
+with open(out_path, 'w', encoding='utf-8') as fh:
+    for r in rows:
+        fh.write('\t'.join(str(x).replace('\t', ' ') for x in r) + '\n')
+PYEOF
+        [[ -s "$COUT" ]] && NCOOK=$(wc -l < "$COUT")
+        ok "$(L "Cookie Safari:" "Safari cookies:") ${BOLD}$NCOOK"
+    fi
+
+    # ---------- Download ----------
+    local DOUT; DOUT=$(mktemp); register_tmp "$DOUT"
+    local NDL=0
+    local P
+    for P in "${PLISTS[@]}"; do
+        local TXT; TXT=$(read_plist "$P" 2>/dev/null)
+        [[ -z "$TXT" ]] && continue
+        # Dalla rappresentazione testuale si estraggono le coppie URL/percorso.
+        printf '%s\n' "$TXT" | "$PY3" -c "
+import sys, re
+txt = sys.stdin.read()
+urls  = re.findall(r'DownloadEntryURL\W+([^\n<]+)', txt) or re.findall(r'(https?://[^\s<\"]+)', txt)
+paths = re.findall(r'DownloadEntryPath\W+([^\n<]+)', txt)
+for i, u in enumerate(urls):
+    p = paths[i] if i < len(paths) else ''
+    print(f\"{u.strip()}\t{p.strip()}\")
+" >> "$DOUT" 2>/dev/null || true
+    done
+    [[ -s "$DOUT" ]] && NDL=$(wc -l < "$DOUT")
+    [[ "$NDL" -gt 0 ]] && ok "$(L "Voci di download:" "Download entries:") ${BOLD}$NDL"
+
+    separator
+    if [[ "$NCOOK" -eq 0 && "$NDL" -eq 0 ]]; then
+        warn "$(L "Nessun dato estratto." "No data extracted.")"
+        return 0
+    fi
+    ask_yn "Generare report HTML?" || return 0
+
+    local BODY=""
+    BODY+="<div class='card' style='margin-bottom:1rem'><div style='padding:1rem 1.5rem;font-size:.8rem;line-height:1.7'>"
+    BODY+="<b>$(L "Il valore dei cookie non viene riportato" "Cookie values are not reported")</b><br>"
+    BODY+="$(L "Della parte segreta si indica solo la lunghezza. Un cookie di sessione ancora valido e' una credenziale a tutti gli effetti: stamparlo nel report significherebbe consegnare a chiunque lo legga la possibilita' di impersonare l'utente. Dominio, nome, date e attributi bastano a stabilire a quali servizi l'utente era autenticato e quando." \
+        "Only the length of the secret part is shown. A still-valid session cookie is a credential: printing it in the report would hand anyone reading it the ability to impersonate the user. Domain, name, dates and attributes are enough to establish which services the user was authenticated to, and when.")"
+    BODY+="</div></div>"
+
+    if [[ "$NCOOK" -gt 0 ]]; then
+        local CT; CT=$(_rows_to_table "$(head -20000 "$COUT")" \
+            "$(L "Creato" "Created")" "$(L "Dominio" "Domain")" "$(L "Nome" "Name")" \
+            "$(L "Valore" "Value")" "$(L "Scadenza" "Expiry")" "$(L "Attributi" "Attributes")" "Path" "$(L "Origine" "Source")")
+        BODY+="<div class='cards'>$(generic_card_html "$(L "Cookie Safari" "Safari cookies")" "Cookies.binarycookies" "$NCOOK" "$CT" "🍪")</div>"
+    fi
+    if [[ "$NDL" -gt 0 ]]; then
+        local DT; DT=$(_rows_to_table "$(cat "$DOUT")" "$(L "URL di origine" "Source URL")" "$(L "Percorso locale" "Local path")")
+        BODY+="<div class='cards'>$(generic_card_html "$(L "Download Safari" "Safari downloads")" "Downloads.plist" "$NDL" "$DT" "⤓")</div>"
+    fi
+
+    local STATS
+    STATS="$(stat_box "Cookie" "$NCOOK")"
+    STATS+="$(stat_box "Download" "$NDL" "info")"
+    finish_report "macos_cookies_downloads" "macOS Cookie & Download" "CKD" "Cookies.binarycookies · Downloads.plist" "$STATS" "$BODY"
+}
+
+# ================================================================
+#  macOS 16 — XProtect, Gatekeeper e policy di sistema
+#
+#  Sono le difese native di macOS. In un'indagine servono a rispondere a due
+#  domande diverse:
+#
+#  - le difese hanno visto qualcosa? (XProtect Remediator, versione delle
+#    firme al momento dei fatti)
+#  - le difese sono state indebolite? Un'app approvata a mano in SystemPolicy,
+#    un kext di terze parti autorizzato in KextPolicy o Gatekeeper disattivato
+#    sono azioni deliberate che spesso precedono l'esecuzione del malware.
+#
+#  La versione delle firme XProtect e' rilevante di per se': se e' molto
+#  anteriore alla data dei fatti, l'assenza di rilevamenti non significa nulla.
+# ================================================================
+module_macos_xprotect() {
+    section_header "macOS — XProtect / Gatekeeper" "$RED"
+    check_target_root || return 1
+
+    local BODY="" ROWS="" NFIND=0
+
+    # ---------- Versione delle firme XProtect ----------
+    local XPV="" XPD=""
+    local META
+    for META in "Library/Apple/System/Library/CoreServices/XProtect.bundle/Contents/Info.plist" \
+                "System/Library/CoreServices/XProtect.bundle/Contents/Info.plist"; do
+        local F; F=$(ci_find_file "$WIN_ROOT" "$META")
+        [[ -s "$F" ]] || continue
+        XPV=$(read_plist "$F" 2>/dev/null | grep -aoE 'CFBundleShortVersionString[^0-9]*([0-9]+)' | grep -oE '[0-9]+$' | head -1)
+        XPD=$(stat -c %y "$F" 2>/dev/null | cut -d. -f1)
+        [[ -n "$XPV" ]] && break
+    done
+    if [[ -n "$XPV" ]]; then
+        ok "XProtect $(L "versione firme:" "signature version:") ${BOLD}${XPV}${RESET} ${DIM}(${XPD})${RESET}"
+        ROWS+="XProtect	$(L "versione firme" "signature version")	${XPV}	${XPD}
+"
+    else
+        warn "$(L "Versione delle firme XProtect non determinabile." "XProtect signature version not determinable.")"
+    fi
+
+    # ---------- Rilevamenti di XProtect Remediator ----------
+    local XPDB
+    for XPDB in "private/var/protected/xprotect/XPdb" "var/protected/xprotect/XPdb"; do
+        local F; F=$(ci_find_file "$WIN_ROOT" "$XPDB")
+        [[ -s "$F" ]] || continue
+        local R; R=$(query_sqlite "$F" "SELECT * FROM sqlite_master WHERE type='table'")
+        [[ -z "$R" || "$R" == ERROR* ]] && continue
+        info "XPdb: ${DIM}${F}${RESET}"
+        ROWS+="XProtect Remediator	$(L "database presente" "database present")	$(stat -c %s "$F" 2>/dev/null) B	$(stat -c %y "$F" 2>/dev/null | cut -d. -f1)
+"
+    done
+
+    # ---------- SystemPolicy: eseguibili approvati a mano ----------
+    local NAPPROVED=0 APPROWS=""
+    local SP; SP=$(ci_find_file "$WIN_ROOT" "private/var/db/SystemPolicy")
+    [[ -z "$SP" ]] && SP=$(ci_find_file "$WIN_ROOT" "var/db/SystemPolicy")
+    if [[ -s "$SP" ]]; then
+        local R
+        R=$(query_sqlite "$SP" "SELECT datetime(ctime,'unixepoch'), type, COALESCE(requirement,''), COALESCE(remarks,'') FROM authority WHERE allow=1 AND (remarks IS NOT NULL AND remarks <> '') ORDER BY ctime DESC LIMIT 500")
+        if [[ -n "$R" && "$R" != ERROR* ]]; then
+            NAPPROVED=$(printf '%s\n' "$R" | grep -c . || true)
+            APPROWS="$R"
+            [[ "$NAPPROVED" -gt 0 ]] && warn "$(L "Autorizzazioni Gatekeeper con annotazione:" "Gatekeeper authorities with remarks:") ${BOLD}$NAPPROVED"
+        fi
+    fi
+
+    # ---------- KextPolicy: estensioni kernel di terze parti approvate ----------
+    local NKEXT=0 KEXTROWS=""
+    local KP; KP=$(ci_find_file "$WIN_ROOT" "private/var/db/SystemPolicyConfiguration/KextPolicy")
+    [[ -z "$KP" ]] && KP=$(ci_find_file "$WIN_ROOT" "var/db/SystemPolicyConfiguration/KextPolicy")
+    if [[ -s "$KP" ]]; then
+        local R
+        R=$(query_sqlite "$KP" "SELECT team_id, bundle_id, allowed, COALESCE(developer_name,'') FROM kext_policy ORDER BY bundle_id")
+        if [[ -n "$R" && "$R" != ERROR* ]]; then
+            NKEXT=$(printf '%s\n' "$R" | grep -c . || true)
+            KEXTROWS="$R"
+            [[ "$NKEXT" -gt 0 ]] && warn "$(L "Estensioni kernel di terze parti registrate:" "Third-party kernel extensions registered:") ${BOLD}$NKEXT"
+        fi
+    fi
+
+    # ---------- Stato di Gatekeeper ----------
+    local GK; GK=$(ci_find_file "$WIN_ROOT" "private/var/db/.LastGKReject")
+    [[ -n "$GK" ]] && ROWS+="Gatekeeper	$(L "ultimo rifiuto registrato" "last recorded rejection")	-	$(stat -c %y "$GK" 2>/dev/null | cut -d. -f1)
+"
+    local SIP; SIP=$(ci_find_file "$WIN_ROOT" "private/var/db/.AppleSetupDone")
+    [[ -n "$SIP" ]] && ROWS+="$(L "Setup completato" "Setup completed")	.AppleSetupDone	-	$(stat -c %y "$SIP" 2>/dev/null | cut -d. -f1)
+"
+
+    NFIND=$(( NAPPROVED + NKEXT ))
+    separator
+    if [[ -z "$ROWS" && "$NFIND" -eq 0 ]]; then
+        warn "$(L "Nessun artefatto XProtect/Gatekeeper leggibile." "No readable XProtect/Gatekeeper artefact.")"
+        return 0
+    fi
+    ask_yn "Generare report HTML?" || return 0
+
+    BODY="<div class='card' style='margin-bottom:1rem'><div style='padding:1rem 1.5rem;font-size:.8rem;line-height:1.7'>"
+    BODY+="<b>$(L "La versione delle firme cambia il significato dell'assenza di rilevamenti" "The signature version changes what 'no detections' means")</b><br>"
+    BODY+="$(L "XProtect rileva solo cio' che le sue firme conoscono. Se la versione qui riportata e' molto anteriore alla data dei fatti, il fatto che non abbia segnalato nulla non e' un'assoluzione: e' semplicemente un dato privo di valore probatorio." \
+        "XProtect only detects what its signatures know. If the version reported here long predates the events, the absence of detections is not an acquittal: it is simply a fact with no evidential weight.")<br><br>"
+    BODY+="<b>$(L "Autorizzazioni concesse a mano" "Manually granted authorisations")</b><br>"
+    BODY+="$(L "Una voce in SystemPolicy con annotazione indica un'app che qualcuno ha approvato esplicitamente superando Gatekeeper; una in KextPolicy indica un'estensione kernel di terze parti autorizzata. Entrambe richiedono un'azione deliberata dell'utente e spesso precedono immediatamente l'esecuzione di codice indesiderato." \
+        "An entry in SystemPolicy with remarks indicates an app someone explicitly approved past Gatekeeper; one in KextPolicy indicates an authorised third-party kernel extension. Both require a deliberate user action and often immediately precede the execution of unwanted code.")"
+    BODY+="</div></div>"
+
+    [[ -n "$ROWS" ]] && BODY+="<div class='cards'>$(generic_card_html "$(L "Stato delle difese" "Defence status")" "$WIN_ROOT" "-" \
+        "$(_rows_to_table "$ROWS" "$(L "Componente" "Component")" "$(L "Dato" "Item")" "$(L "Valore" "Value")" "$(L "Data" "Date")")" "🛡")</div>"
+    [[ -n "$APPROWS" ]] && BODY+="<div class='cards'>$(generic_card_html "$(L "Autorizzazioni Gatekeeper" "Gatekeeper authorities")" "SystemPolicy" "$NAPPROVED" \
+        "$(_rows_to_table "$APPROWS" "$(L "Data" "Date")" "$(L "Tipo" "Type")" "Requirement" "$(L "Annotazione" "Remarks")")" "⚑")</div>"
+    [[ -n "$KEXTROWS" ]] && BODY+="<div class='cards'>$(generic_card_html "$(L "Estensioni kernel" "Kernel extensions")" "KextPolicy" "$NKEXT" \
+        "$(_rows_to_table "$KEXTROWS" "Team ID" "Bundle ID" "$(L "Consentita" "Allowed")" "$(L "Sviluppatore" "Developer")")" "⚙")</div>"
+
+    local STATS
+    STATS="$(stat_box "$(L "Firme XProtect" "XProtect signatures")" "${XPV:-n/d}" "info")"
+    STATS+="$(stat_box "$(L "Autorizzazioni" "Authorities")" "$NAPPROVED" "$([[ "$NAPPROVED" -gt 0 ]] && echo warn || echo info)")"
+    STATS+="$(stat_box "kext" "$NKEXT" "$([[ "$NKEXT" -gt 0 ]] && echo warn || echo info)")"
+    finish_report "macos_xprotect" "macOS XProtect / Gatekeeper" "XPR" "XProtect · SystemPolicy · KextPolicy" "$STATS" "$BODY"
+}
+
+# ================================================================
+#  macOS 17 — Inventario applicazioni
+#
+#  Serve a rispondere a "cosa era installato e da dove veniva". Su macOS un
+#  bundle .app e' una directory: puo' essere copiato ovunque ed eseguito senza
+#  installazione, quindi le applicazioni fuori da /Applications meritano
+#  attenzione — soprattutto quelle in ~/Downloads, /tmp o /Users/Shared.
+#
+#  Nota sulla firma: verificarla richiede `codesign`, disponibile solo su un
+#  host macOS. Da Linux si puo' stabilire se il bundle CONTIENE una firma
+#  (_CodeSignature) e se e' notarizzato in modo evidente, non se la firma sia
+#  valida. Il report distingue le due cose invece di lasciarlo intendere.
+# ================================================================
+module_macos_applications() {
+    section_header "macOS — $(L "Inventario applicazioni" "Application inventory")" "$GREEN"
+    check_target_root || return 1
+
+    local -a ROOTS=()
+    local D
+    for D in "Applications" "Applications/Utilities" "System/Applications" "Library/Application Support"; do
+        local R; R=$(ci_find_dir "$WIN_ROOT" "$D")
+        [[ -n "$R" ]] && ROOTS+=("$R")
+    done
+    local HOME_DIR
+    while IFS= read -r HOME_DIR; do
+        ROOTS+=("$HOME_DIR")
+    done < <(get_macos_user_homes)
+
+    if [[ ${#ROOTS[@]} -eq 0 ]]; then
+        warn "$(L "Nessuna directory di applicazioni trovata." "No application directory found.")"
+        return 0
+    fi
+
+    local OUT; OUT=$(mktemp); register_tmp "$OUT"
+    info "$(L "Enumerazione dei bundle..." "Enumerating bundles...")"
+
+    local R APP
+    for R in "${ROOTS[@]}"; do
+        while IFS= read -r APP; do
+            [[ -d "$APP" ]] || continue
+            local NAME PLIST BID VER SIGNED NOTAR MT LOC
+            NAME=$(basename "$APP")
+            MT=$(stat -c %y "$APP" 2>/dev/null | cut -d. -f1)
+            PLIST="$APP/Contents/Info.plist"
+            BID=""; VER=""
+            if [[ -s "$PLIST" ]]; then
+                local TXT; TXT=$(read_plist "$PLIST" 2>/dev/null | head -400)
+                BID=$(printf '%s' "$TXT" | grep -aoE 'CFBundleIdentifier[^A-Za-z0-9]*[A-Za-z0-9.-]+' | grep -oE '[A-Za-z0-9.-]+$' | head -1)
+                VER=$(printf '%s' "$TXT" | grep -aoE 'CFBundleShortVersionString[^0-9]*[0-9][0-9A-Za-z._-]*' | grep -oE '[0-9][0-9A-Za-z._-]*$' | head -1)
+            fi
+            # Presenza della firma, NON sua validita'.
+            if [[ -d "$APP/Contents/_CodeSignature" ]]; then
+                SIGNED="$(L "firma presente" "signature present")"
+            else
+                SIGNED="$(L "NESSUNA FIRMA" "NO SIGNATURE")"
+            fi
+            # La ricevuta App Store distingue l'origine ufficiale.
+            if [[ -f "$APP/Contents/_MASReceipt/receipt" ]]; then
+                NOTAR="App Store"
+            else
+                NOTAR="-"
+            fi
+            # Posizione: fuori dalle directory di sistema e' il dato che conta.
+            # NB: */Applications/* copre gia' anche */System/Applications/*.
+            case "$APP" in
+                */Applications/*) LOC="$(L "standard" "standard")" ;;
+                *)                LOC="$(L "FUORI DA /Applications" "OUTSIDE /Applications")" ;;
+            esac
+            printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+                "$MT" "$NAME" "${BID:-?}" "${VER:-?}" "$SIGNED" "$NOTAR" "$LOC" "$APP" >> "$OUT"
+        done < <(find "$R" -maxdepth 4 -type d -name '*.app' -prune 2>/dev/null)
+    done
+
+    local TOTAL=0
+    [[ -s "$OUT" ]] && TOTAL=$(wc -l < "$OUT")
+    if [[ "$TOTAL" -eq 0 ]]; then
+        warn "$(L "Nessun bundle applicativo trovato." "No application bundle found.")"
+        return 0
+    fi
+    local NUNSIGNED NOUTSIDE
+    NUNSIGNED=$(awk -F'\t' '$5 ~ /NESSUNA|NO SIGNATURE/' "$OUT" | wc -l)
+    NOUTSIDE=$(awk -F'\t' '$7 ~ /FUORI|OUTSIDE/' "$OUT" | wc -l)
+
+    ok "$(L "Applicazioni trovate:" "Applications found:") ${BOLD}$TOTAL"
+    [[ "$NUNSIGNED" -gt 0 ]] && warn "$(L "Senza firma nel bundle:" "Without a signature in the bundle:") ${BOLD}$NUNSIGNED"
+    if [[ "$NOUTSIDE" -gt 0 ]]; then
+        warn "$(L "Fuori dalle directory standard:" "Outside standard directories:") ${BOLD}$NOUTSIDE"
+        awk -F'\t' '$7 ~ /FUORI|OUTSIDE/{printf "      %s  %s\n", $1, $8}' "$OUT" | head -15 | while IFS= read -r LN; do
+            echo -e "      ${YELLOW}${LN}${RESET}"
+        done
+    fi
+
+    ask_yn "Generare report HTML?" || return 0
+
+    local ROWS; ROWS=$( { awk -F'\t' '$7 ~ /FUORI|OUTSIDE/' "$OUT"; awk -F'\t' '$5 ~ /NESSUNA|NO SIGNATURE/ && $7 !~ /FUORI|OUTSIDE/' "$OUT"; awk -F'\t' '$5 !~ /NESSUNA|NO SIGNATURE/ && $7 !~ /FUORI|OUTSIDE/' "$OUT"; } )
+    local TABLE; TABLE=$(_rows_to_table "$ROWS" \
+        "$(L "Ultima modifica" "Last modified")" "$(L "Applicazione" "Application")" "Bundle ID" \
+        "$(L "Versione" "Version")" "$(L "Firma" "Signature")" "$(L "Origine" "Origin")" \
+        "$(L "Posizione" "Location")" "$(L "Percorso" "Path")")
+
+    local NOTE="<div class='card' style='margin-bottom:1rem'><div style='padding:1rem 1.5rem;font-size:.8rem;line-height:1.7'>"
+    NOTE+="<b>$(L "Cosa dice davvero la colonna Firma" "What the Signature column actually says")</b><br>"
+    NOTE+="$(L "Indica se il bundle contiene una directory _CodeSignature, non se la firma sia valida: la verifica richiede codesign, disponibile solo su un host macOS. Un'app puo' avere una firma presente ma non valida, revocata o di uno sviluppatore qualsiasi. Per la verifica: codesign -dv --verbose=4 /percorso/App.app e spctl -a -vv /percorso/App.app." \
+        "It indicates whether the bundle contains a _CodeSignature directory, not whether the signature is valid: verification requires codesign, available only on a macOS host. An app may carry a present but invalid or revoked signature, or one from any developer. To verify: codesign -dv --verbose=4 /path/App.app and spctl -a -vv /path/App.app.")<br><br>"
+    NOTE+="$(L "Un bundle .app e' una directory: puo' essere copiato ed eseguito da qualunque posizione senza installazione. Le applicazioni fuori dalle directory standard sono elencate per prime." \
+        "An .app bundle is a directory: it can be copied and run from anywhere without installation. Applications outside the standard directories are listed first.")"
+    NOTE+="</div></div>"
+
+    local STATS
+    STATS="$(stat_box "$(L "Applicazioni" "Applications")" "$TOTAL")"
+    STATS+="$(stat_box "$(L "Senza firma" "Unsigned")" "$NUNSIGNED" "$([[ "$NUNSIGNED" -gt 0 ]] && echo warn || echo info)")"
+    STATS+="$(stat_box "$(L "Fuori standard" "Non-standard")" "$NOUTSIDE" "$([[ "$NOUTSIDE" -gt 0 ]] && echo warn || echo info)")"
+    finish_report "macos_applications" "macOS Applications" "APP" "/Applications · home utenti" "$STATS" \
+        "${NOTE}<div class='cards'>$(generic_card_html "$(L "Applicazioni installate" "Installed applications")" "$WIN_ROOT" "$TOTAL" "$TABLE" "▣")</div>"
+}
+
+# ================================================================
+#  macOS 18 — Time Machine e snapshot
+#
+#  Come per le shadow copy su Windows, gli snapshot contengono versioni
+#  precedenti dei file: contenuto poi cancellato o cifrato, e configurazioni
+#  anteriori alla compromissione.
+#
+#  Valgono anche al contrario: il ransomware su macOS cancella gli snapshot
+#  locali (tmutil deletelocalsnapshots) prima di cifrare, quindi la loro
+#  scomparsa su una macchina che li aveva e' un indicatore.
+#
+#  Limite dichiarato: l'elenco degli snapshot APFS vive nei metadati del
+#  container, non nel filesystem montato. Da qui si leggono la configurazione
+#  di Time Machine, le destinazioni note e le tracce degli snapshot, non
+#  l'elenco autoritativo — che richiede `tmutil listlocalsnapshots` o
+#  `diskutil apfs listSnapshots` sul volume vivo.
+# ================================================================
+module_macos_backups() {
+    section_header "macOS — Time Machine / Snapshot" "$BLUE"
+    check_target_root || return 1
+
+    local ROWS="" NDEST=0 NTRACE=0
+
+    # ---------- Configurazione Time Machine ----------
+    local TMP_PLIST
+    for TMP_PLIST in "Library/Preferences/com.apple.TimeMachine.plist" \
+                     "private/var/db/com.apple.xpc.launchd/disabled.plist"; do
+        local F; F=$(ci_find_file "$WIN_ROOT" "$TMP_PLIST")
+        [[ -s "$F" ]] || continue
+        local TXT; TXT=$(read_plist "$F" 2>/dev/null)
+        [[ -z "$TXT" ]] && continue
+        if [[ "$TMP_PLIST" == *TimeMachine* ]]; then
+            # Destinazioni, ultimo backup, esclusioni.
+            local DESTS; DESTS=$(printf '%s\n' "$TXT" | grep -aoE '(BackupAlias|DestinationID|LastKnownVolumeName|LastDestinationID|SnapshotDates?|LastKnownEncryptionState|AutoBackup)[^<]*<?[^<>]{0,120}' | head -40)
+            local LN
+            while IFS= read -r LN; do
+                [[ -z "$LN" ]] && continue
+                NDEST=$((NDEST + 1))
+                ROWS+="Time Machine	${LN}	$(basename "$F")
+"
+            done <<< "$DESTS"
+            ok "$(L "Configurazione Time Machine trovata:" "Time Machine configuration found:") ${DIM}${F}${RESET}"
+        fi
+    done
+
+    # ---------- Tracce di snapshot locali ----------
+    local D
+    for D in ".MobileBackups" "Volumes/.timemachine" "private/var/db/com.apple.TimeMachine.SnapshotCount"; do
+        local X; X=$(ci_find_dir "$WIN_ROOT" "$D")
+        [[ -z "$X" ]] && X=$(ci_find_file "$WIN_ROOT" "$D")
+        [[ -z "$X" ]] && continue
+        NTRACE=$((NTRACE + 1))
+        ROWS+="Snapshot	${D}	$(stat -c %y "$X" 2>/dev/null | cut -d. -f1)
+"
+        info "$(L "Traccia di snapshot:" "Snapshot trace:") ${DIM}${X}${RESET}"
+    done
+
+    # ---------- Backup montati ----------
+    local NBK=0
+    local BK; BK=$(ci_find_dir "$WIN_ROOT" "Backups.backupdb")
+    if [[ -n "$BK" ]]; then
+        while IFS= read -r F; do
+            NBK=$((NBK + 1))
+            ROWS+="Backup	$(basename "$F")	$(stat -c %y "$F" 2>/dev/null | cut -d. -f1)
+"
+        done < <(find "$BK" -mindepth 2 -maxdepth 2 -type d 2>/dev/null | head -100)
+        ok "Backups.backupdb — ${BOLD}${NBK}${RESET} $(L "backup" "backups")"
+    fi
+
+    separator
+    if [[ -z "$ROWS" ]]; then
+        warn "$(L "Nessun artefatto Time Machine o snapshot trovato." "No Time Machine or snapshot artefact found.")"
+        echo ""
+        warn "$(L "L'assenza va interpretata: su macOS il ransomware cancella gli snapshot locali prima di cifrare (tmutil deletelocalsnapshots). Verificare la history della shell e i log per l'uso di tmutil." \
+                 "Absence needs interpreting: on macOS, ransomware deletes local snapshots before encrypting (tmutil deletelocalsnapshots). Check shell history and logs for tmutil usage.")"
+    fi
+    ask_yn "Generare report HTML?" || return 0
+
+    local BODY="<div class='card' style='margin-bottom:1rem'><div style='padding:1rem 1.5rem;font-size:.8rem;line-height:1.7'>"
+    BODY+="<b>$(L "Quello che questo modulo NON puo' dirti" "What this module cannot tell you")</b><br>"
+    BODY+="$(L "L'elenco autoritativo degli snapshot APFS sta nei metadati del container, non nel filesystem montato: da un'analisi offline si vedono la configurazione di Time Machine e le tracce lasciate sul volume, non gli snapshot effettivamente esistenti. Per l'elenco reale servono, sul volume vivo o sull'immagine del container: tmutil listlocalsnapshots / e diskutil apfs listSnapshots." \
+        "The authoritative list of APFS snapshots lives in the container metadata, not in the mounted filesystem: offline analysis shows the Time Machine configuration and the traces left on the volume, not the snapshots that actually exist. For the real list, on the live volume or the container image: tmutil listlocalsnapshots / and diskutil apfs listSnapshots.")<br><br>"
+    BODY+="<b>$(L "Se ci sono, sfruttali" "If they exist, use them")</b><br>"
+    BODY+="$(L "Uno snapshot montato e' un volume analizzabile: rilancia FIUTO su di esso e confronta i report per isolare cosa e' cambiato nella finestra di compromissione." \
+        "A mounted snapshot is an analysable volume: re-run FIUTO on it and compare the reports to isolate what changed during the compromise window.")"
+    BODY+="</div></div>"
+    BODY+="<div class='cards'>$(generic_card_html "$(L "Artefatti di backup" "Backup artefacts")" "$WIN_ROOT" "$((NDEST + NTRACE + NBK))" \
+        "$(_rows_to_table "$ROWS" "$(L "Tipo" "Type")" "$(L "Dato" "Item")" "$(L "Origine / data" "Source / date")")" "◫")"
+
+    local STATS
+    STATS="$(stat_box "$(L "Config TM" "TM config")" "$NDEST" "info")"
+    STATS+="$(stat_box "$(L "Tracce snapshot" "Snapshot traces")" "$NTRACE" "$([[ "$NTRACE" -eq 0 ]] && echo warn || echo info)")"
+    STATS+="$(stat_box "Backup" "$NBK" "info")"
+    finish_report "macos_backups" "macOS Time Machine / Snapshot" "TM" "com.apple.TimeMachine.plist · Backups.backupdb" "$STATS" "$BODY"
+}
+
+# ================================================================
+#  macOS 19 — Unified Logs (.tracev3)
+#
+#  E' il registro centrale di macOS: esecuzioni, autenticazioni, rete,
+#  installazioni, XProtect. Nelle versioni precedenti FIUTO lo dichiarava
+#  fuori scope, ed era il gap piu' evidente dell'analisi macOS.
+#
+#  ONESTA' SUL LIVELLO DI SUPPORTO. Un parser completo di .tracev3 deve
+#  ricostruire il catalogo, risolvere i riferimenti alle stringhe nel
+#  dyld_shared_cache e nei file .uuidtext, e reidratare i formati: e' un
+#  progetto a se' (cfr. mandiant/macos-UnifiedLogs). Questo modulo NON lo fa.
+#
+#  Fa una cosa piu' modesta e verificabile: decomprime i chunk LZ4 (bv41) di
+#  cui il file e' composto ed estrae le stringhe leggibili che ne emergono —
+#  percorsi di processo, nomi di bundle, frammenti di messaggi gia' in chiaro.
+#  Senza la decompressione un `strings` sul file grezzo non restituirebbe
+#  quasi nulla, perche' il contenuto e' compresso.
+#
+#  Risultato: indizi datati approssimativamente e cercabili, non una timeline
+#  di log ricostruita. Per quella serve `log show --archive` su un Mac.
+# ================================================================
+module_macos_unified_logs() {
+    section_header "macOS — Unified Logs (.tracev3)" "$MAGENTA"
+    check_target_root || return 1
+
+    local -a FILES=()
+    local D F
+    for D in "private/var/db/diagnostics" "var/db/diagnostics"; do
+        local R; R=$(ci_find_dir "$WIN_ROOT" "$D")
+        [[ -z "$R" ]] && continue
+        while IFS= read -r F; do
+            [[ -s "$F" ]] && FILES+=("$F")
+        done < <(find "$R" -type f -name '*.tracev3' 2>/dev/null | sort)
+    done
+
+    if [[ ${#FILES[@]} -eq 0 ]]; then
+        warn "$(L "Nessun file .tracev3 trovato." "No .tracev3 file found.")"
+        return 0
+    fi
+    local TOTB=0
+    for F in "${FILES[@]}"; do
+        TOTB=$(( TOTB + $(stat -c %s "$F" 2>/dev/null || echo 0) ))
+    done
+    info "$(L "File .tracev3:" ".tracev3 files:") ${BOLD}${#FILES[@]}${RESET} — $(numfmt --to=iec "$TOTB" 2>/dev/null || echo "$TOTB B")"
+    info "$(L "Decompressione dei chunk in corso..." "Decompressing chunks...")"
+
+    local IOCTMP; IOCTMP=$(mktemp); register_tmp "$IOCTMP"
+    printf '%s\n' "${IOC_LIST[@]:-}" > "$IOCTMP"
+    local OUT; OUT=$(mktemp); register_tmp "$OUT"
+    local STATSF; STATSF=$(mktemp); register_tmp "$STATSF"
+
+    "$PY3" - "$OUT" "$STATSF" "$IOCTMP" "${FILES[@]}" << 'PYEOF' 2>/dev/null
+import sys, os, re, struct, datetime
+
+out_path, stats_path, ioc_path = sys.argv[1], sys.argv[2], sys.argv[3]
+files = sys.argv[4:]
+
+try:
+    iocs = [l.strip().lower() for l in open(ioc_path, encoding='utf-8', errors='replace') if l.strip()]
+except Exception:
+    iocs = []
+
+
+def lz4_block(src, expected):
+    """Decompressore LZ4 block format in puro Python (nessuna dipendenza).
+
+    Apple incapsula i chunk in 'bv41' + dimensioni + blocco LZ4. Senza questo
+    passaggio il contenuto del file resta compresso e illeggibile.
+    """
+    out = bytearray()
+    i, n = 0, len(src)
+    while i < n:
+        token = src[i]; i += 1
+        lit = token >> 4
+        if lit == 15:
+            while i < n:
+                b = src[i]; i += 1
+                lit += b
+                if b != 255:
+                    break
+        out += src[i:i + lit]
+        i += lit
+        if i + 2 > n:
+            break
+        off = src[i] | (src[i + 1] << 8); i += 2
+        if off == 0:
+            break
+        mlen = token & 0x0F
+        if mlen == 15:
+            while i < n:
+                b = src[i]; i += 1
+                mlen += b
+                if b != 255:
+                    break
+        mlen += 4
+        start = len(out) - off
+        if start < 0:
+            break
+        for k in range(mlen):
+            out.append(out[start + k])
+        if expected and len(out) >= expected:
+            break
+    return bytes(out)
+
+
+def decompress(data):
+    """Concatena il contenuto di tutti i chunk bv41/bv4- del file."""
+    out = bytearray()
+    pos = 0
+    n = len(data)
+    while True:
+        k = data.find(b'bv4', pos)
+        if k < 0 or k + 12 > n:
+            break
+        tag = data[k:k + 4]
+        if tag == b'bv41':
+            try:
+                usize, csize = struct.unpack_from('<II', data, k + 4)
+            except Exception:
+                pos = k + 4
+                continue
+            blob = data[k + 12:k + 12 + csize]
+            if 0 < csize <= n and usize < 64 * 1024 * 1024:
+                out += lz4_block(blob, usize)
+            pos = k + 12 + max(csize, 1)
+        elif tag == b'bv4-':
+            try:
+                usize = struct.unpack_from('<I', data, k + 4)[0]
+            except Exception:
+                pos = k + 4
+                continue
+            out += data[k + 8:k + 8 + usize]
+            pos = k + 8 + max(usize, 1)
+        else:
+            pos = k + 3
+        if len(out) > 256 * 1024 * 1024:
+            break
+    return bytes(out)
+
+
+# Stringhe che vale la pena tenere: percorsi, bundle id, comandi, URL.
+KEEP = re.compile(
+    rb'(?:/(?:usr|bin|sbin|Applications|Library|System|Users|private|tmp|var|opt)/[!-~]{3,180}'
+    rb'|[a-z][a-z0-9]+(?:\.[a-z0-9-]+){2,6}'          # bundle id / reverse-dns
+    rb'|https?://[!-~]{4,200}'
+    rb'|[A-Za-z0-9_.-]+\.(?:app|kext|plist|dylib|sh|py|pkg|dmg)\b)')
+
+# Rumore ricorrente dei log di sistema: escluderlo rende il resto leggibile.
+NOISE = re.compile(rb'(?i)(com\.apple\.(?:coreanimation|uikit|coretext|metal|springboard|coreui))')
+
+rows = []
+seen = set()
+stats = []
+
+for path in files:
+    src = os.path.basename(path)
+    try:
+        with open(path, 'rb') as fh:
+            raw = fh.read(512 * 1024 * 1024)
+    except Exception:
+        continue
+    # Unico ancoraggio temporale disponibile senza ricostruire il catalogo.
+    try:
+        approx = datetime.datetime.utcfromtimestamp(os.path.getmtime(path)).strftime('%Y-%m-%d %H:%M:%S')
+    except Exception:
+        approx = ''
+    plain = decompress(raw)
+    stats.append((src, str(len(raw)), str(len(plain))))
+    if not plain:
+        continue
+    for m in KEEP.finditer(plain):
+        s = m.group(0)
+        if NOISE.search(s):
+            continue
+        try:
+            t = s.decode('utf-8', 'strict')
+        except Exception:
+            continue
+        if len(t) < 6:
+            continue
+        key = t.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        flag = 'IOC' if (iocs and any(i in key for i in iocs)) else ''
+        rows.append((approx, t[:300], flag, src))
+
+with open(out_path, 'w', encoding='utf-8') as fh:
+    for r in rows:
+        fh.write('\t'.join(x.replace('\t', ' ') for x in r) + '\n')
+with open(stats_path, 'w', encoding='utf-8') as fh:
+    for s in stats:
+        fh.write('\t'.join(s) + '\n')
+PYEOF
+
+    local TOTAL=0
+    [[ -s "$OUT" ]] && TOTAL=$(wc -l < "$OUT")
+    local DECOMP=0
+    [[ -s "$STATSF" ]] && DECOMP=$(awk -F'\t' '{s+=$3} END{print s+0}' "$STATSF")
+
+    separator
+    if [[ "$TOTAL" -eq 0 ]]; then
+        warn "$(L "Nessuna stringa estratta: i chunk non sono stati decompressi (formato non riconosciuto)." \
+                 "No string extracted: chunks were not decompressed (unrecognised format).")"
+        info "$(L "Per l'analisi completa serve un Mac: log show --archive <cartella>.logarchive" \
+                 "Full analysis requires a Mac: log show --archive <folder>.logarchive")"
+        return 0
+    fi
+    ok "$(L "Byte decompressi:" "Bytes decompressed:") ${BOLD}$(numfmt --to=iec "$DECOMP" 2>/dev/null || echo "$DECOMP")"
+    ok "$(L "Stringhe rilevanti estratte:" "Relevant strings extracted:") ${BOLD}$TOTAL"
+    local NIOC; NIOC=$(awk -F'\t' '$3=="IOC"' "$OUT" | wc -l)
+    [[ "$NIOC" -gt 0 ]] && warn "$(L "Con match IoC:" "With IoC match:") ${BOLD}$NIOC"
+
+    ask_yn "Generare report HTML?" || return 0
+
+    local ROWS; ROWS=$( { awk -F'\t' '$3=="IOC"' "$OUT"; awk -F'\t' '$3!="IOC"' "$OUT"; } | head -30000 )
+    local TABLE; TABLE=$(_rows_to_table "$ROWS" \
+        "$(L "Data file (approx.)" "File date (approx.)")" "$(L "Stringa" "String")" "IoC" "$(L "Origine" "Source")")
+    local STABLE; STABLE=$(_rows_to_table "$(cat "$STATSF")" "$(L "File" "File")" "$(L "Byte su disco" "Bytes on disk")" "$(L "Byte decompressi" "Bytes decompressed")")
+
+    local NOTE="<div class='card' style='margin-bottom:1rem;border-color:rgba(255,166,87,.5)'><div style='padding:1rem 1.5rem;font-size:.8rem;line-height:1.7'>"
+    NOTE+="<b>$(L "Livello di supporto: parziale, e dichiarato" "Support level: partial, and stated")</b><br>"
+    NOTE+="$(L "Questo modulo NON ricostruisce i messaggi di log. Un parser completo di .tracev3 deve interpretare il catalogo e risolvere i riferimenti alle stringhe nei file .uuidtext e nel dyld_shared_cache: e' un progetto a se'. Qui i chunk LZ4 vengono decompressi e se ne estraggono le stringhe gia' leggibili — percorsi, bundle id, URL, nomi di file." \
+        "This module does NOT reconstruct log messages. A complete .tracev3 parser must interpret the catalogue and resolve string references in .uuidtext files and the dyld_shared_cache: that is a project of its own. Here the LZ4 chunks are decompressed and the already-readable strings are extracted — paths, bundle ids, URLs, file names.")<br><br>"
+    NOTE+="$(L "Le date sono quelle di modifica del file che contiene la stringa: un limite superiore approssimato, non l'istante dell'evento." \
+        "Dates are the modification times of the file containing the string: an approximate upper bound, not the moment of the event.")<br><br>"
+    NOTE+="<b>$(L "Per l'analisi completa" "For full analysis")</b><br>"
+    NOTE+="<code>log show --archive /percorso/diagnostics.logarchive --info --debug</code> ($(L "richiede un Mac" "requires a Mac")) — "
+    NOTE+="$(L "oppure" "or") <code>mandiant/macos-UnifiedLogs</code>."
+    NOTE+="</div></div>"
+
+    local STATS
+    STATS="$(stat_box "$(L "Stringhe" "Strings")" "$TOTAL")"
+    STATS+="$(stat_box "$(L "Decompressi" "Decompressed")" "$(numfmt --to=iec "$DECOMP" 2>/dev/null || echo "$DECOMP")" "info")"
+    STATS+="$(stat_box "File" "${#FILES[@]}" "info")"
+    STATS+="$(stat_box "IoC" "$NIOC" "$([[ "$NIOC" -gt 0 ]] && echo warn || echo info)")"
+    finish_report "macos_unified_logs" "macOS Unified Logs" "ULG" "private/var/db/diagnostics/*.tracev3" "$STATS" \
+        "${NOTE}<div class='cards'>$(generic_card_html "$(L "Resa della decompressione" "Decompression yield")" "diagnostics" "${#FILES[@]}" "$STABLE" "∑")</div><div class='cards'>$(generic_card_html "$(L "Stringhe estratte" "Extracted strings")" "$(L "estrazione parziale" "partial extraction")" "$TOTAL" "$TABLE" "⌕")</div>"
+}
+
+# ================================================================
 #  MASTER TIMELINE CROSS-MODULO (Linux/macOS)
 #  Aggrega tutte le evidenze con timestamp dai report generati in sessione.
 #  Pensato per girare per ULTIMO (è l'ultima voce dei registri Linux/macOS):
@@ -15135,6 +15966,12 @@ MODULES_MACOS=(
     "module_macos_fsevents|FSEvents|MAGENTA|/.fseventsd — modifiche al filesystem"
     "module_macos_spotlight|Spotlight|CYAN|store.db — provenienza download"
     "module_xplat_master_timeline|Master Timeline|YELLOW|aggrega le evidenze degli altri moduli (con --all gira per ultimo)§aggregates the other modules' findings (runs last with --all)||defer"
+    "module_macos_messages|Messages|CYAN|chat.db — iMessage e SMS§chat.db — iMessage and SMS"
+    "module_macos_cookies_downloads|Cookie & Download|YELLOW|Cookies.binarycookies · Downloads.plist§Cookies.binarycookies · Downloads.plist"
+    "module_macos_xprotect|XProtect / Gatekeeper|RED|Difese native e autorizzazioni concesse§Native defences and granted authorisations"
+    "module_macos_applications|Applications|GREEN|Inventario app, firma e posizione§App inventory, signature and location"
+    "module_macos_backups|Time Machine / Snapshot|BLUE|Versioni precedenti dei file§Earlier versions of files"
+    "module_macos_unified_logs|Unified Logs|MAGENTA|.tracev3 — estrazione parziale§.tracev3 — partial extraction"
 )
 
 # Restituisce il NOME dell'array registro per l'OS corrente (vuoto per windows/unknown)

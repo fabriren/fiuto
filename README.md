@@ -75,6 +75,12 @@ On macOS volumes FIUTO collects and analyzes:
 - **Recent items** (`SFL`/`SFL2`, `~/.Trash`)
 - **FSEvents** (`/.fseventsd`) — filesystem change history, the macOS counterpart of the USN Journal
 - **Spotlight** (`.Spotlight-V100/store.db`) — heuristic extraction of download URLs and user paths
+- **Messages** (`chat.db`) — iMessage and forwarded SMS, with links and credential references flagged
+- **Cookies and downloads** — Safari `Cookies.binarycookies` (values never printed, only their length) and `Downloads.plist`
+- **XProtect and Gatekeeper** — signature version, manually granted authorisations, third-party kernel extensions
+- **Application inventory** — signature presence and bundles outside the standard directories
+- **Time Machine and snapshots** — earlier versions of files; their absence is reported as an indicator
+- **Unified logs** (`*.tracev3`) — LZ4 chunk decompression and string extraction; **partial by design**, see the note below
 
 ### Flexible Execution Modes
 
@@ -189,7 +195,7 @@ The script uses internal bash helpers for:
 ./fiuto.sh /mnt/disk
 ```
 
-The script detects the volume's OS and presents a numbered menu with the relevant modules (50 for Windows, 21 for Linux, 13 for macOS). Select the module number or type `--all` to run them all.
+The script detects the volume's OS and presents a numbered menu with the relevant modules (50 for Windows, 21 for Linux, 19 for macOS). Select the module number or type `--all` to run them all.
 
 ### Automated Batch Analysis
 
@@ -307,7 +313,7 @@ fiuto_reports/
 
 ---
 
-## 🍎 The 13 macOS analysis modules
+## 🍎 The 19 macOS analysis modules
 
 | #  | Module Name            | macOS Artifact                                                 | Usage                                                         |
 | -- | ---------------------- | -------------------------------------------------------------- | ------------------------------------------------------------- |
@@ -323,7 +329,13 @@ fiuto_reports/
 | 10 | Recent Items           | `SFL`/`SFL2`, `~/.Trash`                                 | Recent apps/docs/servers and trash                            |
 | 11 | FSEvents               | `/.fseventsd`                                                | Filesystem change history (creations, renames, deletions)     |
 | 12 | Spotlight              | `.Spotlight-V100/store.db`                                   | Download provenance and names of deleted files (heuristic)    |
-| 13 | Master Timeline        | (Aggregated)                                                   | Cross-module chronological timeline of all collected evidence |
+| 13 | Master Timeline        | (Aggregated)                                                   | Cross-module chronological timeline (runs last with `--all`)  |
+| 14 | Messages               | `chat.db`                                                    | iMessage/SMS: smishing, 2FA codes, off-channel talk           |
+| 15 | Cookie & Download      | `Cookies.binarycookies`, `Downloads.plist`                 | Authenticated services; download provenance                   |
+| 16 | XProtect / Gatekeeper  | XProtect, SystemPolicy, KextPolicy                             | Signature version; manually granted authorisations            |
+| 17 | Applications           | `/Applications`, user homes                                  | Inventory, signature presence, non-standard locations         |
+| 18 | Time Machine / Snapshot| `com.apple.TimeMachine.plist`, `Backups.backupdb`          | Earlier versions of files; absence as an indicator            |
+| 19 | Unified Logs           | `*.tracev3`                                                  | LZ4 chunk decompression + string extraction (**partial**)     |
 
 ---
 
@@ -695,7 +707,7 @@ Lo script utilizza internamente helper bash per:
 ./fiuto.sh /mnt/disk
 ```
 
-Lo script rileva l'OS del volume e presenta un menu numerato con i moduli pertinenti (50 per Windows, 21 per Linux, 13 per macOS). Seleziona il numero del modulo o digita `--all` per eseguirli tutti.
+Lo script rileva l'OS del volume e presenta un menu numerato con i moduli pertinenti (50 per Windows, 21 per Linux, 19 per macOS). Seleziona il numero del modulo o digita `--all` per eseguirli tutti.
 
 ### Analisi Batch Automatica
 
@@ -813,7 +825,7 @@ fiuto_reports/
 
 ---
 
-## 🍎 I 13 Moduli di Analisi macOS
+## 🍎 I 19 Moduli di Analisi macOS
 
 | #  | Nome Modulo            | Artefatto macOS                                                   | Utilizzo                                                        |
 | -- | ---------------------- | ----------------------------------------------------------------- | --------------------------------------------------------------- |
@@ -829,7 +841,13 @@ fiuto_reports/
 | 10 | Recent Items           | `SFL`/`SFL2`, `~/.Trash`                                    | App/documenti/server recenti e cestino                          |
 | 11 | FSEvents               | `/.fseventsd`                                                   | Storico modifiche al filesystem (creazioni, rinomine, cancellazioni) |
 | 12 | Spotlight              | `.Spotlight-V100/store.db`                                      | Provenienza download e nomi di file cancellati (euristico)      |
-| 13 | Master Timeline        | (Aggregato)                                                       | Timeline cronologica cross-modulo di tutte le evidenze raccolte |
+| 13 | Master Timeline        | (Aggregato)                                                       | Timeline cronologica cross-modulo (con `--all` gira per ultima) |
+| 14 | Messages               | `chat.db`                                                       | iMessage/SMS: smishing, codici 2FA, comunicazioni fuori canale  |
+| 15 | Cookie & Download      | `Cookies.binarycookies`, `Downloads.plist`                    | Servizi a cui si era autenticati; provenienza download          |
+| 16 | XProtect / Gatekeeper  | XProtect, SystemPolicy, KextPolicy                                | Versione firme; autorizzazioni concesse a mano                  |
+| 17 | Applications           | `/Applications`, home utenti                                    | Inventario, presenza firma, posizioni non standard              |
+| 18 | Time Machine / Snapshot| `com.apple.TimeMachine.plist`, `Backups.backupdb`             | Versioni precedenti dei file; l'assenza come indicatore         |
+| 19 | Unified Logs           | `*.tracev3`                                                     | Decompressione chunk LZ4 + estrazione stringhe (**parziale**)   |
 
 ---
 
@@ -1052,11 +1070,15 @@ FIUTO è uno strumento per velocizzare le analisi forensi digitale legittimo, da
 
 **Date:** 2026-07-30 | **Version:** 2.2
 
-**Sixteen new modules.** Windows: eleven. **SetupAPI Device Log** — the only source dating a USB device's *first* connection (the USBSTOR registry keeps the last one). **PowerShell Transcript** — full sessions including command output, invisible to PSReadLine (module 1) when commands come from scripts, `-EncodedCommand` or remoting. **LSA Secrets & DCC2** — cleartext service-account passwords and cached domain credentials from the SECURITY hive, complementing SAM (module 20). **Volume Shadow Copies** — inventory and differential-analysis workflow; their *absence* is reported as an indicator, since deleting them is a standard ransomware step. **Outlook PST/OST** — first local-mail coverage, with risky-attachment and IoC flagging. **Cloud Sync** — OneDrive/Dropbox/Google Drive accounts and synced files: the modern exfiltration path, which leaves no USB artefact. **BITS Jobs** — background downloads abused as a LOLBin (T1197), flagging non-Microsoft hosts, cleartext HTTP and risky targets. **Thumbcache** — thumbnails of deleted files, recovered by signature carving and shown as a gallery beside the report. **Chat Desktop** — Slack/Teams/Discord message fragments carved from LevelDB, flagging sensitive terms. **WebCacheV01** — IE/Edge Legacy history and, more importantly, everything routed through the WinINET APIs, including non-browser code. **Windows Search Index** — indexed paths and content excerpts, which survive file deletion.
+**Twenty-two new modules.** Windows: eleven. **SetupAPI Device Log** — the only source dating a USB device's *first* connection (the USBSTOR registry keeps the last one). **PowerShell Transcript** — full sessions including command output, invisible to PSReadLine (module 1) when commands come from scripts, `-EncodedCommand` or remoting. **LSA Secrets & DCC2** — cleartext service-account passwords and cached domain credentials from the SECURITY hive, complementing SAM (module 20). **Volume Shadow Copies** — inventory and differential-analysis workflow; their *absence* is reported as an indicator, since deleting them is a standard ransomware step. **Outlook PST/OST** — first local-mail coverage, with risky-attachment and IoC flagging. **Cloud Sync** — OneDrive/Dropbox/Google Drive accounts and synced files: the modern exfiltration path, which leaves no USB artefact. **BITS Jobs** — background downloads abused as a LOLBin (T1197), flagging non-Microsoft hosts, cleartext HTTP and risky targets. **Thumbcache** — thumbnails of deleted files, recovered by signature carving and shown as a gallery beside the report. **Chat Desktop** — Slack/Teams/Discord message fragments carved from LevelDB, flagging sensitive terms. **WebCacheV01** — IE/Edge Legacy history and, more importantly, everything routed through the WinINET APIs, including non-browser code. **Windows Search Index** — indexed paths and content excerpts, which survive file deletion.
 
 Both ESE-based modules fall back to string extraction when libesedb cannot open the database — the normal case for a file acquired from a running machine — and state in the report which parser actually produced the data.
 
 **Linux: five new modules** — PAM (authentication backdoors), kernel modules and LKM rootkits, web server logs, cloud/development credentials, SUID/capabilities.
+
+**macOS: six new modules** — Messages, Safari cookies and downloads, XProtect/Gatekeeper, application inventory, Time Machine/snapshots, and unified logs.
+
+**On unified logs.** `.tracev3` was previously declared out of scope. The new module decompresses the LZ4 (`bv41`) chunks the format is built from and extracts the readable strings that emerge — paths, bundle ids, URLs. It does **not** reconstruct log messages: that requires interpreting the catalogue and resolving string references in `.uuidtext` and the dyld shared cache, which is a project of its own. The report states this rather than implying full support; for complete analysis use `log show --archive` on a Mac.
 
 **Note on Linux module numbering.** Adding auditd and Containers in this release shifted the Linux Master Timeline from 14 to 16. Scripts pinning `--module 14` on Linux volumes need updating. The registry now supports a `defer` flag so the Master Timeline keeps its number while still running last under `--all`: further modules can be appended without renumbering anything again.
 

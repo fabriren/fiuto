@@ -4,7 +4,7 @@ Documento di lavoro per portare FIUTO da 2.1 a 3.0. È pensato per essere
 ripreso a distanza di tempo, anche da un'altra sessione o da un'altra persona:
 ogni fase dichiara **cosa fare**, **dove**, **come verificarlo** e **perché**.
 
-Stato aggiornato al: **2026-07-30** (versione 2.2, Fasi 1, 2 e 3 completate).
+Stato aggiornato al: **2026-07-30** (versione 2.2, Fasi 1-4 completate).
 
 ---
 
@@ -43,6 +43,7 @@ Stato aggiornato al: **2026-07-30** (versione 2.2, Fasi 1, 2 e 3 completate).
 | Fase 1 — registro moduli data-driven anche per Windows | ✅ |
 | Fase 2 — 11 moduli Windows nuovi (40-50) | ✅ |
 | Fase 3 — 5 moduli Linux nuovi (17-21) | ✅ |
+| Fase 4 — 6 moduli macOS nuovi (14-19) | ✅ |
 | Flag `defer` nel registro (numerazione stabile) | ✅ |
 | Libreria Python condivisa LevelDB/Snappy (`src/lib/13-pylib-leveldb.sh`) | ✅ |
 
@@ -206,7 +207,15 @@ Tutti e cinque implementati come moduli 17-21.
 
 ---
 
-## Fase 4 — Moduli macOS
+## Fase 4 — Moduli macOS ✅ (completata in v2.2)
+
+Tutti implementati come moduli 14-19. Sui unified log la valutazione di costo
+prevista dalla roadmap si e' chiusa cosi': si decomprimono i chunk LZ4 (bv41) e
+si estraggono le stringhe leggibili, senza ricostruire i messaggi — la
+risoluzione dei riferimenti in .uuidtext e nel dyld_shared_cache resta fuori
+portata per un tool bash+python senza dipendenze. Il limite e' dichiarato nel
+report invece di essere lasciato intendere.
+
 
 | Modulo | Fonte | Note |
 |---|---|---|
