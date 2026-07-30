@@ -4,7 +4,7 @@ Documento di lavoro per portare FIUTO da 2.1 a 3.0. È pensato per essere
 ripreso a distanza di tempo, anche da un'altra sessione o da un'altra persona:
 ogni fase dichiara **cosa fare**, **dove**, **come verificarlo** e **perché**.
 
-Stato aggiornato al: **2026-07-30** (versione 2.1, Fase 1 completata).
+Stato aggiornato al: **2026-07-30** (versione 2.2, Fase 1 completata, Fase 2 in corso).
 
 ---
 
@@ -164,19 +164,24 @@ lingue, e coerenza fra numero di moduli e tabelle del README.
 
 ## Fase 2 — Moduli Windows
 
-Un file per modulo in `modules/win/`. Priorità decrescente.
+Un file per modulo in `src/modules/win/`. Priorità decrescente. ✅ = fatto in v2.2 (moduli 40-44).
+
+I nuovi moduli usano `finish_report` + `generic_card_html` + `_rows_to_table`
+invece di comporre l'HTML a mano come i 39 storici: molto meno codice e un
+solo punto da toccare quando cambia il layout dei report. Conviene seguire
+questa strada anche per i restanti.
 
 | # | Modulo | Fonte | Note di implementazione |
 |---|---|---|---|
-| 1 | **Volume Shadow Copies** | snapshot VSS | Enumerazione + rilancio dei moduli sullo snapshot: abilita l'analisi differenziale storica. Oggi VSS è solo *citato* nei suggerimenti. |
-| 2 | **Outlook PST/OST** | `*.pst`, `*.ost` | `libpff`/`pypff`. Zero copertura email oggi. Header, allegati, item cancellati. |
+| 1 | ✅ **Volume Shadow Copies** | snapshot VSS | Enumerazione + rilancio dei moduli sullo snapshot: abilita l'analisi differenziale storica. Oggi VSS è solo *citato* nei suggerimenti. |
+| 2 | ✅ **Outlook PST/OST** | `*.pst`, `*.ost` | `libpff`/`pypff`. Zero copertura email oggi. Header, allegati, item cancellati. |
 | 3 | **Cloud sync / esfiltrazione** | OneDrive `*.odl` + `SyncEngineDatabase.db`, Dropbox, Google Drive | Vettore di esfiltrazione moderno, oggi invisibile. |
 | 4 | **Chat desktop** | Teams/Slack/Discord LevelDB | **Riusa il decompressore Snappy già scritto per il modulo 39**: costo marginale basso, resa alta. |
-| 5 | **LSA Secrets / DCC2** | hive `SECURITY` | Il modulo 20 copre solo SAM: mancano cached domain credentials e password dei service account. |
+| 5 | ✅ **LSA Secrets / DCC2** | hive `SECURITY` | Il modulo 20 copre solo SAM: mancano cached domain credentials e password dei service account. |
 | 6 | **WebCacheV01.dat** | ESE Edge/IE | History/cookie/download non coperti dal modulo 17 (solo SQLite). |
 | 7 | **Thumbcache / Thumbs.db** | `thumbcache_*.db` | Prova visiva di file **cancellati**. |
-| 8 | **PowerShell transcripts** | `PowerShell_transcript.*.txt` | Il modulo 1 copre solo PSReadLine; i transcript hanno l'output completo. |
-| 9 | **SetupAPI dev log** | `setupapi.dev.log` | Timestamp di *first install* USB, complementa il modulo 9. |
+| 8 | ✅ **PowerShell transcripts** | `PowerShell_transcript.*.txt` | Il modulo 1 copre solo PSReadLine; i transcript hanno l'output completo. |
+| 9 | ✅ **SetupAPI dev log** | `setupapi.dev.log` | Timestamp di *first install* USB, complementa il modulo 9. |
 | 10 | **BITS jobs** | `qmgr.db` | Download/persistenza LOLBin (T1197). |
 | 11 | **Windows Search index** | `Windows.edb` | Contenuto indicizzato di file poi cancellati. |
 

@@ -120,6 +120,7 @@ pip install impacket          # SAM / NTDS.dit / AD hashes (modules 20, 24, 38)
 pip install libesedb-python   # ESE database parsing — SRUM (module 16)
 pip install mft               # MFT timeline (module 21)
 pip install python-snappy     # ChatGPT LevelDB decompression (module 39) — or: pip install cramjam
+pip install libpff-python     # Outlook PST/OST parsing (module 44)
 ```
 
 > **Linux and macOS modules need no extra packages** — they rely only on the Python standard library (`sqlite3`, `plistlib`, …). Optionally, `journalctl` (for systemd journal) and the `rpm` CLI (for offline RPM dumps) improve coverage if present.
@@ -182,7 +183,7 @@ The script uses internal bash helpers for:
 ./fiuto.sh /mnt/disk
 ```
 
-The script detects the volume's OS and presents a numbered menu with the relevant modules (39 for Windows, 16 for Linux, 13 for macOS). Select the module number or type `--all` to run them all.
+The script detects the volume's OS and presents a numbered menu with the relevant modules (44 for Windows, 16 for Linux, 13 for macOS). Select the module number or type `--all` to run them all.
 
 ### Automated Batch Analysis
 
@@ -215,7 +216,7 @@ fiuto_reports/
 
 ---
 
-## 📊 The 39 Windows analysis modules
+## 📊 The 44 Windows analysis modules
 
 | #  | Module Name                   | Windows Artifact                    | Usage                                                           |
 | -- | ----------------------------- | ----------------------------------- | --------------------------------------------------------------- |
@@ -258,6 +259,11 @@ fiuto_reports/
 | 37 | Master Timeline               | (Aggregated)                        | Cross-artifact timeline                                         |
 | 38 | PAD Offline                   | NTDS.dit                            | Advanced Active Directory                                       |
 | 39 | AI Chat / Query History       | LevelDB / JSON / SQLite             | Recover AI assistant conversations (ChatGPT, Copilot, Claude…) |
+| 40 | SetupAPI Device Log           | Windows/INF/setupapi.dev.log        | **First** install time of USB devices                           |
+| 41 | PowerShell Transcript         | PowerShell_transcript*.txt          | Full sessions: commands **and** output                          |
+| 42 | LSA Secrets & DCC2            | Registry SECURITY                   | Service-account passwords, cached domain credentials            |
+| 43 | Volume Shadow Copies          | System Volume Information           | Earlier volume snapshots, differential analysis                 |
+| 44 | Outlook PST / OST             | *.pst, *.ost (libpff)               | Local mail, attachments, deleted items                          |
 
 ---
 
@@ -608,6 +614,7 @@ pip install impacket          # Hash SAM / NTDS.dit / AD (moduli 20, 24, 38)
 pip install libesedb-python   # Parsing database ESE — SRUM (modulo 16)
 pip install mft               # MFT timeline (modulo 21)
 pip install python-snappy     # Decompressione LevelDB ChatGPT (modulo 39) — oppure: pip install cramjam
+pip install libpff-python     # Parsing PST/OST di Outlook (modulo 44)
 ```
 
 > **I moduli Linux e macOS non richiedono pacchetti aggiuntivi** — usano solo la libreria standard di Python (`sqlite3`, `plistlib`, …). Facoltativamente, `journalctl` (per il journal systemd) e la CLI `rpm` (per il dump RPM offline) migliorano la copertura se presenti.
@@ -670,7 +677,7 @@ Lo script utilizza internamente helper bash per:
 ./fiuto.sh /mnt/disk
 ```
 
-Lo script rileva l'OS del volume e presenta un menu numerato con i moduli pertinenti (39 per Windows, 16 per Linux, 13 per macOS). Seleziona il numero del modulo o digita `--all` per eseguirli tutti.
+Lo script rileva l'OS del volume e presenta un menu numerato con i moduli pertinenti (44 per Windows, 16 per Linux, 13 per macOS). Seleziona il numero del modulo o digita `--all` per eseguirli tutti.
 
 ### Analisi Batch Automatica
 
@@ -703,7 +710,7 @@ fiuto_reports/
 
 ---
 
-## 📊 I 39 Moduli di Analisi Windows
+## 📊 I 44 Moduli di Analisi Windows
 
 | #  | Nome Modulo                   | Artefatto Windows                   | Utilizzo                                                              |
 | -- | ----------------------------- | ----------------------------------- | --------------------------------------------------------------------- |
@@ -746,6 +753,11 @@ fiuto_reports/
 | 37 | Master Timeline               | (Aggregato)                         | Timeline cross-artefatto                                              |
 | 38 | PAD Offline                   | NTDS.dit                            | Active Directory avanzato                                             |
 | 39 | AI Chat / Query History       | LevelDB / JSON / SQLite             | Recupera conversazioni con assistenti AI (ChatGPT, Copilot, Claude…) |
+| 40 | SetupAPI Device Log           | Windows/INF/setupapi.dev.log        | **Prima** installazione dei dispositivi USB                           |
+| 41 | PowerShell Transcript         | PowerShell_transcript*.txt          | Sessioni complete: comandi **e** output                               |
+| 42 | LSA Secrets & DCC2            | Registry SECURITY                   | Password account di servizio, credenziali di dominio in cache         |
+| 43 | Volume Shadow Copies          | System Volume Information           | Snapshot precedenti del volume, analisi differenziale                 |
+| 44 | Outlook PST / OST             | *.pst, *.ost (libpff)               | Posta locale, allegati, item cancellati                               |
 
 ---
 
@@ -1008,6 +1020,12 @@ FIUTO è uno strumento per velocizzare le analisi forensi digitale legittimo, da
 ---
 
 ## 📝 Changelog
+
+**Date:** 2026-07-30 | **Version:** 2.2
+
+**Five new Windows modules.** **SetupAPI Device Log** — the only source dating a USB device's *first* connection (the USBSTOR registry keeps the last one). **PowerShell Transcript** — full sessions including command output, invisible to PSReadLine (module 1) when commands come from scripts, `-EncodedCommand` or remoting. **LSA Secrets & DCC2** — cleartext service-account passwords and cached domain credentials from the SECURITY hive, complementing SAM (module 20). **Volume Shadow Copies** — inventory and differential-analysis workflow; their *absence* is reported as an indicator, since deleting them is a standard ransomware step. **Outlook PST/OST** — first local-mail coverage, with risky-attachment and IoC flagging.
+
+**Internals.** Module dispatch is now data-driven for Windows too: three parallel dispatchers were removed (a hand-written menu and two separate 39-branch `case` statements). Registry entries support bilingual labels and optional guards. Module numbering is unchanged — `--module N` keeps invoking the same modules.
 
 **Date:** 2026-07-29 | **Version:** 2.1
 

@@ -44,7 +44,7 @@ main() {
                     echo -e "    riapplicati su una copia temporanea: senza questo passaggio le"
                     echo -e "    scritture piu' recenti dell'hive non sono visibili.${RESET}"
                     echo ""
-                    echo -e "  ${BOLD}Moduli disponibili (1-39):${RESET}"
+                    echo -e "  ${BOLD}Moduli disponibili (1-44):${RESET}"
                 else
                     echo -e "${CYAN}${BOLD}fiuto.sh${RESET} — DFIR Toolkit for offline Windows disk analysis"
                     echo ""
@@ -62,7 +62,7 @@ main() {
                     echo -e "    onto a temporary copy: without this step the most recent hive"
                     echo -e "    writes are not visible.${RESET}"
                     echo ""
-                    echo -e "  ${BOLD}Available modules (1-39):${RESET}"
+                    echo -e "  ${BOLD}Available modules (1-44):${RESET}"
                 fi
                 echo -e "    1  PowerShell History        2  Notepad TabState"
                 echo -e "    3  IFEO Hijacking            4  BAM"

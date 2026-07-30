@@ -50,6 +50,11 @@ src/modules/win/36-network-artifacts.sh
 src/modules/win/37-master-timeline.sh
 src/modules/win/38-pad-offline.sh
 src/modules/win/39-ai-chat.sh
+src/modules/win/40-setupapi.sh
+src/modules/win/41-ps-transcripts.sh
+src/modules/win/42-lsa-secrets.sh
+src/modules/win/43-vss.sh
+src/modules/win/44-pst-ost.sh
 src/modules/linux/01-syslog.sh
 src/modules/linux/02-journal.sh
 src/modules/linux/03-logins.sh

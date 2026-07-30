@@ -10830,6 +10830,691 @@ CSSEOF
 }
 
 # ================================================================
+#  MODULO 40 — SetupAPI Device Log
+#
+#  setupapi.dev.log registra l'installazione dei driver di ogni dispositivo
+#  collegato alla macchina. E' l'unica fonte che data con precisione la PRIMA
+#  connessione di un dispositivo USB: il registro (modulo 8, USBSTOR) conserva
+#  l'ultima connessione e i metadati, ma non il momento in cui il dispositivo
+#  e' comparso per la prima volta.
+#
+#  In un caso di esfiltrazione la differenza conta: "questa chiavetta e' stata
+#  collegata per la prima volta il giorno X" e' un'affermazione che si sostiene
+#  solo con questo log.
+# ================================================================
+module_setupapi() {
+    section_header "SetupAPI — $(L "Prima installazione dispositivi" "Device First Install")" "$BLUE"
+    check_win_root || return 1
+
+    local -a LOGS=()
+    local D F
+    D=$(ci_find_dir "$WIN_ROOT" "Windows/INF")
+    if [[ -n "$D" ]]; then
+        while IFS= read -r F; do
+            [[ -n "$F" ]] && LOGS+=("$F")
+        done < <(find "$D" -maxdepth 1 -type f -iname 'setupapi.dev*.log' 2>/dev/null)
+    fi
+    # Percorso legacy (XP/2003)
+    D=$(ci_find_dir "$WIN_ROOT" "Windows")
+    if [[ -n "$D" ]]; then
+        F=$(ci_find_file "$D" "setupapi.log")
+        [[ -n "$F" ]] && LOGS+=("$F")
+    fi
+
+    if [[ ${#LOGS[@]} -eq 0 ]]; then
+        warn "$(L "Nessun setupapi.dev.log trovato." "No setupapi.dev.log found.")"
+        return 0
+    fi
+    info "$(L "Log trovati:" "Logs found:") ${BOLD}${#LOGS[@]}"
+
+    local OUT; OUT=$(mktemp); register_tmp "$OUT"
+    "$PY3" - "$OUT" "${LOGS[@]}" << 'PYEOF' 2>/dev/null
+import sys, re, os
+
+out_path = sys.argv[1]
+logs = sys.argv[2:]
+
+# Struttura del log:
+#   >>>  [Device Install (Hardware initiated) - SWD\WPDBUSENUM\{GUID}#...]
+#   >>>  Section start 2024/01/15 10:23:45.123
+DEV = re.compile(r'^>>>\s+\[(?P<what>[^\]]+)\]')
+SEC = re.compile(r'^>>>\s+Section start\s+(?P<ts>\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2})')
+
+# Bus che identificano supporti rimovibili: sono quelli che interessano in
+# un'indagine su esfiltrazione.
+REMOVABLE = ('USBSTOR', 'USB\\', 'WPDBUSENUM', 'SWD\\WPDBUSENUM', 'SCSI\\DISK')
+
+rows = []
+for path in logs:
+    src = os.path.basename(path)
+    try:
+        fh = open(path, encoding='utf-8', errors='replace')
+    except Exception:
+        continue
+    pending = None
+    with fh:
+        for line in fh:
+            line = line.rstrip('\n')
+            m = DEV.match(line)
+            if m:
+                pending = m.group('what').strip()
+                continue
+            m = SEC.match(line)
+            if m and pending:
+                ts = m.group('ts').replace('/', '-')
+                what = pending
+                pending = None
+                # "Device Install (Hardware initiated) - <istanza>"
+                inst = what.split(' - ', 1)[1] if ' - ' in what else what
+                kind = what.split(' - ', 1)[0] if ' - ' in what else ''
+                up = inst.upper()
+                removable = '1' if any(k in up for k in REMOVABLE) else '0'
+                rows.append((ts, kind, inst, removable, src))
+
+rows.sort(key=lambda r: r[0])
+with open(out_path, 'w', encoding='utf-8') as fh:
+    for r in rows:
+        fh.write('\t'.join(x.replace('\t', ' ') for x in r) + '\n')
+PYEOF
+
+    local TOTAL=0
+    [[ -s "$OUT" ]] && TOTAL=$(wc -l < "$OUT")
+    if [[ "$TOTAL" -eq 0 ]]; then
+        warn "$(L "Nessuna installazione di dispositivo interpretabile." "No parsable device installation.")"
+        return 0
+    fi
+    local NREM; NREM=$(awk -F'\t' '$4=="1"' "$OUT" | wc -l)
+
+    ok "$(L "Installazioni registrate:" "Recorded installations:") ${BOLD}$TOTAL"
+    info "$(L "Di cui supporti rimovibili:" "Of which removable media:") ${BOLD}$NREM"
+    echo ""
+    awk -F'\t' '$4=="1"{printf "      %s  %s\n", $1, substr($3,1,90)}' "$OUT" | head -25 | while IFS= read -r LN; do
+        echo -e "      ${CYAN}${LN}${RESET}"
+    done
+
+    # Marca gli IoC eventualmente caricati.
+    if [[ ${#IOC_LIST[@]} -gt 0 ]]; then
+        local NIOC=0 LINE
+        while IFS= read -r LINE; do
+            check_ioc "$LINE" && NIOC=$((NIOC + 1))
+        done < "$OUT"
+        [[ $NIOC -gt 0 ]] && warn "$(L "Righe con match IoC:" "Lines matching IoC:") ${BOLD}$NIOC"
+    fi
+
+    ask_yn "Generare report HTML?" || return 0
+
+    # Prima i rimovibili: sono il motivo per cui si guarda questo log.
+    local ROWS; ROWS=$( { awk -F'\t' '$4=="1"{print $1"\t"$2"\t"$3"\t"$5}' "$OUT";
+                          awk -F'\t' '$4=="0"{print $1"\t"$2"\t"$3"\t"$5}' "$OUT"; } )
+    local TABLE; TABLE=$(_rows_to_table "$ROWS" \
+        "$(L "Prima installazione" "First install")" "$(L "Tipo" "Kind")" \
+        "$(L "Istanza dispositivo" "Device instance")" "Log")
+
+    local NOTE="<div class='card' style='margin-bottom:1rem'><div style='padding:1rem 1.5rem;font-size:.8rem;line-height:1.7'>"
+    NOTE+="<b>$(L "Perche' conta" "Why it matters")</b><br>"
+    NOTE+="$(L "Il registro USBSTOR (modulo 8) conserva l'ULTIMA connessione di un dispositivo. Questo log conserva la PRIMA: e' l'unica fonte che permette di affermare quando un supporto e' comparso per la prima volta sulla macchina. I due vanno letti insieme." \
+        "The USBSTOR registry (module 8) keeps a device's LAST connection. This log keeps the FIRST: it is the only source supporting a claim about when a device first appeared on the machine. Read the two together.")"
+    NOTE+="</div></div>"
+
+    local STATS
+    STATS="$(stat_box "$(L "Installazioni" "Installations")" "$TOTAL")"
+    STATS+="$(stat_box "$(L "Rimovibili" "Removable")" "$NREM" "warn")"
+    STATS+="$(stat_box "Log" "${#LOGS[@]}" "info")"
+    finish_report "setupapi" "SetupAPI Device Log" "DEV" "Windows/INF/setupapi.dev.log" "$STATS" \
+        "${NOTE}<div class='cards'>$(generic_card_html "$(L "Installazioni dispositivi" "Device installations")" "${LOGS[0]}" "$TOTAL" "$TABLE" "⇄")</div>"
+}
+
+# ================================================================
+#  MODULO 41 — PowerShell Transcript
+#
+#  Il modulo 1 legge PSReadLine, che conserva solo le righe DIGITATE nella
+#  console. I transcript (Start-Transcript, o la policy "Turn on PowerShell
+#  Transcription") registrano invece la sessione completa: comandi, output,
+#  utente, host e processo.
+#
+#  Differenza pratica: PSReadLine non vede nulla di quanto eseguito da script,
+#  da -EncodedCommand o da una sessione remota; i transcript sì, e includono
+#  anche l'output — spesso l'unica traccia rimasta di cosa un comando abbia
+#  effettivamente restituito.
+# ================================================================
+module_ps_transcripts() {
+    section_header "PowerShell Transcript" "$MAGENTA"
+    check_win_root || return 1
+
+    local -a FILES=()
+    local F
+
+    # I transcript finiscono in Documenti per default, ma la policy consente
+    # una OutputDirectory arbitraria: si cercano anche nelle posizioni comuni.
+    local -a ROOTS=()
+    while IFS= read -r F; do
+        [[ -n "$F" ]] && ROOTS+=("$F")
+    done < <(get_user_homes)
+    local D
+    for D in "Windows/Temp" "Temp" "ProgramData/Microsoft/Windows/PowerShell" "Transcripts" "PSTranscripts"; do
+        local R; R=$(ci_find_dir "$WIN_ROOT" "$D")
+        [[ -n "$R" ]] && ROOTS+=("$R")
+    done
+
+    local R
+    for R in "${ROOTS[@]}"; do
+        while IFS= read -r F; do
+            [[ -n "$F" ]] && FILES+=("$F")
+        done < <(find "$R" -maxdepth 5 -type f -iname 'PowerShell_transcript*.txt' 2>/dev/null)
+    done
+
+    if [[ ${#FILES[@]} -eq 0 ]]; then
+        warn "$(L "Nessun transcript PowerShell trovato." "No PowerShell transcript found.")"
+        info "$(L "I transcript esistono solo se attivati (Start-Transcript o policy di trascrizione)." \
+                 "Transcripts exist only if enabled (Start-Transcript or transcription policy).")"
+        return 0
+    fi
+    info "$(L "Transcript trovati:" "Transcripts found:") ${BOLD}${#FILES[@]}"
+
+    # Parole che segnalano attivita' offensiva dentro una sessione PowerShell.
+    local KW="downloadstring|downloadfile|iex|invoke-expression|invoke-webrequest|frombase64string|encodedcommand|-enc |bypass|hidden|net user|net localgroup|mimikatz|invoke-mimikatz|add-mppreference|set-mppreference|disable-windowsoptionalfeature|schtasks|reg add|vssadmin|bcdedit|wevtutil|certutil|bitsadmin|password|secret|token"
+    local -a IOCS=("${IOC_LIST[@]:-}")
+    local I
+    for I in "${IOCS[@]}"; do
+        [[ -n "$I" ]] && KW+="|${I,,}"
+    done
+
+    local BODY="" TOTAL=0 SUSP=0
+    local META; META=$(mktemp); register_tmp "$META"
+    for F in "${FILES[@]}"; do
+        [[ -s "$F" ]] || continue
+        TOTAL=$((TOTAL + 1))
+        local N; N=$(grep -icE "$KW" "$F" 2>/dev/null || echo 0)
+        [[ "$N" -gt 0 ]] && SUSP=$((SUSP + 1))
+
+        # L'intestazione del transcript contiene utente, host e PID.
+        local U H P ST
+        U=$(grep -m1 -iE '^Username:' "$F" 2>/dev/null | cut -d: -f2- | xargs || true)
+        H=$(grep -m1 -iE '^Host Application:' "$F" 2>/dev/null | cut -d: -f2- | xargs || true)
+        P=$(grep -m1 -iE '^Process ID:' "$F" 2>/dev/null | cut -d: -f2- | xargs || true)
+        ST=$(grep -m1 -iE '^Start time:' "$F" 2>/dev/null | cut -d: -f2- | xargs || true)
+        printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+            "${ST:-?}" "${U:-?}" "${P:-?}" "$N" "${H:0:120}" "$F" >> "$META"
+
+        if [[ "$N" -gt 0 ]]; then
+            ok "$(basename "$F") — ${BOLD}${N}$(L " righe sospette" " suspicious lines")"
+        else
+            dim_msg "$(basename "$F")"
+        fi
+        BODY+=$(file_card_html "$F" "$KW" "PS")
+    done
+
+    separator
+    info "$(L "Transcript analizzati:" "Transcripts analysed:") ${BOLD}$TOTAL"
+    [[ $SUSP -gt 0 ]] && warn "$(L "Con contenuto sospetto:" "With suspicious content:") ${BOLD}$SUSP"
+    [[ $TOTAL -eq 0 ]] && return 0
+
+    ask_yn "Generare report HTML?" || return 0
+
+    local SUMTABLE; SUMTABLE=$(_rows_to_table "$(sort "$META")" \
+        "$(L "Inizio" "Start")" "$(L "Utente" "User")" "PID" \
+        "$(L "Righe sospette" "Suspicious lines")" "Host Application" "$(L "Percorso" "Path")")
+
+    local STATS
+    STATS="$(stat_box "Transcript" "$TOTAL")"
+    STATS+="$(stat_box "$(L "Sospetti" "Suspicious")" "$SUSP" "$([[ $SUSP -gt 0 ]] && echo warn || echo info)")"
+    finish_report "ps_transcripts" "PowerShell Transcript" "PS" "PowerShell_transcript*.txt" "$STATS" \
+        "<div class='cards'>$(generic_card_html "$(L "Sessioni" "Sessions")" "$(L "intestazioni dei transcript" "transcript headers")" "$TOTAL" "$SUMTABLE" "▤")</div><div class='cards'>${BODY}</div>"
+}
+
+# ================================================================
+#  MODULO 42 — LSA Secrets & Cached Domain Credentials (DCC2)
+#
+#  Il modulo 20 estrae gli hash degli account LOCALI dall'hive SAM. L'hive
+#  SECURITY contiene altro, e spesso di piu' valore:
+#
+#  - LSA Secrets: password IN CHIARO degli account di servizio, delle
+#    scheduled task configurate con credenziali, del DefaultPassword di
+#    autologon, delle VPN e dei trust di dominio.
+#  - Cached Domain Credentials (DCC2/MSCACHE v2): hash degli ultimi utenti di
+#    dominio autenticatisi sulla macchina — inclusi amministratori di dominio
+#    che si sono collegati a una workstation compromessa.
+#
+#  Su una workstation membro di dominio questo modulo e' spesso il punto in cui
+#  si capisce fin dove l'attaccante poteva arrivare.
+# ================================================================
+module_lsa_secrets() {
+    section_header "LSA Secrets & Cached Domain Credentials" "$RED"
+    check_win_root || return 1
+
+    local SEC_HIVE SYS_HIVE
+    SEC_HIVE=$(get_hive SECURITY)
+    SYS_HIVE=$(get_hive SYSTEM)
+
+    if [[ -z "$SEC_HIVE" ]]; then
+        warn "$(L "Hive SECURITY non trovato." "SECURITY hive not found.")"
+        return 0
+    fi
+    if [[ -z "$SYS_HIVE" ]]; then
+        warn "$(L "Hive SYSTEM non trovato: serve per la bootkey." "SYSTEM hive not found: required for the boot key.")"
+        return 0
+    fi
+    info "SECURITY: ${DIM}${SEC_HIVE}${RESET}"
+    info "SYSTEM:   ${DIM}${SYS_HIVE}${RESET}"
+
+    if ! "$PY3" -c "import impacket" 2>/dev/null; then
+        warn "$(L "impacket non disponibile: LSA Secrets e DCC2 non estraibili." \
+                 "impacket unavailable: LSA Secrets and DCC2 cannot be extracted.")"
+        info "$(L "Installalo con:" "Install it with:") ${PY3} -m pip install impacket"
+        return 0
+    fi
+
+    info "$(L "Estrazione in corso (impacket)..." "Extracting (impacket)...")"
+    local OUT; OUT=$(mktemp); register_tmp "$OUT"
+    "$PY3" - "$SYS_HIVE" "$SEC_HIVE" > "$OUT" << 'PYEOF' 2>/dev/null
+import sys, io, os, contextlib
+
+system_hive, security_hive = sys.argv[1], sys.argv[2]
+
+def L(it, en):
+    return it if os.environ.get('LANG', 'en') == 'it' else en
+
+try:
+    from impacket.examples.secretsdump import LocalOperations, LSASecrets
+except Exception as exc:
+    print(f"ERROR\t{L('impacket non importabile', 'impacket not importable')}: {exc}")
+    sys.exit(0)
+
+try:
+    ops = LocalOperations(system_hive)
+    boot_key = ops.getBootKey()
+except Exception as exc:
+    print(f"ERROR\t{L('bootkey non ricavabile dall hive SYSTEM', 'boot key not derivable from SYSTEM hive')}: {exc}")
+    sys.exit(0)
+
+# impacket scrive i risultati su stdout: li si cattura per classificarli
+# invece di lasciarli finire grezzi nel report.
+buf = io.StringIO()
+try:
+    lsa = LSASecrets(security_hive, boot_key, None, isRemote=False, perSecretCallback=lambda *a: None)
+    with contextlib.redirect_stdout(buf):
+        try:
+            lsa.dumpCachedHashes()
+        except Exception:
+            pass
+        try:
+            lsa.dumpSecrets()
+        except Exception:
+            pass
+except Exception as exc:
+    print(f"ERROR\t{L('estrazione fallita', 'extraction failed')}: {exc}")
+    sys.exit(0)
+
+captured = buf.getvalue().splitlines()
+
+# I DCC2 hanno forma  utente/DOMINIO:$DCC2$10240#utente#hash
+# Gli LSA secret sono blocchi "NOME\n(valore)".
+for line in captured:
+    line = line.rstrip()
+    if not line.strip():
+        continue
+    low = line.lower()
+    if '$dcc2$' in low:
+        kind = 'DCC2'
+    elif line.startswith('[*]') or line.startswith('[-]'):
+        continue
+    else:
+        kind = 'LSA'
+    print(f"{kind}\t{line}")
+PYEOF
+
+    if grep -q '^ERROR' "$OUT" 2>/dev/null; then
+        warn "$(sed -n 's/^ERROR\t//p' "$OUT" | head -1)"
+        return 0
+    fi
+
+    local NDCC NLSA TOTAL
+    NDCC=$(awk -F'\t' '$1=="DCC2"' "$OUT" | wc -l)
+    NLSA=$(awk -F'\t' '$1=="LSA"' "$OUT" | wc -l)
+    TOTAL=$((NDCC + NLSA))
+    if [[ "$TOTAL" -eq 0 ]]; then
+        warn "$(L "Nessun segreto estratto (hive vuoto o non decifrabile)." "No secret extracted (empty or undecryptable hive).")"
+        return 0
+    fi
+
+    ok "$(L "Cached domain credentials (DCC2):" "Cached domain credentials (DCC2):") ${BOLD}$NDCC"
+    ok "$(L "LSA secrets:" "LSA secrets:") ${BOLD}$NLSA"
+    [[ "$NDCC" -gt 0 ]] && warn "$(L "I DCC2 sono craccabili offline: hashcat -m 2100" "DCC2 are crackable offline: hashcat -m 2100")"
+
+    ask_yn "Generare report HTML?" || return 0
+
+    local BODY=""
+    BODY+="<div class='card' style='margin-bottom:1rem;border-color:rgba(255,123,114,.5)'><div style='padding:1rem 1.5rem;font-size:.8rem;line-height:1.7'>"
+    BODY+="<b>$(L "Materiale altamente sensibile" "Highly sensitive material")</b><br>"
+    BODY+="$(L "Questo report puo' contenere password in chiaro di account di servizio e hash di credenziali di dominio. Trattalo come materiale riservato del caso: non allegarlo a ticket, non condividerlo su canali non cifrati." \
+        "This report may contain cleartext service-account passwords and domain credential hashes. Treat it as restricted case material: do not attach it to tickets or share it over unencrypted channels.")<br><br>"
+    BODY+="$(L "Cracking offline:" "Offline cracking:") <code>hashcat -m 2100 dcc2.txt wordlist.txt</code>"
+    BODY+="</div></div>"
+
+    if [[ "$NDCC" -gt 0 ]]; then
+        local R; R=$(awk -F'\t' '$1=="DCC2"{print $2}' "$OUT")
+        BODY+="<div class='cards'>$(generic_card_html "Cached Domain Credentials (DCC2)" "$SEC_HIVE" "$NDCC" "$(_rows_to_table "$R" "$(L "Voce" "Entry")")" "⚿")</div>"
+    fi
+    if [[ "$NLSA" -gt 0 ]]; then
+        local R2; R2=$(awk -F'\t' '$1=="LSA"{print $2}' "$OUT")
+        BODY+="<div class='cards'>$(generic_card_html "LSA Secrets" "$SEC_HIVE" "$NLSA" "$(_rows_to_table "$R2" "$(L "Voce" "Entry")")" "⚿")</div>"
+    fi
+
+    local STATS
+    STATS="$(stat_box "DCC2" "$NDCC" "$([[ "$NDCC" -gt 0 ]] && echo warn || echo info)")"
+    STATS+="$(stat_box "LSA Secrets" "$NLSA" "$([[ "$NLSA" -gt 0 ]] && echo warn || echo info)")"
+    finish_report "lsa_secrets" "LSA Secrets & DCC2" "LSA" "Windows/System32/config/SECURITY" "$STATS" "$BODY"
+}
+
+# ================================================================
+#  MODULO 43 — Volume Shadow Copies
+#
+#  Le shadow copy sono fotografie precedenti del volume. Valgono molto in DFIR
+#  per due ragioni:
+#
+#  - contengono file che l'attaccante ha poi cancellato o modificato, e hive di
+#    registro anteriori alla compromissione;
+#  - permettono l'analisi DIFFERENZIALE: cosa e' cambiato fra due istanti.
+#
+#  Sono anche un bersaglio: la loro cancellazione (vssadmin delete shadows) e'
+#  un passo standard del ransomware, quindi l'ASSENZA di shadow copy su una
+#  macchina che dovrebbe averne e' essa stessa un indicatore.
+#
+#  Nota sui limiti: montare una shadow copy richiede libvshadow (vshadowmount),
+#  privilegi e un mount point. Questo modulo inventaria e prepara i comandi;
+#  non monta nulla da solo, perche' un mount silenzioso su una postazione
+#  forense non e' un effetto collaterale accettabile.
+# ================================================================
+module_vss() {
+    section_header "Volume Shadow Copies" "$CYAN"
+    check_win_root || return 1
+
+    local SVI; SVI=$(ci_find_dir "$WIN_ROOT" "System Volume Information")
+    local -a STORES=()
+    local F
+
+    if [[ -n "$SVI" ]]; then
+        # I contenitori delle shadow copy hanno il GUID del provider VSS nel nome.
+        while IFS= read -r F; do
+            [[ -n "$F" ]] && STORES+=("$F")
+        done < <(find "$SVI" -maxdepth 1 -type f -iname '*3808876b-c176-4e48-b7ae-04046e6cc752*' 2>/dev/null)
+    fi
+
+    local NSTORE=${#STORES[@]}
+    local ROWS="" TOTBYTES=0
+    for F in "${STORES[@]}"; do
+        local SZ MT
+        SZ=$(stat -c %s "$F" 2>/dev/null || echo 0)
+        MT=$(stat -c %y "$F" 2>/dev/null | cut -d. -f1 || echo "?")
+        TOTBYTES=$((TOTBYTES + SZ))
+        ROWS+="${MT}	$(basename "$F")	${SZ}
+"
+    done
+
+    # vshadowinfo legge il catalogo VSS, ma opera sul DEVICE o sull'immagine
+    # raw, non su un filesystem gia' montato: da qui si puo' solo segnalarne la
+    # disponibilita' e preparare il comando, non eseguirlo.
+    local HAVE_VSHADOW=false
+    command -v vshadowinfo > /dev/null 2>&1 && HAVE_VSHADOW=true
+
+    separator
+    if [[ "$NSTORE" -eq 0 ]]; then
+        warn "$(L "Nessun contenitore di shadow copy trovato in System Volume Information." \
+                 "No shadow copy container found in System Volume Information.")"
+        echo ""
+        warn "$(L "L'assenza non e' neutra: la cancellazione delle shadow copy (vssadmin delete shadows) e' un passo tipico del ransomware. Verifica gli Event ID 524/8224 nel modulo Event Log e la presenza di vssadmin/wmic nelle history." \
+                 "Absence is not neutral: deleting shadow copies (vssadmin delete shadows) is a standard ransomware step. Check Event IDs 524/8224 in the Event Log module and vssadmin/wmic usage in command histories.")"
+    else
+        ok "$(L "Contenitori shadow copy:" "Shadow copy containers:") ${BOLD}$NSTORE"
+        info "$(L "Spazio occupato:" "Space used:") ${BOLD}$(numfmt --to=iec "$TOTBYTES" 2>/dev/null || echo "$TOTBYTES B")"
+        echo ""
+        info "$(L "Le date reali degli snapshot stanno nel catalogo VSS, leggibile solo dal device o dall'immagine raw:" \
+                 "Real snapshot dates live in the VSS catalogue, readable only from the device or raw image:")"
+        if $HAVE_VSHADOW; then
+            echo -e "      ${CYAN}vshadowinfo <device|immagine.raw>${RESET}"
+        else
+            info "$(L "vshadowinfo non installato (pacchetto libvshadow-utils)." \
+                     "vshadowinfo not installed (libvshadow-utils package).")"
+        fi
+    fi
+
+    ask_yn "Generare report HTML?" || return 0
+
+    local BODY=""
+    BODY+="<div class='card' style='margin-bottom:1rem'><div style='padding:1rem 1.5rem;font-size:.8rem;line-height:1.7'>"
+    if [[ "$NSTORE" -eq 0 ]]; then
+        BODY+="<b>$(L "Nessuna shadow copy presente" "No shadow copy present")</b><br>"
+        BODY+="$(L "L'assenza va interpretata, non archiviata: la cancellazione delle shadow copy e' un passo standard del ransomware prima della cifratura. Da correlare con gli Event ID 524 e 8224 e con l'uso di vssadmin, wmic shadowcopy o Win32_ShadowCopy nelle history dei comandi." \
+            "Absence needs interpreting, not filing: deleting shadow copies is a standard ransomware step before encryption. Correlate with Event IDs 524 and 8224 and with use of vssadmin, wmic shadowcopy or Win32_ShadowCopy in command histories.")"
+    else
+        BODY+="<b>$(L "Come sfruttarle" "How to use them")</b><br>"
+        BODY+="$(L "Ogni shadow copy e' una versione precedente del volume: contiene file poi cancellati e hive di registro anteriori alla compromissione. Il vero valore e' il confronto differenziale fra due istanti." \
+            "Each shadow copy is an earlier version of the volume: it holds files later deleted and registry hives predating the compromise. The real value is the differential comparison between two points in time.")<br><br>"
+        BODY+="<b>$(L "Procedura consigliata" "Suggested procedure")</b><br>"
+        BODY+="<code>vshadowinfo /dev/sdX1</code> — $(L "elenca gli snapshot e le loro date" "list snapshots and their dates")<br>"
+        BODY+="<code>vshadowmount /dev/sdX1 /mnt/vss</code> — $(L "espone gli snapshot come file vssN" "expose snapshots as vssN files")<br>"
+        BODY+="<code>mount -o ro,loop /mnt/vss/vss1 /mnt/snap1</code><br>"
+        BODY+="<code>./fiuto.sh /mnt/snap1 --all</code> — $(L "rilancia FIUTO sullo snapshot" "re-run FIUTO on the snapshot")<br><br>"
+        BODY+="$(L "Confrontando i report di due snapshot si isola cosa e' cambiato nella finestra di compromissione." \
+            "Comparing the reports of two snapshots isolates what changed during the compromise window.")"
+    fi
+    BODY+="</div></div>"
+
+    if [[ "$NSTORE" -gt 0 ]]; then
+        local TABLE; TABLE=$(_rows_to_table "$ROWS" \
+            "$(L "Ultima modifica" "Last modified")" "$(L "Contenitore" "Container")" "$(L "Byte" "Bytes")")
+        BODY+="<div class='cards'>$(generic_card_html "$(L "Contenitori shadow copy" "Shadow copy containers")" "${SVI:-System Volume Information}" "$NSTORE" "$TABLE" "◫")</div>"
+    fi
+
+    local STATS
+    STATS="$(stat_box "$(L "Contenitori" "Containers")" "$NSTORE" "$([[ "$NSTORE" -eq 0 ]] && echo warn || echo info)")"
+    [[ "$NSTORE" -gt 0 ]] && STATS+="$(stat_box "$(L "Spazio" "Space")" "$(numfmt --to=iec "$TOTBYTES" 2>/dev/null || echo "$TOTBYTES")" "info")"
+    finish_report "vss" "Volume Shadow Copies" "VSS" "System Volume Information" "$STATS" "$BODY"
+}
+
+# ================================================================
+#  MODULO 44 — Outlook PST / OST
+#
+#  FIUTO non aveva alcuna copertura della posta locale, che in un caso di
+#  phishing, BEC o esfiltrazione e' spesso il punto di partenza: il messaggio
+#  di ingresso, l'allegato eseguito, le regole di inoltro create
+#  dall'attaccante e la corrispondenza esfiltrata stanno tutti qui.
+#
+#  Un OST conserva anche messaggi cancellati lato server ma non ancora
+#  sincronizzati: a volte e' l'unica copia rimasta.
+#
+#  Richiede pypff (libpff). Senza, il modulo si limita all'inventario dei file
+#  con dimensioni e date, che e' comunque utile per l'acquisizione.
+# ================================================================
+module_pst_ost() {
+    section_header "Outlook PST / OST" "$YELLOW"
+    check_win_root || return 1
+
+    local -a STORES=()
+    local F HOME_DIR
+    while IFS= read -r HOME_DIR; do
+        while IFS= read -r F; do
+            [[ -n "$F" ]] && STORES+=("$F")
+        done < <(find "$HOME_DIR" -maxdepth 6 -type f \( -iname '*.pst' -o -iname '*.ost' \) 2>/dev/null)
+    done < <(get_user_homes)
+
+    if [[ ${#STORES[@]} -eq 0 ]]; then
+        warn "$(L "Nessun archivio PST/OST trovato." "No PST/OST store found.")"
+        return 0
+    fi
+    ok "$(L "Archivi trovati:" "Stores found:") ${BOLD}${#STORES[@]}"
+
+    # Inventario: utile anche senza pypff (dimensioni, date, hash per la catena
+    # di custodia, stima dei tempi di elaborazione).
+    local INV="" TOTBYTES=0
+    for F in "${STORES[@]}"; do
+        local SZ MT
+        SZ=$(stat -c %s "$F" 2>/dev/null || echo 0)
+        MT=$(stat -c %y "$F" 2>/dev/null | cut -d. -f1 || echo "?")
+        TOTBYTES=$((TOTBYTES + SZ))
+        info "$(basename "$F") — ${BOLD}$(numfmt --to=iec "$SZ" 2>/dev/null || echo "$SZ")${RESET} ${DIM}${MT}${RESET}"
+        INV+="${MT}	$(basename "$F")	${SZ}	${F}
+"
+    done
+
+    local HAVE_PYPFF=false
+    "$PY3" -c "import pypff" 2>/dev/null && HAVE_PYPFF=true
+
+    local OUT; OUT=$(mktemp); register_tmp "$OUT"
+    local NMSG=0 NSUSP=0
+    if $HAVE_PYPFF; then
+        info "$(L "Estrazione messaggi con pypff (puo' richiedere tempo)..." "Extracting messages with pypff (may take a while)...")"
+        local IOCTMP; IOCTMP=$(mktemp); register_tmp "$IOCTMP"
+        printf '%s\n' "${IOC_LIST[@]:-}" > "$IOCTMP"
+        "$PY3" - "$OUT" "$IOCTMP" "${STORES[@]}" << 'PYEOF' 2>/dev/null
+import sys, os, datetime
+
+out_path, ioc_path = sys.argv[1], sys.argv[2]
+stores = sys.argv[3:]
+
+try:
+    iocs = [l.strip().lower() for l in open(ioc_path, encoding='utf-8', errors='replace') if l.strip()]
+except Exception:
+    iocs = []
+
+import pypff
+
+# Indicatori tipici di phishing/BEC negli header e negli allegati.
+SUSP_EXT = ('.exe', '.scr', '.js', '.vbs', '.jse', '.wsf', '.hta', '.lnk',
+            '.iso', '.img', '.7z', '.ace', '.docm', '.xlsm', '.pptm', '.jar', '.ps1')
+
+rows = []
+
+def walk(folder, path, src):
+    try:
+        subs = folder.number_of_sub_folders
+    except Exception:
+        subs = 0
+    for i in range(subs):
+        try:
+            sub = folder.get_sub_folder(i)
+        except Exception:
+            continue
+        name = ''
+        try:
+            name = sub.name or ''
+        except Exception:
+            pass
+        walk(sub, f"{path}/{name}", src)
+    try:
+        n = folder.number_of_sub_messages
+    except Exception:
+        return
+    for i in range(n):
+        try:
+            msg = folder.get_sub_message(i)
+        except Exception:
+            continue
+        def g(attr):
+            try:
+                v = getattr(msg, attr)
+                return v if isinstance(v, str) else (v or '')
+            except Exception:
+                return ''
+        subject = g('subject')
+        sender = g('sender_name')
+        try:
+            when = msg.get_delivery_time()
+            when = when.strftime('%Y-%m-%d %H:%M:%S') if when else ''
+        except Exception:
+            when = ''
+        # Allegati
+        atts = []
+        try:
+            for a in range(msg.number_of_attachments):
+                try:
+                    att = msg.get_attachment(a)
+                    an = ''
+                    try:
+                        an = att.get_name() or ''
+                    except Exception:
+                        pass
+                    atts.append(an)
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        att_s = '; '.join(x for x in atts if x)
+        flags = []
+        low_att = att_s.lower()
+        if any(low_att.endswith(e) or (e + ';') in low_att or (e + ' ') in low_att for e in SUSP_EXT):
+            flags.append('ALLEGATO_RISCHIOSO')
+        blob = f"{subject} {sender} {att_s}".lower()
+        if iocs and any(i in blob for i in iocs):
+            flags.append('IOC')
+        rows.append((when, path, sender[:120], subject[:200], att_s[:200], ';'.join(flags), src))
+
+for sp in stores:
+    src = os.path.basename(sp)
+    try:
+        pff = pypff.file()
+        pff.open(sp)
+        root = pff.get_root_folder()
+    except Exception:
+        continue
+    try:
+        walk(root, '', src)
+    except Exception:
+        pass
+    try:
+        pff.close()
+    except Exception:
+        pass
+
+rows.sort(key=lambda r: r[0])
+with open(out_path, 'w', encoding='utf-8') as fh:
+    for r in rows:
+        fh.write('\t'.join(str(x).replace('\t', ' ').replace('\n', ' ') for x in r) + '\n')
+PYEOF
+        [[ -s "$OUT" ]] && NMSG=$(wc -l < "$OUT")
+        [[ "$NMSG" -gt 0 ]] && NSUSP=$(awk -F'\t' '$6!=""' "$OUT" | wc -l)
+        ok "$(L "Messaggi estratti:" "Messages extracted:") ${BOLD}$NMSG"
+        [[ "$NSUSP" -gt 0 ]] && warn "$(L "Messaggi con allegato rischioso o match IoC:" "Messages with risky attachment or IoC match:") ${BOLD}$NSUSP"
+    else
+        warn "$(L "pypff non disponibile: estratto solo l'inventario degli archivi." \
+                 "pypff unavailable: only the store inventory was extracted.")"
+        info "$(L "Installalo con:" "Install it with:") ${PY3} -m pip install libpff-python"
+    fi
+
+    ask_yn "Generare report HTML?" || return 0
+
+    local BODY=""
+    local INVTABLE; INVTABLE=$(_rows_to_table "$INV" \
+        "$(L "Ultima modifica" "Last modified")" "$(L "Archivio" "Store")" "$(L "Byte" "Bytes")" "$(L "Percorso" "Path")")
+    BODY+="<div class='cards'>$(generic_card_html "$(L "Archivi di posta" "Mail stores")" "$(L "inventario" "inventory")" "${#STORES[@]}" "$INVTABLE" "✉")</div>"
+
+    if [[ "$NMSG" -gt 0 ]]; then
+        local ROWS; ROWS=$( { awk -F'\t' '$6!=""{print $1"\t"$2"\t"$3"\t"$4"\t"$5"\t"$6}' "$OUT";
+                              awk -F'\t' '$6==""{print $1"\t"$2"\t"$3"\t"$4"\t"$5"\t"$6}' "$OUT"; } | head -20000 )
+        local TABLE; TABLE=$(_rows_to_table "$ROWS" \
+            "$(L "Data" "Date")" "$(L "Cartella" "Folder")" "$(L "Mittente" "Sender")" \
+            "$(L "Oggetto" "Subject")" "$(L "Allegati" "Attachments")" "$(L "Segnalazioni" "Flags")")
+        BODY+="<div class='cards'>$(generic_card_html "$(L "Messaggi" "Messages")" "$(L "sospetti in testa" "suspicious first")" "$NMSG" "$TABLE" "✉")</div>"
+    else
+        BODY+="<div class='card'><div style='padding:1rem 1.5rem;font-size:.8rem;line-height:1.7'>"
+        BODY+="$(L "Contenuto dei messaggi non estratto: manca pypff (libpff). Gli archivi sono comunque inventariati sopra e possono essere analizzati a parte con readpst o pffexport." \
+            "Message content not extracted: pypff (libpff) is missing. The stores are inventoried above and can be analysed separately with readpst or pffexport.")<br><br>"
+        BODY+="<code>${PY3} -m pip install libpff-python</code><br>"
+        BODY+="<code>pffexport -q archivio.pst</code>"
+        BODY+="</div></div>"
+    fi
+
+    local STATS
+    STATS="$(stat_box "$(L "Archivi" "Stores")" "${#STORES[@]}")"
+    STATS+="$(stat_box "$(L "Dimensione" "Size")" "$(numfmt --to=iec "$TOTBYTES" 2>/dev/null || echo "$TOTBYTES")" "info")"
+    if [[ "$NMSG" -gt 0 ]]; then
+        STATS+="$(stat_box "$(L "Messaggi" "Messages")" "$NMSG" "info")"
+        STATS+="$(stat_box "$(L "Sospetti" "Suspicious")" "$NSUSP" "$([[ "$NSUSP" -gt 0 ]] && echo warn || echo info)")"
+    fi
+    finish_report "pst_ost" "Outlook PST / OST" "PST" "*.pst · *.ost" "$STATS" "$BODY"
+}
+
+# ================================================================
 #  MODULI LINUX
 # ================================================================
 
@@ -12580,6 +13265,11 @@ MODULES_WIN=(
     "module_master_timeline|Master Timeline|YELLOW|Aggregazione cross-moduli con filtri§Cross-module aggregation with filters"
     "module_pad_offline|PAD Offline AD Analysis|RED|NTDS.dit offline — utenti privilegiati, ACL, GPO§NTDS.dit offline — privileged users, ACL, GPO|_guard_pad_offline"
     "module_ai_chat|AI Chat History|MAGENTA|Claude · ChatGPT · Copilot · Cursor · Gemini · Codex"
+    "module_setupapi|SetupAPI Device Log|BLUE|Prima installazione dispositivi (USB)§Device first install (USB)"
+    "module_ps_transcripts|PowerShell Transcript|MAGENTA|Sessioni complete: comandi + output§Full sessions: commands + output"
+    "module_lsa_secrets|LSA Secrets & DCC2|RED|SECURITY hive — password servizi, cache dominio§SECURITY hive — service passwords, domain cache"
+    "module_vss|Volume Shadow Copies|CYAN|Snapshot precedenti del volume§Earlier volume snapshots"
+    "module_pst_ost|Outlook PST / OST|YELLOW|Posta locale, allegati, item cancellati§Local mail, attachments, deleted items"
 )
 
 MODULES_LINUX=(
@@ -12664,7 +13354,7 @@ main() {
                     echo -e "    riapplicati su una copia temporanea: senza questo passaggio le"
                     echo -e "    scritture piu' recenti dell'hive non sono visibili.${RESET}"
                     echo ""
-                    echo -e "  ${BOLD}Moduli disponibili (1-39):${RESET}"
+                    echo -e "  ${BOLD}Moduli disponibili (1-44):${RESET}"
                 else
                     echo -e "${CYAN}${BOLD}fiuto.sh${RESET} — DFIR Toolkit for offline Windows disk analysis"
                     echo ""
@@ -12682,7 +13372,7 @@ main() {
                     echo -e "    onto a temporary copy: without this step the most recent hive"
                     echo -e "    writes are not visible.${RESET}"
                     echo ""
-                    echo -e "  ${BOLD}Available modules (1-39):${RESET}"
+                    echo -e "  ${BOLD}Available modules (1-44):${RESET}"
                 fi
                 echo -e "    1  PowerShell History        2  Notepad TabState"
                 echo -e "    3  IFEO Hijacking            4  BAM"

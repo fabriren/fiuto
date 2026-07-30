@@ -66,6 +66,11 @@ MODULES_WIN=(
     "module_master_timeline|Master Timeline|YELLOW|Aggregazione cross-moduli con filtri§Cross-module aggregation with filters"
     "module_pad_offline|PAD Offline AD Analysis|RED|NTDS.dit offline — utenti privilegiati, ACL, GPO§NTDS.dit offline — privileged users, ACL, GPO|_guard_pad_offline"
     "module_ai_chat|AI Chat History|MAGENTA|Claude · ChatGPT · Copilot · Cursor · Gemini · Codex"
+    "module_setupapi|SetupAPI Device Log|BLUE|Prima installazione dispositivi (USB)§Device first install (USB)"
+    "module_ps_transcripts|PowerShell Transcript|MAGENTA|Sessioni complete: comandi + output§Full sessions: commands + output"
+    "module_lsa_secrets|LSA Secrets & DCC2|RED|SECURITY hive — password servizi, cache dominio§SECURITY hive — service passwords, domain cache"
+    "module_vss|Volume Shadow Copies|CYAN|Snapshot precedenti del volume§Earlier volume snapshots"
+    "module_pst_ost|Outlook PST / OST|YELLOW|Posta locale, allegati, item cancellati§Local mail, attachments, deleted items"
 )
 
 MODULES_LINUX=(
