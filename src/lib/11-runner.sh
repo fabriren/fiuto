@@ -262,6 +262,9 @@ render_menu_from_registry() {
     done
     echo ""
     echo -e "  ${WHITE}${BOLD}[0]${RESET}  ${BOLD}${_RUN_ALL}${RESET}"
+    if [[ ${#GENERATED_REPORTS[@]} -gt 0 ]]; then
+        echo -e "  ${WHITE}${BOLD}[S]${RESET}  ${BOLD}$(L "Executive summary dei report di questa sessione" "Executive summary of this session's reports")${RESET}"
+    fi
     echo ""
     if [[ ${#GENERATED_REPORTS[@]} -gt 0 ]]; then
         echo -e "  ${DIM}── ${_REPORTS_LABEL} (${#GENERATED_REPORTS[@]}) ──────────────────────────${RESET}"
@@ -364,6 +367,9 @@ run_all_from_registry() {
     done
     echo ""
     ok "$(L "Report salvati integralmente in:" "All reports saved in:") ${BOLD}$REPORT_BASE_DIR"
+    # Il riepilogo va generato PRIMA della dashboard: la dashboard elenca i
+    # report esistenti, e il riepilogo e' il primo che va aperto.
+    generate_executive_summary
     generate_full_dashboard
 }
 

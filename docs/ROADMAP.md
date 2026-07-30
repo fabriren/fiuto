@@ -34,7 +34,7 @@ Stato aggiornato al: **2026-07-30** (versione 2.2, Fasi 1-5 complete, Fase 6 ini
 | Area | Stato |
 |---|---|
 | CI (bash -n, ShellCheck, bats, parser Python su 3.9 + 3.12) | ✅ |
-| Suite di test — 107 test bats | ✅ |
+| Suite di test — 127 test bats | ✅ |
 | Replay transaction log registro (`.LOG1`/`.LOG2`) | ✅ |
 | Export JSONL / schema Timesketch (`--jsonl`) | ✅ |
 | macOS: FSEvents, Spotlight | ✅ |
@@ -48,6 +48,8 @@ Stato aggiornato al: **2026-07-30** (versione 2.2, Fasi 1-5 complete, Fase 6 ini
 | Libreria Python condivisa SQLite (`src/lib/14-pylib-sqlite.sh`) | ✅ |
 | Fase 6.1 — chain of custody (`evidence_manifest.json`) | ✅ |
 | Fase 6.2 — finestra temporale `--since`/`--until` + fuso del volume | ✅ |
+| Fase 6.3 — executive summary, scoring e correlazione cross-modulo | ✅ |
+| Libreria Python condivisa timeline (`src/lib/17-pylib-timeline.sh`) | ✅ |
 | Flag `defer` nel registro (numerazione stabile) | ✅ |
 | Libreria Python condivisa LevelDB/Snappy (`src/lib/13-pylib-leveldb.sh`) | ✅ |
 
@@ -292,10 +294,42 @@ Ordinati per rapporto valore/costo.
    filtrato dichiara quante righe ha nascosto. Un limite malformato **ferma
    l'esecuzione**: ignorarlo produrrebbe un report che dichiara una copertura
    che non ha.
-3. **Executive summary con scoring.** Findings ordinati per severità e
-   correlazione cross-modulo (es. USB inserito + LNK + picco USN nella stessa
-   finestra ⇒ candidato esfiltrazione). È ciò che distingue un tool DFIR da un
-   dumper.
+3. ~~**Executive summary con scoring.**~~ ✅ **Fatto (6.3)** —
+   `src/lib/18-summary.sh`, `executive_summary.html` + `findings.json`.
+   Generato a fine `--all` e dalla voce `[S]` del menu.
+
+   **Tre sostrati, in ordine di affidabilità decrescente:** le righe che i
+   moduli hanno già marcato `sensitive` (giudizio di chi conosce l'artefatto),
+   le corrispondenze `--ioc`, e una tabella di regole esplicite in
+   `finding_rules_tsv`. Le regole girano **solo sul dato** (`read_report_data`:
+   righe di tabella e righe di log), mai sulla prosa dei cartigli: un motore
+   che leggesse l'intera pagina scatterebbe sulle spiegazioni scritte da FIUTO
+   stesso. C'è un test dedicato, ed è il primo che si rompe se qualcuno
+   allarga l'estrazione.
+
+   **Aggiungendo regole:** preferire pattern che descrivono la *forma* del dato
+   (un base64 lungo dopo `-enc`) a parole che possono comparire in un nome di
+   file legittimo. In un executive summary una regola rumorosa costa più di una
+   regola mancante: fa perdere fiducia in tutte le altre. I test strutturali
+   verificano campi, severità, validità delle regex e — soprattutto —
+   **esistenza degli slug citati**: uno slug sbagliato non rompe niente, la
+   regola semplicemente non scatta mai.
+
+   **Correlazione:** cluster temporali di 30 minuti su tutti gli eventi, con
+   scenari in `correlation_scenarios_tsv`. Sono ipotesi, e il report le
+   presenta come tali. Ogni riscontro porta la sua tecnica MITRE: il punto 8
+   resta aperto solo per l'export del layer Navigator.
+
+   **Punteggio:** somma dei pesi (40/15/5/1) limitata a 100, con formula
+   stampata nel report. Ordina la coda di lavoro, non misura la
+   compromissione — e l'assenza di riscontri è dichiarata come "le poche regole
+   applicate non hanno trovato nulla", non come esito negativo dell'analisi.
+
+   **Nota di refactoring:** l'estrazione degli eventi dall'HTML viveva dentro
+   `export_report_jsonl`. Serve identica al riepilogo, che deve poter correlare
+   anche senza `--jsonl`, quindi è stata spostata in `pylib_timeline`
+   (`src/lib/17-pylib-timeline.sh`). L'export ne è ora un consumatore: i 12
+   test JSONL esistenti hanno presidiato il cambio.
 4. **Detection engine Sigma/YARA.** `--sigma <dir>` sugli EVTX (approccio
    Chainsaw/Hayabusa), `--yara <rules>` su file estratti, quarantena, ESP.
    Trasforma FIUTO da collector a triage.
@@ -306,7 +340,7 @@ Ordinati per rapporto valore/costo.
    (IP/dominio/hash/regex), import STIX/MISP, defanging in output.
 7. **`--redact`.** I report contengono hash NTLM, PSK Wi-Fi, token: serve una
    modalità per condividerli senza i segreti.
-8. **Mapping MITRE ATT&CK** per finding + export di un layer Navigator.
+8. **Mapping MITRE ATT&CK.** Le tecniche sono già sui riscontri (Fase 6.3): resta l'export del layer Navigator.
 9. **Immagini senza mount manuale.** `ewfmount` per E01, `losetup` per raw/dd,
    volumi cifrati (BitLocker/`dislocker`, LUKS, FileVault).
 

@@ -426,6 +426,42 @@ Files above the size limit (1 GB by default — `pagefile.sys`, `$MFT`,
 `Windows.edb`) are still listed, with the reason the hash is missing rather
 than silently omitting it.
 
+### Executive summary
+
+Ninety HTML reports are a dump, not an analysis. At the end of `--all` — and
+from `[S]` in the menu, for the reports produced so far — FIUTO writes an
+`executive_summary.html` and a machine-readable `findings.json` next to them.
+
+It answers two questions: **where do I start** and **what happened alongside
+what else**. It does not answer "is this machine compromised": that is the
+analyst's conclusion, and the page says so at the top.
+
+Findings come from three substrates, in decreasing order of reliability:
+
+1. **rows the modules already flagged** — every module passes its own keyword
+   list to the log renderer; a flagged row is a judgement by someone who knows
+   the artefact;
+2. **IoC matches**, when `--ioc` was used;
+3. **an explicit rule table**, deliberately small, each rule carrying a MITRE
+   ATT&CK technique and an explanation of why that data matters.
+
+Rules run **only on the data** — table rows and log lines — never on the
+explanatory notes FIUTO itself writes into the reports. A detection engine
+reading the whole page would fire on its own prose; there is a test for this.
+
+**Cross-module correlation** is what no single report can show. Events from all
+reports are clustered in 30-minute windows; when a window contains modules
+matching a known scenario, the summary states the hypothesis — for example
+removable media connected while LNK files were opened and the USN journal
+recorded changes. These are **hypotheses to verify**, and the page labels them
+as such: temporal coincidence is not causation.
+
+The **priority score** is the sum of finding weights (critical 40, high 15,
+medium 5, low 1) capped at 100. It orders the work queue; it does not measure
+compromise, and the report prints the formula so the number is never taken for
+more than it is. Equally, no findings is not a clean bill of health — it means
+a small, conservative rule set found nothing.
+
 ### Time window (`--since` / `--until`)
 
 On a large disk a report can run to hundreds of thousands of rows spanning
@@ -568,7 +604,7 @@ python3 tests/lint_embedded_python.py fiuto.sh   # compile the embedded parsers
 ```
 
 CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs on every push:
-bash syntax, ShellCheck, the bats suite, and compilation of the ~92 Python
+bash syntax, ShellCheck, the bats suite, and compilation of the ~94 Python
 parsers embedded as heredocs on both Python 3.9 and 3.12.
 
 That last job is not decoration: `bash -n` treats heredocs as opaque text, so a
@@ -1010,6 +1046,45 @@ I file oltre la soglia (1 GB di default — `pagefile.sys`, `$MFT`,
 `Windows.edb`) restano elencati, con il motivo per cui manca l'hash invece di
 ometterlo in silenzio.
 
+### Executive summary (riepilogo di sessione)
+
+Novanta report HTML sono un dump, non un'analisi. Al termine di `--all` — e da
+`[S]` nel menu, sui report prodotti fino a quel momento — FIUTO scrive accanto
+a loro un `executive_summary.html` e un `findings.json` leggibile da programma.
+
+Risponde a due domande: **da dove comincio** e **cosa è successo insieme a
+cos'altro**. Non risponde a "la macchina è compromessa": quella è una
+conclusione dell'analista, e la pagina lo dice in testa.
+
+I riscontri vengono da tre sostrati, in ordine di affidabilità decrescente:
+
+1. **le righe che i moduli hanno già marcato** — ogni modulo passa le proprie
+   parole chiave al renderer dei log, e una riga marcata è un giudizio di chi
+   conosce l'artefatto;
+2. **le corrispondenze con gli IoC**, se è stato usato `--ioc`;
+3. **una tabella di regole esplicite**, deliberatamente piccola, ognuna con la
+   sua tecnica MITRE ATT&CK e la spiegazione del perché quel dato conta.
+
+Le regole girano **solo sul dato** — righe di tabella e righe di log — mai sui
+cartigli esplicativi che FIUTO stesso scrive nei report. Un motore di detection
+che leggesse l'intera pagina scatterebbe sulla propria prosa: c'è un test che
+lo presidia.
+
+La **correlazione cross-modulo** è ciò che nessun report singolo può mostrare.
+Gli eventi di tutti i report vengono raggruppati in finestre di 30 minuti;
+quando una finestra contiene moduli che corrispondono a uno scenario noto, il
+riepilogo enuncia l'ipotesi — per esempio un supporto rimovibile collegato
+mentre venivano aperti file LNK e il journal USN registrava modifiche. Sono
+**ipotesi da verificare**, e la pagina le presenta come tali: la coincidenza
+temporale non è un nesso di causa.
+
+Il **punteggio di priorità** è la somma dei pesi dei riscontri (critico 40, alto
+15, medio 5, basso 1) limitata a 100. Ordina la coda di lavoro; non misura la
+compromissione, e il report stampa la formula perché il numero non venga preso
+per più di quello che è. Allo stesso modo, l'assenza di riscontri non è un
+attestato di pulizia: significa che un insieme piccolo e conservativo di regole
+non ha trovato nulla.
+
 ### Finestra temporale (`--since` / `--until`)
 
 Su un disco grande un report può contenere centinaia di migliaia di righe che
@@ -1154,7 +1229,7 @@ python3 tests/lint_embedded_python.py fiuto.sh   # compila i parser incorporati
 ```
 
 La CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) gira a ogni push:
-sintassi bash, ShellCheck, suite bats e compilazione dei ~92 parser Python
+sintassi bash, ShellCheck, suite bats e compilazione dei ~94 parser Python
 incorporati come heredoc, sia su Python 3.9 sia su 3.12.
 
 Quest'ultimo job non è un ornamento: `bash -n` tratta gli heredoc come testo
@@ -1226,6 +1301,8 @@ Both ESE-based modules fall back to string extraction when libesedb cannot open 
 **macOS: six new modules** — Messages, Safari cookies and downloads, XProtect/Gatekeeper, application inventory, Time Machine/snapshots, and unified logs.
 
 **Chain of custody.** Every session now writes an `evidence_manifest.json` recording tool version, command line, operator, analysed volume, and the SHA-256 of every evidence file consulted and every report produced. Until 2.1 hashing was scattered across a handful of modules and there was no way to answer "which files were read, in what state, and are the attached reports the ones produced then?".
+
+**Executive summary.** At the end of `--all`, an `executive_summary.html` plus a machine-readable `findings.json`: findings ordered by severity, each with its MITRE ATT&CK technique, the data it matched and why that data matters — and cross-module time correlations, which is what no single report can show (removable media connected while LNK files were opened and USN recorded changes, and so on). Findings come mostly from what the modules already flagged themselves; the explicit rule table is deliberately small, and it runs only on the data, never on the explanatory prose FIUTO writes into its own reports. The priority score orders the work queue and prints its own formula: it does not measure compromise, and no findings is not a clean bill of health.
 
 **Time window `--since` / `--until`.** On a large disk the incident is three days inside years of artefacts. The window applies to tables, to `<pre>` log blocks and to the JSONL export together, so no two views of a module can disagree. It never removes what it cannot judge: rows without a date are kept, and a row with several dates survives if any of them falls in the window. Every filtered block declares how many rows it hid, and the manifest records the window — a filtered report must not be mistakable for an empty one. The volume timezone is detected and declared, but **nothing is converted**: artefacts on one volume mix UTC and local time, and a blind conversion would shift events by hours.
 

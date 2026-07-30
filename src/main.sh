@@ -245,6 +245,13 @@ main() {
             D)  debug_mounts ;;
             0)  run_all_from_registry "$(active_registry_name)"
                 return_to_menu ;;
+            S)  if [[ ${#GENERATED_REPORTS[@]} -gt 0 ]]; then
+                    generate_executive_summary
+                else
+                    warn "$(L "Nessun report in questa sessione: esegui prima almeno un modulo." \
+                             "No report in this session: run at least one module first.")"
+                fi
+                return_to_menu ;;
             Q)  echo ""
                 if [[ ${#GENERATED_REPORTS[@]} -gt 0 ]]; then
                     clear
