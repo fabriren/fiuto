@@ -92,6 +92,8 @@ YARA_RULES=""                # file o directory di regole YARA (--yara)
 YARA_SCAN_PATH=""            # ambito alternativo da scansionare (--yara-scan)
 YARA_MAX_MB=64               # tetto per file: oltre, il file viene dichiarato saltato
 YARA_MAX_FILES=200000        # tetto complessivo: oltre, la scansione si dichiara parziale
+SIGMA_RULES=""               # file o directory di regole Sigma (--sigma)
+SIGMA_MAX_RECORDS=300000     # tetto sui record EVTX letti: oltre, valutazione parziale dichiarata
 # Lo stato del replay (cache, esiti, avvisi gia' emessi) vive su disco in
 # ${TMPDIR:-/tmp}/fiuto_hives_$$ e non in variabili: recover_hive gira quasi
 # sempre dentro una command substitution, quindi in subshell.
@@ -2963,6 +2965,7 @@ linux_ssh	MEDIA	T1098.004	ssh-(rsa|ed25519|dss)|ecdsa-sha2	Chiave in authorized_
 macos_persistence|macos_loginitems	ALTA	T1543.001	(/tmp/|/users/shared/|/private/var/tmp/)	LaunchAgent o LoginItem in una directory scrivibile§LaunchAgent or LoginItem in a writable directory	Un elemento di avvio che punta a una cartella condivisa o temporanea invece che a /Applications o ai bundle di sistema.§A startup item pointing at a shared or temporary folder rather than /Applications or system bundles.
 macos_tcc	MEDIA	T1123	kTCCServiceScreenCapture|kTCCServiceListenEvent|kTCCServiceAccessibility|kTCCServiceMicrophone	Permesso TCC ad alto impatto concesso§High-impact TCC permission granted	Accessibility, cattura schermo, tastiera e microfono: con questi permessi un'applicazione vede e registra tutto quello che fa l'utente.§Accessibility, screen capture, keystrokes and microphone: with these an application sees and records everything the user does.
 xplat_sqlite_recovery	MEDIA	T1555	password|passwd|token|api[_-]?key|secret	Credenziale in un record SQLite cancellato§Credential in a deleted SQLite record	Una stringa che sembra una credenziale recuperata da spazio non allocato: era stata cancellata dall'applicazione ma e' rimasta nel file.§A credential-looking string recovered from unallocated space: the application deleted it but it stayed in the file.
+sigma	ALTA	T1059	.	Match di una regola Sigma§Sigma rule match	Una detection della comunita' ha riconosciuto un evento negli EVTX. Il livello originale della regola e' nella tabella del modulo; qui la severita' e' uniforme perche' FIUTO non puo' giudicare la qualita' di una regola di terze parti.§A community detection matched an event in the EVTX. The rule's own level is in the module table; the severity here is uniform because FIUTO cannot judge the quality of a third-party rule.
 yara	ALTA	T1204	.	Match di una regola YARA§YARA rule match	Una firma esterna ha riconosciuto un file sul volume. Il peso dipende da chi ha scritto la regola: la severita' qui e' uniforme perche' FIUTO non puo' giudicare la qualita' di una regola di terze parti.§An external signature recognised a file on the volume. Its weight depends on who wrote the rule: the severity here is uniform because FIUTO cannot judge the quality of a third-party rule.
 usb|setupapi	BASSA	T1052.001	.	Supporti rimovibili collegati§Removable media connected	Da solo non significa nulla. Conta per la correlazione: un supporto collegato nella stessa finestra in cui compaiono LNK e attivita' USN e' il profilo di un'esfiltrazione.§On its own it means nothing. It matters for correlation: media connected in the same window as LNK and USN activity is the shape of an exfiltration.
 RULESEOF
@@ -13276,6 +13279,320 @@ PYEOF
 }
 
 # ================================================================
+#  MODULO 51 — Sigma sugli Event Log (EVTX)
+#
+#  Sigma e' il formato in cui la comunita' pubblica le detection: SigmaHQ,
+#  i CERT e i vendor distribuiscono migliaia di regole YAML. Applicarle agli
+#  EVTX di un disco acquisito e' quello che fanno Chainsaw e Hayabusa, ed e' il
+#  passo che trasforma una raccolta di log in un triage.
+#
+#  IL SOTTOINSIEME SUPPORTATO E' DICHIARATO, NON IMPLICITO. Sigma e' un
+#  linguaggio ampio: modificatori base64, CIDR, condizioni con parentesi,
+#  aggregazioni temporali. Implementarne una parte e far finta di supportarlo
+#  tutto significherebbe che una regola non valutata risulta "non scattata" —
+#  cioe' un falso negativo silenzioso, il difetto peggiore che una detection
+#  possa avere. Qui le regole che il motore non sa valutare vengono CONTATE ED
+#  ELENCATE nel report con il motivo.
+#
+#  Supportato:
+#    - selezioni: mappa campo/valore, liste di valori (OR), liste di mappe (OR)
+#    - modificatori: contains, startswith, endswith, re, all, cased
+#    - condizioni: "sel", "a and b", "a or b", "a and not b", "not a",
+#                  "1 of x*", "all of x*", "1 of them", "all of them"
+#    - null come valore (campo assente o vuoto)
+#
+#  Non supportato (regola scartata e dichiarata):
+#    - condizioni con parentesi o aggregazioni (| count, near, timeframe)
+#    - modificatori base64/base64offset, utf16, wide, cidr, gt/lt
+#    - logsource non mappabile a un canale EVTX presente sul volume
+#
+#  Il compilatore vive in src/lib/19-pylib-sigma.sh: e' la parte rischiosa —
+#  un modificatore interpretato male produce un falso negativo invisibile — e
+#  li' e' esercitabile dai test con eventi sintetici, senza un .evtx. Qui resta
+#  la lettura degli EVTX e la presentazione.
+# ================================================================
+
+_guard_sigma() {
+    if [[ -z "${SIGMA_RULES:-}" ]]; then
+        L "nessuna regola (--sigma)" "no rules (--sigma)"
+        return 1
+    fi
+    return 0
+}
+
+module_sigma() {
+    section_header "Sigma — Event Log" "$RED"
+    check_win_root || return 1
+
+    if [[ -z "${SIGMA_RULES:-}" ]]; then
+        warn "$(L "Nessuna regola indicata." "No rules given.")"
+        info "$(L "Uso: --sigma /percorso/regole/  (file .yml o directory, anche annidata)" \
+                 "Usage: --sigma /path/rules/  (a .yml file or a directory, nested is fine)")"
+        return 0
+    fi
+    [[ -e "$SIGMA_RULES" ]] || { err "$(L "Percorso regole inesistente:" "Rules path does not exist:") $SIGMA_RULES"; return 1; }
+
+    if ! "$PY3" -c "import yaml" 2>/dev/null; then
+        err "$(L "PyYAML non disponibile: le regole Sigma sono file YAML." \
+                 "PyYAML unavailable: Sigma rules are YAML files.")"
+        info "$(L "Installa con:" "Install with:") ${PY3} -m pip install pyyaml"
+        return 1
+    fi
+    if ! "$PY3" -c "import Evtx" 2>/dev/null; then
+        err "$(L "python-evtx non disponibile: senza non si leggono gli EVTX." \
+                 "python-evtx unavailable: without it EVTX cannot be read.")"
+        info "$(L "Installa con:" "Install with:") ${PY3} -m pip install python-evtx"
+        return 1
+    fi
+
+    local EVTX_DIR; EVTX_DIR=$(ci_find_dir "$WIN_ROOT" "Windows/System32/winevt/Logs")
+    [[ -z "$EVTX_DIR" ]] && EVTX_DIR=$(ci_find_dir "$WIN_ROOT" "Windows/System32/config")
+    if [[ -z "$EVTX_DIR" ]]; then
+        warn "$(L "Directory dei log eventi non trovata." "Event log directory not found.")"
+        return 0
+    fi
+    info "$(L "Log eventi:" "Event logs:") ${BOLD}${EVTX_DIR}"
+    info "$(L "Regole:" "Rules:") ${BOLD}${SIGMA_RULES}"
+    info "$(L "Valutazione in corso (dipende dal numero di regole e dalla dimensione dei log)..." \
+             "Evaluating (depends on rule count and log size)...")"
+
+    local OUT; OUT=$(mktemp); register_tmp "$OUT"
+    local STATS; STATS=$(mktemp); register_tmp "$STATS"
+
+    run_py_with_lib pylib_sigma "$SIGMA_RULES" "$EVTX_DIR" "$OUT" "$STATS" "$SIGMA_MAX_RECORDS" << 'PYEOF'
+import sys, os, re, json, glob
+
+rules_path, evtx_dir, out_path, stats_path = sys.argv[1:5]
+MAX_RECORDS = int(sys.argv[5])
+
+
+import Evtx.Evtx as evtx
+
+NS = 'http://schemas.microsoft.com/win/2004/08/events/event'
+
+available = {os.path.basename(p).lower(): p
+             for p in glob.glob(os.path.join(evtx_dir, '*.evtx'))}
+rules, rejected = load_sigma_rules(rules_path, available)
+
+stats = {
+    'rules_loaded': len(rules) + len(rejected),
+    'rules_active': len(rules),
+    'rules_rejected': rejected[:400],
+    'rules_rejected_total': len(rejected),
+    'channels': [],
+    'records_read': 0,
+    'stopped_at_cap': False,
+}
+
+if not rules:
+    json.dump(stats, open(stats_path, 'w'), ensure_ascii=False)
+    sys.exit(0)
+
+# --- valutazione -----------------------------------------------------------
+by_file = {}
+for r in rules:
+    for f in r['files']:
+        by_file.setdefault(f, []).append(r)
+
+_TAG = re.compile(r'\{[^}]+\}')
+rows = []
+seen = set()
+
+for path, rlist in sorted(by_file.items()):
+    n = 0
+    try:
+        with evtx.Evtx(path) as log:
+            for rec in log.records():
+                if stats['records_read'] >= MAX_RECORDS:
+                    stats['stopped_at_cap'] = True
+                    break
+                n += 1
+                stats['records_read'] += 1
+                try:
+                    root = rec.lxml()
+                except Exception:
+                    continue
+                sysel = root.find('{%s}System' % NS)
+                if sysel is None:
+                    continue
+                ev = {}
+                eid = ''
+                ts = ''
+                for child in sysel:
+                    tag = _TAG.sub('', child.tag)
+                    if tag == 'EventID':
+                        eid = (child.text or '').strip()
+                        ev['EventID'] = eid
+                    elif tag == 'TimeCreated':
+                        ts = child.attrib.get('SystemTime', '')[:19]
+                    elif tag == 'Provider':
+                        ev['Provider_Name'] = child.attrib.get('Name', '')
+                    elif tag == 'Channel':
+                        ev['Channel'] = (child.text or '').strip()
+                    elif tag == 'Computer':
+                        ev['Computer'] = (child.text or '').strip()
+                de = root.find('.//{%s}EventData' % NS)
+                if de is not None:
+                    for it in de:
+                        key = it.attrib.get('Name') or _TAG.sub('', it.tag)
+                        ev[key] = (it.text or '').strip()
+                for r in rlist:
+                    try:
+                        if not r['pred'](ev):
+                            continue
+                    except Exception:
+                        continue
+                    key = (r['title'], ts, eid)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    # Il contesto e' cio' che rende il match verificabile: i
+                    # campi piu' parlanti, non il record intero.
+                    ctx = ' | '.join(
+                        '%s=%s' % (k, v[:120])
+                        for k, v in ev.items()
+                        if k in ('Image', 'CommandLine', 'ParentImage', 'ParentCommandLine',
+                                 'TargetUserName', 'SubjectUserName', 'ServiceName',
+                                 'ScriptBlockText', 'TargetFilename', 'DestinationIp',
+                                 'QueryName', 'TargetObject', 'Details') and v)[:600]
+                    rows.append((ts.replace('T', ' '), r['level'], r['title'],
+                                 os.path.basename(path), eid, ctx,
+                                 ','.join(t for t in r['tags'] if t.startswith('attack.'))[:100]))
+    except Exception as exc:
+        stats['channels'].append({'file': os.path.basename(path), 'records': n,
+                                  'error': str(exc)[:150]})
+        continue
+    stats['channels'].append({'file': os.path.basename(path), 'records': n,
+                              'rules': len(rlist)})
+    if stats['stopped_at_cap']:
+        break
+
+LEVEL_ORDER = {'critical': 0, 'high': 1, 'medium': 2, 'low': 3, 'informational': 4}
+rows.sort(key=lambda r: (LEVEL_ORDER.get(r[1], 9), r[0]))
+with open(out_path, 'w', encoding='utf-8') as fh:
+    for r in rows:
+        fh.write('\t'.join(str(x).replace('\t', ' ').replace('\n', ' ') for x in r) + '\n')
+stats['matches'] = len(rows)
+json.dump(stats, open(stats_path, 'w'), ensure_ascii=False)
+PYEOF
+
+    [[ -s "$STATS" ]] || { err "$(L "Valutazione non riuscita." "Evaluation failed.")"; return 1; }
+    local NLOAD NACT NREJ NREC CAPPED
+    read -r NLOAD NACT NREJ NREC CAPPED < <("$PY3" -c '
+import json, sys
+s = json.load(open(sys.argv[1]))
+print(s["rules_loaded"], s["rules_active"], s["rules_rejected_total"],
+      s["records_read"], str(s["stopped_at_cap"]).lower())' "$STATS" 2>/dev/null)
+
+    if [[ "${NACT:-0}" -eq 0 ]]; then
+        warn "$(L "Nessuna regola valutabile su questo volume." "No rule evaluable on this volume.")"
+        info "$(L "Regole caricate:" "Rules loaded:") ${NLOAD:-0}  ·  $(L "scartate:" "rejected:") ${NREJ:-0}"
+        "$PY3" -c '
+import json, sys
+for r in json.load(open(sys.argv[1]))["rules_rejected"][:10]:
+    print("      %s — %s" % (r["rule"][:60], r["reason"]))' "$STATS" 2>/dev/null
+        return 0
+    fi
+
+    local TOTAL=0
+    [[ -s "$OUT" ]] && TOTAL=$(wc -l < "$OUT")
+    ok "$(L "Regole attive:" "Active rules:") ${BOLD}${NACT}${RESET}/${NLOAD}  ·  $(L "record letti:" "records read:") ${BOLD}${NREC}"
+    [[ "${NREJ:-0}" -gt 0 ]] && warn "$(L "Regole non valutate (elencate nel report):" "Rules not evaluated (listed in the report):") ${BOLD}${NREJ}"
+    [[ "$CAPPED" == "true" ]] && warn "$(L "Raggiunto il tetto di record: la valutazione e' PARZIALE." \
+                                          "Record cap reached: the evaluation is PARTIAL.")"
+
+    if [[ "$TOTAL" -eq 0 ]]; then
+        ok "$(L "Nessun match." "No match.")"
+    else
+        warn "$(L "Match:" "Matches:") ${BOLD}${TOTAL}"
+        awk -F'\t' '{printf "      [%s] %s  %s\n", $2, $1, substr($3,1,70)}' "$OUT" | head -20 | while IFS= read -r LN; do
+            echo -e "      ${RED}${LN}${RESET}"
+        done
+    fi
+
+    ask_yn "Generare report HTML?" || return 0
+
+    local TABLE
+    if [[ "$TOTAL" -gt 0 ]]; then
+        TABLE=$(_rows_to_table "$(head -20000 "$OUT")" \
+            "$(L "Data" "Date")" "$(L "Livello" "Level")" "$(L "Regola" "Rule")" \
+            "$(L "Canale" "Channel")" "EventID" "$(L "Contesto" "Context")" "ATT&CK")
+    else
+        TABLE="<div style='padding:.6rem 0;font-size:.85rem'>$(L "Nessun match." "No match.")</div>"
+    fi
+
+    local COV; COV=$("$PY3" - "$STATS" "${LANG:-en}" << 'PYEOF' 2>/dev/null
+import json, sys, html
+
+s = json.load(open(sys.argv[1]))
+it = sys.argv[2] == 'it'
+
+
+def L(i, e):
+    return i if it else e
+
+
+o = ['<div class="card" style="margin-bottom:1rem">'
+     '<div style="padding:1rem 1.5rem;font-size:.8rem;line-height:1.7">']
+o.append('<b>' + L('Copertura effettiva', 'Actual coverage') + '</b><br>')
+o.append(L("Sigma e' un linguaggio ampio e questo motore ne implementa un sottoinsieme. "
+           "Una regola non valutata non e' una regola non scattata: le regole scartate "
+           "sono contate ed elencate qui sotto con il motivo, perche' un falso negativo "
+           "silenzioso e' il difetto peggiore che una detection possa avere.",
+           'Sigma is a broad language and this engine implements a subset of it. '
+           'A rule that was not evaluated is not a rule that did not fire: rejected rules '
+           'are counted and listed below with the reason, because a silent false negative '
+           'is the worst defect a detection can have.') + '<br><br>')
+o.append('<b>%d</b> %s · <b>%d</b> %s · <b>%d</b> %s<br><br>' % (
+    s['rules_loaded'], L('regole caricate', 'rules loaded'),
+    s['rules_active'], L('valutate', 'evaluated'),
+    s['rules_rejected_total'], L('scartate', 'rejected')))
+
+o.append('<table><tr><th>' + L('Canale', 'Channel') + '</th><th>'
+         + L('Record letti', 'Records read') + '</th><th>'
+         + L('Regole applicate', 'Rules applied') + '</th></tr>')
+for c in s['channels']:
+    o.append('<tr><td class="mono">%s</td><td class="mono">%d</td><td class="mono">%s</td></tr>'
+             % (html.escape(c['file']), c.get('records', 0),
+                html.escape(str(c.get('rules', c.get('error', '-'))))))
+o.append('</table>')
+if s['stopped_at_cap']:
+    o.append('<br><b>' + L("Raggiunto il tetto di record: la valutazione e' PARZIALE.",
+                           'Record cap reached: the evaluation is PARTIAL.') + '</b>')
+
+if s['rules_rejected']:
+    reasons = {}
+    for r in s['rules_rejected']:
+        key = r['reason'].split(':')[0].split('(')[0].strip()
+        reasons.setdefault(key, []).append(r['rule'])
+    o.append('<br><br><b>' + L('Regole scartate, per motivo', 'Rejected rules, by reason') + '</b>')
+    o.append('<table><tr><th>' + L('Motivo', 'Reason') + '</th><th>'
+             + L('Regole', 'Rules') + '</th><th>' + L('Esempi', 'Examples') + '</th></tr>')
+    for reason, names in sorted(reasons.items(), key=lambda kv: -len(kv[1])):
+        o.append('<tr><td class="mono">%s</td><td class="mono">%d</td><td class="mono">%s</td></tr>'
+                 % (html.escape(reason), len(names),
+                    html.escape(', '.join(n[:50] for n in names[:3]))))
+    o.append('</table>')
+    if s['rules_rejected_total'] > len(s['rules_rejected']):
+        o.append('<br>' + L('Elenco troncato: scartate in totale %d.'
+                            % s['rules_rejected_total'],
+                            'List truncated: %d rejected in total.'
+                            % s['rules_rejected_total']))
+o.append('</div></div>')
+print(''.join(o))
+PYEOF
+    )
+
+    local SB
+    SB="$(stat_box "Match" "$TOTAL" "$([[ "$TOTAL" -gt 0 ]] && echo warn || echo ok)")"
+    SB+="$(stat_box "$(L "Regole valutate" "Rules evaluated")" "${NACT:-0}" "info")"
+    SB+="$(stat_box "$(L "Regole scartate" "Rules rejected")" "${NREJ:-0}" "$([[ "${NREJ:-0}" -gt 0 ]] && echo warn || echo info)")"
+    SB+="$(stat_box "$(L "Record letti" "Records read")" "${NREC:-0}" "info")"
+    finish_report "sigma" "Sigma" "SIG" "$(basename "$SIGMA_RULES")" "$SB" \
+        "${COV}<div class='cards'>$(generic_card_html "$(L "Riscontri" "Matches")" "$SIGMA_RULES" "$TOTAL" "$TABLE" "⚐")</div>"
+}
+
+# ================================================================
 #  MODULI LINUX
 # ================================================================
 
@@ -17846,6 +18163,272 @@ FIUTO_PYLIB_EOF
 }
 
 # ================================================================
+#  LIBRERIA PYTHON CONDIVISA — compilatore di regole Sigma
+#
+#  Sigma e' un linguaggio ampio e questo e' un motore parziale. La parte
+#  rischiosa non e' leggere gli EVTX, e' decidere cosa una regola significa:
+#  un modificatore interpretato male, o una condizione valutata al contrario,
+#  produce un falso negativo che nessuno vede. Per questo il compilatore vive
+#  qui e non dentro il modulo: cosi' e' esercitabile dai test con eventi
+#  sintetici, senza bisogno di un .evtx.
+#
+#  SOTTOINSIEME SUPPORTATO — dichiarato, non implicito:
+#    selezioni     mappa campo/valore, liste di valori (OR), liste di mappe (OR)
+#    modificatori  contains, startswith, endswith, re, all, cased
+#    condizioni    "sel", "a and b", "a or b", "a and not b", "not a",
+#                  "1 of x*", "all of x*", "1 of them", "all of them"
+#    valori        null = campo assente o vuoto
+#
+#  Tutto il resto solleva Unsupported con il motivo, e il chiamante e' tenuto
+#  a ELENCARE le regole scartate: una regola non valutata non e' una regola
+#  non scattata.
+#
+#  Uso:
+#      run_py_with_lib pylib_sigma "$RULES" << 'PYEOF'
+#      rules, rejected = load_sigma_rules(sys.argv[1], {'security.evtx': '/x/Security.evtx'})
+#      PYEOF
+# ================================================================
+
+pylib_sigma() {
+    cat << 'FIUTO_PYLIB_EOF'
+import os as _os
+import re as _re
+import glob as _glob
+
+import yaml as _yaml
+
+
+class Unsupported(Exception):
+    """La regola usa una costruzione che questo motore non implementa."""
+
+
+SUPPORTED_MODS = {'contains', 'startswith', 'endswith', 're', 'all', 'cased'}
+
+# Sigma descrive la sorgente in astratto; sul disco ci sono file con nomi
+# precisi. Una logsource che non sappiamo mappare NON viene fatta girare a
+# tappeto su tutti i log: la regola verrebbe valutata su campi che in quel
+# canale non esistono, e il "non scattata" sarebbe privo di significato.
+SERVICE_MAP = {
+    'security': ['Security.evtx'],
+    'system': ['System.evtx'],
+    'application': ['Application.evtx'],
+    'sysmon': ['Microsoft-Windows-Sysmon%4Operational.evtx'],
+    'powershell': ['Microsoft-Windows-PowerShell%4Operational.evtx'],
+    'powershell-classic': ['Windows PowerShell.evtx'],
+    'taskscheduler': ['Microsoft-Windows-TaskScheduler%4Operational.evtx'],
+    'windefend': ['Microsoft-Windows-Windows Defender%4Operational.evtx'],
+    'terminalservices-localsessionmanager':
+        ['Microsoft-Windows-TerminalServices-LocalSessionManager%4Operational.evtx'],
+    'wmi': ['Microsoft-Windows-WMI-Activity%4Operational.evtx'],
+    'bits-client': ['Microsoft-Windows-Bits-Client%4Operational.evtx'],
+    'smbclient-security': ['Microsoft-Windows-SmbClient%4Security.evtx'],
+    'ntlm': ['Microsoft-Windows-NTLM%4Operational.evtx'],
+}
+# process_creation sta sia in Security (4688) sia in Sysmon (EID 1): una regola
+# scritta per l'uno vale spesso per l'altro, quindi si applica a entrambi.
+CATEGORY_MAP = {
+    'process_creation': ['Security.evtx', 'Microsoft-Windows-Sysmon%4Operational.evtx'],
+    'network_connection': ['Microsoft-Windows-Sysmon%4Operational.evtx'],
+    'image_load': ['Microsoft-Windows-Sysmon%4Operational.evtx'],
+    'file_event': ['Microsoft-Windows-Sysmon%4Operational.evtx'],
+    'registry_event': ['Microsoft-Windows-Sysmon%4Operational.evtx'],
+    'registry_set': ['Microsoft-Windows-Sysmon%4Operational.evtx'],
+    'registry_add': ['Microsoft-Windows-Sysmon%4Operational.evtx'],
+    'process_access': ['Microsoft-Windows-Sysmon%4Operational.evtx'],
+    'pipe_created': ['Microsoft-Windows-Sysmon%4Operational.evtx'],
+    'dns_query': ['Microsoft-Windows-Sysmon%4Operational.evtx'],
+    'ps_script': ['Microsoft-Windows-PowerShell%4Operational.evtx'],
+    'ps_module': ['Microsoft-Windows-PowerShell%4Operational.evtx'],
+    'ps_classic_start': ['Windows PowerShell.evtx'],
+}
+
+
+def compile_field(key, raw):
+    """(nome_campo, predicato) da una chiave 'Campo|modificatore'."""
+    parts = key.split('|')
+    field = parts[0]
+    mods = [m.lower() for m in parts[1:]]
+    for m in mods:
+        if m not in SUPPORTED_MODS:
+            raise Unsupported('modificatore |%s' % m)
+    cased = 'cased' in mods
+    values = raw if isinstance(raw, list) else [raw]
+
+    def norm(v):
+        return None if v is None else (str(v) if cased else str(v).lower())
+
+    vals = [norm(v) for v in values]
+
+    def actual_of(a):
+        a = '' if a is None else str(a)
+        return a if cased else a.lower()
+
+    if 're' in mods:
+        rxs = [_re.compile(str(v), 0 if cased else _re.I) for v in values]
+
+        def pred(a):
+            return any(r.search('' if a is None else str(a)) for r in rxs)
+    elif 'contains' in mods:
+        if 'all' in mods:
+            def pred(a):
+                s = actual_of(a)
+                return all(v is not None and v in s for v in vals)
+        else:
+            def pred(a):
+                s = actual_of(a)
+                return any(v is not None and v in s for v in vals)
+    elif 'startswith' in mods:
+        def pred(a):
+            s = actual_of(a)
+            return any(v is not None and s.startswith(v) for v in vals)
+    elif 'endswith' in mods:
+        def pred(a):
+            s = actual_of(a)
+            return any(v is not None and s.endswith(v) for v in vals)
+    else:
+        def pred(a):
+            s = actual_of(a)
+            # null in Sigma significa "campo assente o vuoto".
+            return any((v is None and not s) or (v is not None and s == v) for v in vals)
+
+    return field, pred
+
+
+def compile_selection(sel):
+    """funzione(evento)->bool. Una lista di mappe e' un OR fra le mappe."""
+    if isinstance(sel, list):
+        subs = [compile_selection(s) for s in sel]
+        return lambda ev: any(s(ev) for s in subs)
+    if not isinstance(sel, dict):
+        raise Unsupported('selezione non e\' una mappa')
+    checks = [compile_field(k, v) for k, v in sel.items()]
+
+    def run(ev):
+        return all(pred(ev.get(field, '')) for field, pred in checks)
+    return run
+
+
+_COND_RX = _re.compile(
+    r'^(?:(1|all)\s+of\s+(\S+)|not\s+(\S+)|(\S+))'
+    r'(?:\s+(and|or)\s+(?:(not)\s+)?(?:(1|all)\s+of\s+)?(\S+))?$', _re.I)
+
+
+def compile_condition(cond, sels):
+    """Sottoinsieme documentato della grammatica delle condizioni Sigma."""
+    if not isinstance(cond, str):
+        raise Unsupported('condizione non testuale')
+    c = ' '.join(cond.split())
+    if '(' in c or '|' in c:
+        raise Unsupported('condizione con parentesi o aggregazione')
+
+    def resolve(name):
+        n = name.strip()
+        if n.lower() == 'them':
+            got = list(sels.values())
+        elif n.endswith('*'):
+            got = [v for k, v in sels.items() if k.startswith(n[:-1])]
+        else:
+            got = [sels[n]] if n in sels else []
+        if not got:
+            raise Unsupported('selezione %s inesistente' % n)
+        return got
+
+    m = _COND_RX.match(c)
+    if not m:
+        raise Unsupported('condizione non riconosciuta: %s' % c[:60])
+    quant, quant_name, not_name, plain, op, op_not, rquant, rhs = m.groups()
+
+    def side(quantifier, name, negated):
+        group = resolve(name)
+        if (quantifier or '').lower() == 'all':
+            base = lambda ev: all(f(ev) for f in group)   # noqa: E731
+        else:
+            base = lambda ev: any(f(ev) for f in group)   # noqa: E731
+        return (lambda ev: not base(ev)) if negated else base
+
+    if quant:
+        left = side(quant, quant_name, False)
+    elif not_name:
+        left = side(None, not_name, True)
+    else:
+        left = side(None, plain, False)
+
+    if not op:
+        return left
+
+    right = side(rquant, rhs, bool(op_not))
+    if op.lower() == 'and':
+        return lambda ev: left(ev) and right(ev)
+    return lambda ev: left(ev) or right(ev)
+
+
+def _rule_files(path):
+    if _os.path.isdir(path):
+        out = []
+        for ext in ('yml', 'yaml'):
+            out += _glob.glob(_os.path.join(path, '**', '*.' + ext), recursive=True)
+        return sorted(out)
+    return [path]
+
+
+def load_sigma_rules(rules_path, available):
+    """(rules, rejected).
+
+    `available` mappa nome-file-evtx-minuscolo -> percorso reale sul volume.
+    Ogni regola scartata finisce in `rejected` con il motivo: e' quella lista
+    che impedisce di leggere "nessun match" come "nessuna minaccia".
+    """
+    rules, rejected = [], []
+    for rf in _rule_files(rules_path):
+        try:
+            with open(rf, encoding='utf-8', errors='replace') as fh:
+                docs = [d for d in _yaml.safe_load_all(fh) if isinstance(d, dict)]
+        except Exception as exc:
+            rejected.append({'rule': _os.path.basename(rf),
+                             'reason': 'YAML illeggibile: %s' % str(exc)[:120]})
+            continue
+        for doc in docs:
+            name = doc.get('title') or _os.path.basename(rf)
+            det = doc.get('detection')
+            if not isinstance(det, dict) or 'condition' not in det:
+                rejected.append({'rule': name, 'reason': 'detection assente o senza condition'})
+                continue
+            ls = doc.get('logsource') or {}
+            svc = str(ls.get('service', '')).lower()
+            cat = str(ls.get('category', '')).lower()
+            targets = SERVICE_MAP.get(svc) or CATEGORY_MAP.get(cat) or []
+            if not targets:
+                rejected.append({'rule': name, 'reason': 'logsource non mappata (%s/%s)'
+                                 % (ls.get('product', '-'), svc or cat or '-')})
+                continue
+            present = [available[t.lower()] for t in targets if t.lower() in available]
+            if not present:
+                rejected.append({'rule': name, 'reason': 'canale non presente sul volume (%s)'
+                                 % ', '.join(targets)})
+                continue
+            try:
+                sels = {k: compile_selection(v) for k, v in det.items() if k != 'condition'}
+                pred = compile_condition(det['condition'], sels)
+            except Unsupported as exc:
+                rejected.append({'rule': name, 'reason': str(exc)})
+                continue
+            except Exception as exc:
+                rejected.append({'rule': name,
+                                 'reason': 'compilazione fallita: %s' % str(exc)[:120]})
+                continue
+            rules.append({
+                'title': name,
+                'id': doc.get('id', ''),
+                'level': str(doc.get('level', 'medium')),
+                'tags': [t for t in (doc.get('tags') or []) if isinstance(t, str)],
+                'files': present,
+                'pred': pred,
+            })
+    return rules, rejected
+FIUTO_PYLIB_EOF
+}
+
+# ================================================================
 #  REGISTRO MODULI PER OS (data-driven)
 #
 #  Formato entry:
@@ -17928,6 +18511,7 @@ MODULES_WIN=(
     "module_chat_desktop|Chat Desktop|MAGENTA|Slack/Teams/Discord — LevelDB§Slack/Teams/Discord — LevelDB"
     "module_webcache|WebCacheV01|CYAN|IE/Edge Legacy + WinINET§IE/Edge Legacy + WinINET"
     "module_search_index|Search Index|YELLOW|Windows.edb — file indicizzati§Windows.edb — indexed files"
+    "module_sigma|Sigma|RED|Regole Sigma sugli EVTX (--sigma)§Sigma rules over EVTX (--sigma)|_guard_sigma"
     "module_xplat_sqlite_recovery|SQLite Recovery|MAGENTA|Record cancellati da freelist e spazio libero§Deleted records from freelist and free space"
     "module_xplat_esp_bootkit|EFI System Partition|RED|Bootkit e persistenza pre-boot§Bootkits and pre-boot persistence"
     "module_xplat_yara|YARA|RED|Scansione con regole esterne (--yara)§Scan with external rules (--yara)|_guard_yara"
@@ -18040,6 +18624,7 @@ main() {
                     echo -e "    ./fiuto.sh /mnt/windows --all --since -7d     # ultimi 7 giorni"
                     echo -e "    ./fiuto.sh /mnt/disk --all --yara /regole/     # applica regole YARA"
                     echo -e "    ./fiuto.sh /mnt/disk --all --yara r.yar --yara-scan /mnt/disk/Users  # ambito esplicito"
+                    echo -e "    ./fiuto.sh /mnt/windows --all --sigma /sigma/rules/  # regole Sigma sugli EVTX"
                     echo ""
                     echo -e "  ${DIM}--yara non scansiona l'intero volume: si limita alle posizioni"
                     echo -e "    scrivibili senza privilegi e le ELENCA nel report. Usa --yara-scan"
@@ -18072,6 +18657,7 @@ main() {
                     echo -e "    ./fiuto.sh /mnt/windows --all --since -7d     # last 7 days"
                     echo -e "    ./fiuto.sh /mnt/disk --all --yara /rules/     # apply YARA rules"
                     echo -e "    ./fiuto.sh /mnt/disk --all --yara r.yar --yara-scan /mnt/disk/Users  # explicit scope"
+                    echo -e "    ./fiuto.sh /mnt/windows --all --sigma /sigma/rules/  # Sigma rules over EVTX"
                     echo ""
                     echo -e "  ${DIM}--yara does not scan the whole volume: it covers the locations"
                     echo -e "    writable without privileges and LISTS them in the report. Use"
@@ -18123,6 +18709,7 @@ main() {
             --yara)        YARA_RULES="${2:-}"; shift ;;
             --yara-scan)   YARA_SCAN_PATH="${2:-}"; shift ;;
             --yara-max-mb) YARA_MAX_MB="${2:-64}"; shift ;;
+            --sigma)       SIGMA_RULES="${2:-}"; shift ;;
             --since|--until)
                 # Un limite scritto male non deve passare in silenzio: filtrerebbe
                 # tutto o niente, e in entrambi i casi il report sarebbe falso.

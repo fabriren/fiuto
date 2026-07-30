@@ -64,6 +64,7 @@ src/modules/win/47-thumbcache.sh
 src/modules/win/48-chat-desktop.sh
 src/modules/win/49-webcache.sh
 src/modules/win/50-search-index.sh
+src/modules/win/51-sigma.sh
 src/modules/linux/01-syslog.sh
 src/modules/linux/02-journal.sh
 src/modules/linux/03-logins.sh
@@ -109,5 +110,6 @@ src/modules/xplat/04-yara.sh
 src/lib/13-pylib-leveldb.sh
 src/lib/14-pylib-sqlite.sh
 src/lib/17-pylib-timeline.sh
+src/lib/19-pylib-sigma.sh
 src/lib/12-registries.sh
 src/main.sh

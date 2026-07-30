@@ -82,6 +82,7 @@ MODULES_WIN=(
     "module_chat_desktop|Chat Desktop|MAGENTA|Slack/Teams/Discord — LevelDB§Slack/Teams/Discord — LevelDB"
     "module_webcache|WebCacheV01|CYAN|IE/Edge Legacy + WinINET§IE/Edge Legacy + WinINET"
     "module_search_index|Search Index|YELLOW|Windows.edb — file indicizzati§Windows.edb — indexed files"
+    "module_sigma|Sigma|RED|Regole Sigma sugli EVTX (--sigma)§Sigma rules over EVTX (--sigma)|_guard_sigma"
     "module_xplat_sqlite_recovery|SQLite Recovery|MAGENTA|Record cancellati da freelist e spazio libero§Deleted records from freelist and free space"
     "module_xplat_esp_bootkit|EFI System Partition|RED|Bootkit e persistenza pre-boot§Bootkits and pre-boot persistence"
     "module_xplat_yara|YARA|RED|Scansione con regole esterne (--yara)§Scan with external rules (--yara)|_guard_yara"

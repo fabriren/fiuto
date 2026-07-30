@@ -34,7 +34,7 @@ Stato aggiornato al: **2026-07-30** (versione 2.2, Fasi 1-5 complete, Fase 6 ini
 | Area | Stato |
 |---|---|
 | CI (bash -n, ShellCheck, bats, parser Python su 3.9 + 3.12) | ✅ |
-| Suite di test — 139 test bats | ✅ |
+| Suite di test — 161 test bats | ✅ |
 | Replay transaction log registro (`.LOG1`/`.LOG2`) | ✅ |
 | Export JSONL / schema Timesketch (`--jsonl`) | ✅ |
 | macOS: FSEvents, Spotlight | ✅ |
@@ -50,6 +50,8 @@ Stato aggiornato al: **2026-07-30** (versione 2.2, Fasi 1-5 complete, Fase 6 ini
 | Fase 6.2 — finestra temporale `--since`/`--until` + fuso del volume | ✅ |
 | Fase 6.3 — executive summary, scoring e correlazione cross-modulo | ✅ |
 | Fase 6.4 — scansione YARA (`--yara`), ambito dichiarato | ✅ |
+| Fase 6.5 — motore Sigma sugli EVTX (`--sigma`), sottoinsieme dichiarato | ✅ |
+| Libreria Python condivisa Sigma (`src/lib/19-pylib-sigma.sh`) | ✅ |
 | Libreria Python condivisa timeline (`src/lib/17-pylib-timeline.sh`) | ✅ |
 | Flag `defer` nel registro (numerazione stabile) | ✅ |
 | Libreria Python condivisa LevelDB/Snappy (`src/lib/13-pylib-leveldb.sh`) | ✅ |
@@ -331,9 +333,9 @@ Ordinati per rapporto valore/costo.
    anche senza `--jsonl`, quindi è stata spostata in `pylib_timeline`
    (`src/lib/17-pylib-timeline.sh`). L'export ne è ora un consumatore: i 12
    test JSONL esistenti hanno presidiato il cambio.
-4. **Detection engine Sigma/YARA.** `--yara` ✅ **fatto (6.4)**,
-   `src/modules/xplat/04-yara.sh`. `--sigma <dir>` sugli EVTX (approccio
-   Chainsaw/Hayabusa) resta da fare.
+4. ~~**Detection engine Sigma/YARA.**~~ ✅ **Fatto (6.4 YARA, 6.5 Sigma)** —
+   `src/modules/xplat/04-yara.sh`, `src/modules/win/51-sigma.sh` con il
+   compilatore in `src/lib/19-pylib-sigma.sh`.
 
    **Sull'ambito, che è il punto vero.** Un volume da un terabyte non si
    scansiona file per file, quindi il modulo copre un insieme limitato di
@@ -348,13 +350,34 @@ Ordinati per rapporto valore/costo.
    I symlink non vengono seguiti — su un volume montato porterebbero fuori
    dall'evidenza fino al file system della workstation.
 
-   Per Sigma: il formato è vasto e un supporto parziale spacciato per completo
-   sarebbe peggio di nessun supporto. Vale la stessa regola tenuta finora
-   (unified logs, Spotlight, carving SQLite): implementare un sottoinsieme
-   documentato — selezioni con `contains`/`startswith`/`endswith`/`re`,
-   condizioni `selection and not filter` e `1 of selection*` — e dichiarare
-   nel report quali regole sono state **scartate perché non supportate**,
-   invece di ignorarle in silenzio.
+   **Sigma — il sottoinsieme è dichiarato.** Il formato è vasto e un supporto
+   parziale spacciato per completo sarebbe peggio di nessun supporto: una regola
+   mai valutata comparirebbe come una regola non scattata, cioè un falso
+   negativo invisibile. Implementato: selezioni (mappe, liste di valori, liste
+   di mappe), modificatori `contains`/`startswith`/`endswith`/`re`/`all`/`cased`,
+   condizioni `sel`, `a and/or b`, `a and not b`, `not a`, `1 of x*`,
+   `all of x*`, `1 of them`, `all of them`, e `null` come campo assente.
+   Scartato e **contato ed elencato nel report, raggruppato per motivo**: le
+   condizioni con parentesi o aggregazioni, i modificatori
+   base64/utf16/wide/cidr/gt/lt, e le logsource non mappabili.
+
+   Una logsource non mappata **non** viene fatta girare a tappeto su tutti i
+   canali come ripiego: la regola verrebbe valutata su campi che quel canale non
+   ha, e il "non scattata" sarebbe privo di significato.
+
+   Il compilatore sta in `src/lib/19-pylib-sigma.sh` e non dentro il modulo,
+   perché è la parte rischiosa: lì è esercitabile dai test con eventi sintetici,
+   senza bisogno di un `.evtx`. I 22 test coprono in parti uguali "la regola
+   scatta quando deve" e "la regola non valutabile finisce fra le scartate".
+
+   Aggiungendo supporto per altre costruzioni: prima il test che dimostra che
+   oggi finisce fra le scartate, poi l'implementazione, poi il test che dimostra
+   che scatta. L'ordine conta — è l'unico modo per sapere che il caso era
+   davvero coperto dal ramo "scartate" e non silenziosamente ignorato.
+
+   Sigma è registrato **solo per Windows**: le logsource mappate puntano a
+   canali EVTX, offrirlo su Linux o macOS prometterebbe una copertura
+   inesistente. C'è un test che lo presidia.
 5. **Parallelizzazione di `--all`.** Oggi strettamente sequenziale. Pool di job
    sui moduli indipendenti; unico vincolo la master timeline, che è già un
    aggregatore finale.

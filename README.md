@@ -229,7 +229,7 @@ fiuto_reports/
 
 ---
 
-## 📊 The 53 Windows analysis modules
+## 📊 The 54 Windows analysis modules
 
 | #  | Module Name                   | Windows Artifact                    | Usage                                                           |
 | -- | ----------------------------- | ----------------------------------- | --------------------------------------------------------------- |
@@ -286,6 +286,7 @@ fiuto_reports/
 | 51 | SQLite Recovery *(cross-OS)*  | freelist, unallocated space         | Content of **deleted** records still on disk                    |
 | 52 | EFI System Partition *(cross-OS)* | ESP                             | Bootkits: code running **before** the OS and any EDR            |
 | 53 | YARA *(cross-OS)*                 | YAR                             | External rules applied to a declared, bounded scope (`--yara`)  |
+| 54 | Sigma                             | SIG                             | Community detections over EVTX, declared subset (`--sigma`)     |
 
 ---
 
@@ -459,6 +460,43 @@ Without that accounting, "no match" would read as "the disk is clean"; with it,
 it reads as what it is.
 
 A rule file that does not compile is reported and skipped; the others still run.
+
+### Sigma (`--sigma`, Windows)
+
+Sigma is how the community publishes detections: SigmaHQ, CERTs and vendors
+ship thousands of YAML rules. Applying them to the EVTX of an acquired disk is
+what Chainsaw and Hayabusa do, and it is the step that turns a pile of logs
+into a triage.
+
+```bash
+./fiuto.sh /mnt/windows --all --sigma /sigma/rules/windows/
+```
+
+Requires `pyyaml` and `python-evtx`.
+
+**The supported subset is declared, not implied.** Sigma is a broad language —
+base64 modifiers, CIDR, parenthesised conditions, temporal aggregations.
+Implementing a part of it and pretending to support all of it would mean a rule
+that was never evaluated shows up as a rule that did not fire: a silent false
+negative, the worst defect a detection can have. Rules the engine cannot
+evaluate are **counted and listed in the report with the reason**, grouped by
+cause.
+
+| | |
+|---|---|
+| Selections | field/value maps, value lists (OR), lists of maps (OR) |
+| Modifiers | `contains`, `startswith`, `endswith`, `re`, `all`, `cased` |
+| Conditions | `sel`, `a and b`, `a or b`, `a and not b`, `not a`, `1 of x*`, `all of x*`, `1 of them`, `all of them` |
+| Values | `null` = field absent or empty |
+| **Rejected** | parenthesised or aggregating conditions, `base64offset`/`utf16`/`wide`/`cidr`/`gt`/`lt`, unmappable logsource |
+
+A rule whose `logsource` cannot be mapped to an EVTX channel present on the
+volume is **not** run against every log as a fallback: it would be evaluated
+against fields that channel does not have, and "did not fire" would mean
+nothing. It is rejected and listed.
+
+The report also states how many records were read per channel, and marks the
+evaluation PARTIAL if the record cap was reached.
 
 ### Executive summary
 
@@ -638,7 +676,7 @@ python3 tests/lint_embedded_python.py fiuto.sh   # compile the embedded parsers
 ```
 
 CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs on every push:
-bash syntax, ShellCheck, the bats suite, and compilation of the ~96 Python
+bash syntax, ShellCheck, the bats suite, and compilation of the ~99 Python
 parsers embedded as heredocs on both Python 3.9 and 3.12.
 
 That last job is not decoration: `bash -n` treats heredocs as opaque text, so a
@@ -883,7 +921,7 @@ fiuto_reports/
 
 ---
 
-## 📊 I 53 Moduli di Analisi Windows
+## 📊 I 54 Moduli di Analisi Windows
 
 | #  | Nome Modulo                   | Artefatto Windows                   | Utilizzo                                                              |
 | -- | ----------------------------- | ----------------------------------- | --------------------------------------------------------------------- |
@@ -940,6 +978,7 @@ fiuto_reports/
 | 51 | SQLite Recovery *(cross-OS)*  | freelist, spazio non allocato       | Contenuto di record **cancellati** ancora sul disco                   |
 | 52 | EFI System Partition *(cross-OS)* | ESP                             | Bootkit: codice eseguito **prima** del sistema e di ogni EDR          |
 | 53 | YARA *(cross-OS)*                 | YAR                             | Regole esterne su un ambito limitato e dichiarato (`--yara`)          |
+| 54 | Sigma                             | SIG                             | Detection della comunita' sugli EVTX, sottoinsieme dichiarato (`--sigma`) |
 
 ---
 
@@ -1115,6 +1154,43 @@ system della workstation di analisi. Senza questa contabilità un "nessun match"
 si leggerebbe come "il disco è pulito"; con essa si legge per quello che è.
 
 Un file di regole che non compila viene segnalato e saltato; gli altri girano.
+
+### Sigma — detection della comunità (`--sigma`, Windows)
+
+Sigma è il formato in cui la comunità pubblica le detection: SigmaHQ, i CERT e
+i vendor distribuiscono migliaia di regole YAML. Applicarle agli EVTX di un
+disco acquisito è quello che fanno Chainsaw e Hayabusa, ed è il passo che
+trasforma una raccolta di log in un triage.
+
+```bash
+./fiuto.sh /mnt/windows --all --sigma /sigma/rules/windows/
+```
+
+Richiede `pyyaml` e `python-evtx`.
+
+**Il sottoinsieme supportato è dichiarato, non implicito.** Sigma è un
+linguaggio ampio — modificatori base64, CIDR, condizioni con parentesi,
+aggregazioni temporali. Implementarne una parte e far finta di supportarlo
+tutto significherebbe che una regola mai valutata compare come una regola che
+non è scattata: un falso negativo silenzioso, il difetto peggiore che una
+detection possa avere. Le regole che il motore non sa valutare vengono
+**contate ed elencate nel report con il motivo**, raggruppate per causa.
+
+| | |
+|---|---|
+| Selezioni | mappe campo/valore, liste di valori (OR), liste di mappe (OR) |
+| Modificatori | `contains`, `startswith`, `endswith`, `re`, `all`, `cased` |
+| Condizioni | `sel`, `a and b`, `a or b`, `a and not b`, `not a`, `1 of x*`, `all of x*`, `1 of them`, `all of them` |
+| Valori | `null` = campo assente o vuoto |
+| **Scartate** | condizioni con parentesi o aggregazioni, `base64offset`/`utf16`/`wide`/`cidr`/`gt`/`lt`, logsource non mappabile |
+
+Una regola la cui `logsource` non è mappabile a un canale EVTX presente sul
+volume **non** viene fatta girare a tappeto su tutti i log come ripiego:
+verrebbe valutata su campi che quel canale non ha, e il "non scattata" sarebbe
+privo di significato. Viene scartata ed elencata.
+
+Il report riporta anche quanti record sono stati letti per canale, e marca la
+valutazione PARZIALE se il tetto è stato raggiunto.
 
 ### Executive summary (riepilogo di sessione)
 
@@ -1299,7 +1375,7 @@ python3 tests/lint_embedded_python.py fiuto.sh   # compila i parser incorporati
 ```
 
 La CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) gira a ogni push:
-sintassi bash, ShellCheck, suite bats e compilazione dei ~96 parser Python
+sintassi bash, ShellCheck, suite bats e compilazione dei ~99 parser Python
 incorporati come heredoc, sia su Python 3.9 sia su 3.12.
 
 Quest'ultimo job non è un ornamento: `bash -n` tratta gli heredoc come testo
