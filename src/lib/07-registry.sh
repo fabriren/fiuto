@@ -71,6 +71,7 @@ hive_replay_report() {
 recover_hive() {
     local ORIG="$1"
     [[ -n "$ORIG" && -f "$ORIG" ]] || { echo ""; return; }
+    evidence_note "$ORIG" "hive di registro"
     [[ "$HIVE_REPLAY" == "true" ]] || { echo "$ORIG"; return; }
 
     local OUT; OUT=$(_hive_recovered_path "$ORIG") || { echo "$ORIG"; return; }

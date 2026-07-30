@@ -2,6 +2,7 @@ ci_find_file() {
     local BASE="$1"
     local REL="$2"
     if [[ -f "$BASE/$REL" ]]; then
+        evidence_note "$BASE/$REL" "letto"
         echo "$BASE/$REL"
         return
     fi
@@ -9,7 +10,9 @@ ci_find_file() {
     local FILE; FILE=$(basename "$REL")
     local DIR_PATH; DIR_PATH=$(ci_find_dir "$BASE" "$DIR")
     [[ -z "$DIR_PATH" ]] && echo "" && return
-    find "$DIR_PATH" -maxdepth 1 -iname "$FILE" -type f 2>/dev/null | head -1
+    local FOUND; FOUND=$(find "$DIR_PATH" -maxdepth 1 -iname "$FILE" -type f 2>/dev/null | head -1)
+    [[ -n "$FOUND" ]] && evidence_note "$FOUND" "letto"
+    echo "$FOUND"
 }
 
 # Risolve un percorso case-insensitive su filesystem montato NTFS
@@ -216,6 +219,7 @@ get_target_user_homes() {
 read_plist() {
     local F="$1"
     [[ -f "$F" ]] || return 1
+    evidence_note "$F" "plist"
     "$PY3" - "$F" << 'PYEOF'
 import sys, plistlib
 def walk(o, indent=0):
@@ -252,6 +256,7 @@ PYEOF
 query_sqlite() {
     local DB="$1" SQL="$2"
     [[ -f "$DB" ]] || return 1
+    evidence_note "$DB" "database SQLite"
     local TMP; TMP=$(mktemp)
     cp -f "$DB" "$TMP" 2>/dev/null || { rm -f "$TMP"; return 1; }
     # copia anche -wal/-shm se presenti, per leggere transazioni non ancora consolidate

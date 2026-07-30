@@ -398,6 +398,33 @@ keys and 3,905 additional values that raw parsing simply does not see.
 Requires `regipy`. If it is missing, FIUTO warns once and falls back to the raw
 hive rather than failing.
 
+### Chain of custody
+
+Every session writes `evidence_manifest.json` into the report directory. It
+records what the analysis was based on, so the reports can be verified later:
+
+- tool version, exact command line, operator and analysis host;
+- session start and end in UTC;
+- the analysed volume, its detected OS and the hostname read from artefacts;
+- **every evidence file consulted**, with size, mtime and SHA-256;
+- **every generated report**, with its SHA-256;
+- the outcome of the registry transaction-log replay.
+
+Coverage is automatic: files are recorded inside the functions every module
+goes through to reach an artefact (`ci_find_file`, `query_sqlite`,
+`read_plist`, `recover_hive`), so modules added later are covered without
+touching them.
+
+```bash
+./fiuto.sh /mnt/disk --all --no-hash        # record files without hashing (faster)
+./fiuto.sh /mnt/disk --all --hash-limit 256 # skip hashing above 256 MB
+./fiuto.sh /mnt/disk --all --no-custody     # disable the manifest entirely
+```
+
+Files above the size limit (1 GB by default — `pagefile.sys`, `$MFT`,
+`Windows.edb`) are still listed, with the reason the hash is missing rather
+than silently omitting it.
+
 ### JSONL export (Timesketch / plaso)
 
 ```bash
@@ -916,6 +943,33 @@ evidenza non viene mai toccato. Su un hive di test reale questo ha recuperato
 Richiede `regipy`. Se manca, FIUTO avvisa una volta e ripiega sull'hive
 originale invece di fallire.
 
+### Catena di custodia
+
+Ogni sessione scrive `evidence_manifest.json` nella cartella dei report.
+Registra su cosa si è basata l'analisi, così i report restano verificabili:
+
+- versione del tool, comando esatto, operatore e host di analisi;
+- inizio e fine sessione in UTC;
+- volume analizzato, OS rilevato e hostname letto dagli artefatti;
+- **ogni file di evidenza consultato**, con dimensione, data e SHA-256;
+- **ogni report generato**, con il suo SHA-256;
+- l'esito del replay dei transaction log del registro.
+
+La copertura è automatica: i file vengono annotati dentro le funzioni che
+tutti i moduli attraversano per arrivare a un artefatto (`ci_find_file`,
+`query_sqlite`, `read_plist`, `recover_hive`), quindi i moduli aggiunti in
+futuro sono coperti senza doverli toccare.
+
+```bash
+./fiuto.sh /mnt/disk --all --no-hash        # annota i file senza calcolare gli hash
+./fiuto.sh /mnt/disk --all --hash-limit 256 # niente hash oltre i 256 MB
+./fiuto.sh /mnt/disk --all --no-custody     # disattiva del tutto il manifesto
+```
+
+I file oltre la soglia (1 GB di default — `pagefile.sys`, `$MFT`,
+`Windows.edb`) restano elencati, con il motivo per cui manca l'hash invece di
+ometterlo in silenzio.
+
 ### Export JSONL (Timesketch / plaso)
 
 ```bash
@@ -1089,6 +1143,8 @@ Both ESE-based modules fall back to string extraction when libesedb cannot open 
 **Linux: five new modules** — PAM (authentication backdoors), kernel modules and LKM rootkits, web server logs, cloud/development credentials, SUID/capabilities.
 
 **macOS: six new modules** — Messages, Safari cookies and downloads, XProtect/Gatekeeper, application inventory, Time Machine/snapshots, and unified logs.
+
+**Chain of custody.** Every session now writes an `evidence_manifest.json` recording tool version, command line, operator, analysed volume, and the SHA-256 of every evidence file consulted and every report produced. Until 2.1 hashing was scattered across a handful of modules and there was no way to answer "which files were read, in what state, and are the attached reports the ones produced then?".
 
 **Two cross-OS modules**, available on all three systems. **SQLite Recovery** — nearly every modern artefact is a SQLite database, and every module reading one sees only the *live* records; a deleted record stays in the file until overwritten, in the freelist or in a page's unallocated space. This module carves it back, which is often the only place a "cleared" history still exists. **EFI System Partition** — code in the ESP runs before the OS, the kernel and any EDR, and survives a full system reinstall; the module inventories it, hashes everything and flags structural anomalies.
 

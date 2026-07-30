@@ -4,7 +4,7 @@ Documento di lavoro per portare FIUTO da 2.1 a 3.0. È pensato per essere
 ripreso a distanza di tempo, anche da un'altra sessione o da un'altra persona:
 ogni fase dichiara **cosa fare**, **dove**, **come verificarlo** e **perché**.
 
-Stato aggiornato al: **2026-07-30** (versione 2.2, Fasi 1-5 completate).
+Stato aggiornato al: **2026-07-30** (versione 2.2, Fasi 1-5 complete, Fase 6 iniziata).
 
 ---
 
@@ -46,6 +46,7 @@ Stato aggiornato al: **2026-07-30** (versione 2.2, Fasi 1-5 completate).
 | Fase 4 — 6 moduli macOS nuovi (14-19) | ✅ |
 | Fase 5 — 2 moduli cross-OS (SQLite recovery, ESP/bootkit) | ✅ |
 | Libreria Python condivisa SQLite (`src/lib/14-pylib-sqlite.sh`) | ✅ |
+| Fase 6.1 — chain of custody (`evidence_manifest.json`) | ✅ |
 | Flag `defer` nel registro (numerazione stabile) | ✅ |
 | Libreria Python condivisa LevelDB/Snappy (`src/lib/13-pylib-leveldb.sh`) | ✅ |
 

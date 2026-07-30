@@ -397,6 +397,7 @@ print_file_lines() {
 # $1 = file, $2 = keyword IoC, $3 = icona (default ≣)
 file_card_html() {
     local F="$1" KW="$2" ICON="${3:-≣}" MODE="${4:-}"
+    evidence_note "$F" "riprodotto nel report"
     local SZ MT BODY
     SZ=$(stat -c %s "$F" 2>/dev/null || echo "?")
     MT=$(stat -c %y "$F" 2>/dev/null | cut -d. -f1 || echo "?")

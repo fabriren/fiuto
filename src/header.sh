@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ================================================================
-#  fiuto.sh  –  v2.1
+#  fiuto.sh  –  v2.2
 #  Toolkit DFIR unificato per analisi offline di dischi Windows/Linux/macOS
 #
 #  Uso:
@@ -27,6 +27,10 @@
 # ================================================================
 
 set -uo pipefail
+
+# Versione del tool. Unica fonte: la usano il banner e il manifesto di catena
+# di custodia, che non devono poter divergere.
+FIUTO_VERSION="2.2"
 
 # -- Cleanup globale file temporanei (signal-safe) ----------------
 # La trap EXIT viene invocata su ritorno normale, SIGINT (Ctrl+C),

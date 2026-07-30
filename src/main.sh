@@ -10,6 +10,13 @@ main() {
     # padre. rm -rf ignora i percorsi inesistenti, quindi registrarla anche
     # quando non verra' mai creata e' innocuo.
     register_tmp "${TMPDIR:-/tmp}/fiuto_hives_$$"
+    register_tmp "${TMPDIR:-/tmp}/fiuto_custody_$$"
+
+    # Contesto della sessione, congelato all'avvio per il manifesto.
+    CUSTODY_START_UTC=$(date -u "+%Y-%m-%dT%H:%M:%SZ")
+    CUSTODY_CMDLINE="$0 $*"
+    CUSTODY_OPERATOR="$(id -un 2>/dev/null || echo '?')"
+    CUSTODY_HOST="$(hostname 2>/dev/null || echo '?')"
 
     # Always ask for language at the very start (unless --help is passed)
     if [[ "${1:-}" != "-h" && "${1:-}" != "--help" ]]; then
@@ -39,6 +46,7 @@ main() {
                     echo -e "    ./fiuto.sh /mnt/windows --all --ioc /path/to/ioc.txt  # con IoC"
                     echo -e "    ./fiuto.sh /mnt/windows --all --no-log-replay  # non applicare i .LOG1/.LOG2"
                     echo -e "    ./fiuto.sh /mnt/windows --all --jsonl  # esporta anche JSONL per Timesketch"
+                    echo -e "    ./fiuto.sh /mnt/windows --all --no-hash  # manifesto senza SHA256 (piu' veloce)"
                     echo ""
                     echo -e "  ${DIM}Di default i transaction log del registro (.LOG1/.LOG2) vengono"
                     echo -e "    riapplicati su una copia temporanea: senza questo passaggio le"
@@ -57,6 +65,7 @@ main() {
                     echo -e "    ./fiuto.sh /mnt/windows --all --ioc /path/to/ioc.txt  # with IoCs"
                     echo -e "    ./fiuto.sh /mnt/windows --all --no-log-replay  # skip .LOG1/.LOG2 replay"
                     echo -e "    ./fiuto.sh /mnt/windows --all --jsonl  # also export JSONL for Timesketch"
+                    echo -e "    ./fiuto.sh /mnt/windows --all --no-hash  # manifest without SHA256 (faster)"
                     echo ""
                     echo -e "  ${DIM}By default registry transaction logs (.LOG1/.LOG2) are replayed"
                     echo -e "    onto a temporary copy: without this step the most recent hive"
@@ -93,6 +102,9 @@ main() {
             --ioc)       ARG_IOC="$2"; shift ;;
             --no-log-replay) HIVE_REPLAY=false ;;
             --jsonl)     EXPORT_JSONL=true ;;
+            --no-custody)  CUSTODY=false ;;
+            --no-hash)     CUSTODY_HASH=false ;;
+            --hash-limit)  CUSTODY_HASH_LIMIT_MB="${2:-1024}"; shift ;;
             --format)    [[ "${2:-}" == "jsonl" ]] && EXPORT_JSONL=true; shift ;;
             -*)          local UNKNOWN_OPT="$([ "$LANG" = "it" ] && echo "Opzione sconosciuta:" || echo "Unknown option:")"; warn "$UNKNOWN_OPT $1" ;;
             *)           [[ -z "$ARG_ROOT" ]] && ARG_ROOT="$1" ;;

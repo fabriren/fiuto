@@ -1,4 +1,7 @@
 _global_cleanup() {
+    # Il manifesto di catena di custodia va scritto prima di rimuovere i file
+    # temporanei: lo stato della sessione vive li'.
+    declare -F write_evidence_manifest > /dev/null && write_evidence_manifest 2>/dev/null || true
     local _f
     for _f in "${_GLOBAL_TMP_FILES[@]:-}"; do
         [[ -e "$_f" ]] && rm -rf "$_f" 2>/dev/null || true
