@@ -69,6 +69,93 @@ run_batch_module() {
 }
 
 # ================================================================
+#  POOL DI JOB PER --all --jobs N
+#
+#  I moduli sono indipendenti: leggono file diversi e scrivono in cartelle
+#  diverse. L'unico vincolo d'ordine e' la Master Timeline, marcata `defer`,
+#  che aggrega il lavoro degli altri — e quindi va eseguita per ultima, da
+#  sola, quando il pool si e' svuotato.
+#
+#  La parallelizzazione e' OPT-IN e non il default. Su un volume montato da
+#  disco meccanico o via rete N processi che leggono insieme vanno piu' piano
+#  di uno solo, e il guadagno dipende dal collo di bottiglia reale, che qui e'
+#  quasi sempre l'I/O e non la CPU. Chi analizza sa qual e' il suo: sceglie.
+#
+#  In parallelo si perde l'interruzione con ESC: intercettarla richiede il
+#  controllo esclusivo del terminale, che con N moduli concorrenti non c'e'.
+#  Viene dichiarato all'avvio invece di lasciare che il tasto smetta di
+#  funzionare senza spiegazione.
+# ================================================================
+run_batch_pool() {
+    local _total="$1"; shift
+    local -a _queue=("$@")
+    local _njobs="${JOBS:-1}"
+
+    echo -e "  ${CYAN}[*]${RESET} $(L "Esecuzione parallela:" "Parallel execution:") ${BOLD}${_njobs}${RESET} $(L "moduli alla volta" "modules at a time")"
+    echo -e "  ${DIM}$(L "In parallelo l'interruzione con ESC non e' disponibile." \
+                        "ESC interruption is not available in parallel mode.")${RESET}"
+    echo ""
+
+    # Un file per modulo: gli array bash non risalgono dai processi figli.
+    local _POOLDIR; _POOLDIR=$(mktemp -d); register_tmp "$_POOLDIR"
+
+    # I moduli `defer` restano fuori dal pool: aggregano gli altri e devono
+    # vederli finiti. Sono gia' in coda, ma "in coda" non basta col parallelo.
+    local -a _par=() _seq=()
+    local _item _i _f _label _flags
+    for _item in "${_queue[@]}"; do
+        IFS='|' read -r _i _f _label _flags <<< "$_item"
+        if [[ "${_flags:-}" == *defer* ]]; then _seq+=("$_item"); else _par+=("$_item"); fi
+    done
+
+    local _running=0
+    for _item in "${_par[@]}"; do
+        IFS='|' read -r _i _f _label _flags <<< "$_item"
+        (
+            register_report() { [[ -n "${1:-}" && -f "$1" ]] && echo "$1" >> "${_POOLDIR}/${_i}.rep"; }
+            "$_f" > /dev/null 2>&1
+        ) &
+        _running=$((_running + 1))
+        if [[ "$_running" -ge "$_njobs" ]]; then
+            wait -n 2>/dev/null || wait
+            _running=$((_running - 1))
+        fi
+    done
+    wait
+
+    # Esiti raccolti nell'ordine dei moduli, non in quello di completamento:
+    # un riepilogo che cambia ordine a ogni esecuzione non e' confrontabile.
+    #
+    # Va fatto PRIMA di lanciare i deferred: la Master Timeline aggrega leggendo
+    # GENERATED_REPORTS, e se lo trovasse ancora vuoto produrrebbe una timeline
+    # vuota senza segnalare nulla. E' il difetto che questo ordine evita.
+    for _item in "${_par[@]}"; do
+        IFS='|' read -r _i _f _label _flags <<< "$_item"
+        local _rf="${_POOLDIR}/${_i}.rep"
+        if [[ -s "$_rf" ]]; then
+            local _rep
+            while IFS= read -r _rep; do
+                [[ -n "$_rep" && -f "$_rep" ]] && GENERATED_REPORTS+=("$_rep")
+            done < "$_rf"
+            local _last; _last=$(tail -1 "$_rf")
+            echo -e "  ${GREEN}[✓]${RESET} [${_i}/${_total}] $_label — report: ${DIM}${_last}${RESET}"
+            SUMMARY_TABLE+=("$_i|$_label|SI|$_last")
+        else
+            echo -e "  ${DIM}[i] [${_i}/${_total}] $_label — $(L "nessun risultato" "no results")${RESET}"
+            SUMMARY_TABLE+=("$_i|$_label|NO|-")
+        fi
+    done
+
+    # I deferred girano ora, in sequenza e nel percorso normale: il pool e'
+    # vuoto e GENERATED_REPORTS contiene gli altri moduli, che e' esattamente
+    # la condizione che si aspettano.
+    for _item in "${_seq[@]}"; do
+        IFS='|' read -r _i _f _label _flags <<< "$_item"
+        run_batch_module "$_i" "$_f" "$_label" "$_total"
+    done
+}
+
+# ================================================================
 #  DASHBOARD "FULL" — indice navigabile con tab + iframe centrale.
 #  Generata al termine di "esegui TUTTI i moduli" (Windows/Linux/macOS).
 #  Costruita interamente da SUMMARY_TABLE (righe "num|nome|SI/NONE/SKIP|path").
@@ -328,13 +415,15 @@ run_all_from_registry() {
     done
     _order+=("${_deferred[@]}")
 
+    # Le guardie si valutano prima, in sequenza: sono veloci e cosi' la coda
+    # da eseguire e' nota, che serve al pool per non lanciare lavoro inutile.
+    local -a _todo=()
     local _item _i
     for _item in "${_order[@]}"; do
         _i="${_item%%|*}"
         _entry="${_item#*|}"
         IFS='|' read -r _f _name _color _desc _guard _flags <<< "$_entry"
         local _label; _label=$(reg_text "$_name")
-        # Guardia facoltativa: se fallisce il modulo viene saltato con motivo.
         if [[ -n "${_guard:-}" ]] && declare -F "$_guard" > /dev/null; then
             local _reason
             if ! _reason=$("$_guard"); then
@@ -343,8 +432,17 @@ run_all_from_registry() {
                 continue
             fi
         fi
-        run_batch_module "$_i" "$_f" "$_label" "$_total"
+        _todo+=("${_i}|${_f}|${_label}|${_flags:-}")
     done
+
+    if [[ "${JOBS:-1}" -gt 1 ]]; then
+        run_batch_pool "$_total" "${_todo[@]}"
+    else
+        for _item in "${_todo[@]}"; do
+            IFS='|' read -r _i _f _label _flags <<< "$_item"
+            run_batch_module "$_i" "$_f" "$_label" "$_total"
+        done
+    fi
     BATCH_MODE=false
     echo ""
     section_header "$(L "Riepilogo Scansione Globale" "Global Scan Summary")" "$GREEN"

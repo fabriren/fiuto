@@ -94,6 +94,7 @@ YARA_MAX_MB=64               # tetto per file: oltre, il file viene dichiarato s
 YARA_MAX_FILES=200000        # tetto complessivo: oltre, la scansione si dichiara parziale
 SIGMA_RULES=""               # file o directory di regole Sigma (--sigma)
 SIGMA_MAX_RECORDS=300000     # tetto sui record EVTX letti: oltre, valutazione parziale dichiarata
+JOBS=1                       # moduli eseguiti in parallelo con --all (--jobs N)
 # Lo stato del replay (cache, esiti, avvisi gia' emessi) vive su disco in
 # ${TMPDIR:-/tmp}/fiuto_hives_$$ e non in variabili: recover_hive gira quasi
 # sempre dentro una command substitution, quindi in subshell.
@@ -1464,6 +1465,26 @@ recover_hive() {
     # evita di ritentare a ogni modulo.
     [[ -f "${OUT}.skip" ]] && { echo "$ORIG"; return; }
 
+    # Con --jobs piu' moduli possono chiedere lo stesso hive nello stesso
+    # istante. Senza lock il secondo leggerebbe la copia ricostruita mentre il
+    # primo la sta ancora scrivendo: un hive troncato non da' errore, da'
+    # risultati parziali — che e' peggio. mkdir e' atomico anche su NFS.
+    local LOCK="${OUT}.lock" _held=false _tries=0
+    while true; do
+        if mkdir "$LOCK" 2>/dev/null; then _held=true; break; fi
+        _tries=$((_tries + 1))
+        # Un lock orfano (processo ucciso) non deve bloccare la sessione: dopo
+        # due minuti si procede comunque, nel caso peggiore rifacendo il lavoro.
+        [[ $_tries -gt 240 ]] && break
+        sleep 0.5
+        # Nel frattempo puo' aver finito qualcun altro.
+        [[ -s "$OUT" ]] && { echo "$OUT"; return; }
+        [[ -f "${OUT}.skip" ]] && { echo "$ORIG"; return; }
+    done
+    # Rilascia il lock solo chi lo detiene davvero: dopo un timeout il lock e'
+    # di un altro processo, e rimuoverlo aprirebbe la corsa che il lock evita.
+    _unlock() { [[ "$_held" == "true" ]] && rmdir "$LOCK" 2>/dev/null; return 0; }
+
     local DIR BASE LOG1 LOG2
     DIR=$(dirname "$ORIG")
     BASE=$(basename "$ORIG")
@@ -1474,7 +1495,7 @@ recover_hive() {
     if [[ ( -z "$LOG1" || ! -s "$LOG1" ) && ( -z "$LOG2" || ! -s "$LOG2" ) ]]; then
         : > "${OUT}.skip"
         _hive_replay_note "clean" "$BASE" "$(L "nessun transaction log da applicare" "no transaction log to apply")"
-        echo "$ORIG"
+        _unlock; echo "$ORIG"
         return
     fi
 
@@ -1489,7 +1510,7 @@ recover_hive() {
         fi
         : > "${OUT}.skip"
         _hive_replay_note "skipped" "$BASE" "$(L "regipy non disponibile" "regipy unavailable")"
-        echo "$ORIG"
+        _unlock; echo "$ORIG"
         return
     fi
 
@@ -1528,7 +1549,7 @@ PYEOF
         _hive_replay_note "recovered" "$BASE" "${DETAIL} $(L "pagine dirty riapplicate" "dirty pages replayed")"
         info "$(L "Transaction log applicati a" "Transaction logs applied to") ${BOLD}${BASE}${RESET} — ${DETAIL} $(L "pagine dirty" "dirty pages")" >&2
         log_msg "[HIVE] replay OK: $ORIG -> $OUT (${DETAIL} dirty pages)"
-        echo "$OUT"
+        _unlock; echo "$OUT"
         return
     fi
 
@@ -1538,7 +1559,7 @@ PYEOF
     _hive_replay_note "failed" "$BASE" "$DETAIL"
     warn "$(L "Replay dei transaction log fallito per" "Transaction log replay failed for") ${BASE}: ${DETAIL}" >&2
     log_msg "[HIVE] replay FAILED: $ORIG — $DETAIL"
-    echo "$ORIG"
+    _unlock; echo "$ORIG"
 }
 
 # Torna il percorso di un hive di sistema, con i transaction log gia' applicati.
@@ -2585,6 +2606,93 @@ run_batch_module() {
 }
 
 # ================================================================
+#  POOL DI JOB PER --all --jobs N
+#
+#  I moduli sono indipendenti: leggono file diversi e scrivono in cartelle
+#  diverse. L'unico vincolo d'ordine e' la Master Timeline, marcata `defer`,
+#  che aggrega il lavoro degli altri — e quindi va eseguita per ultima, da
+#  sola, quando il pool si e' svuotato.
+#
+#  La parallelizzazione e' OPT-IN e non il default. Su un volume montato da
+#  disco meccanico o via rete N processi che leggono insieme vanno piu' piano
+#  di uno solo, e il guadagno dipende dal collo di bottiglia reale, che qui e'
+#  quasi sempre l'I/O e non la CPU. Chi analizza sa qual e' il suo: sceglie.
+#
+#  In parallelo si perde l'interruzione con ESC: intercettarla richiede il
+#  controllo esclusivo del terminale, che con N moduli concorrenti non c'e'.
+#  Viene dichiarato all'avvio invece di lasciare che il tasto smetta di
+#  funzionare senza spiegazione.
+# ================================================================
+run_batch_pool() {
+    local _total="$1"; shift
+    local -a _queue=("$@")
+    local _njobs="${JOBS:-1}"
+
+    echo -e "  ${CYAN}[*]${RESET} $(L "Esecuzione parallela:" "Parallel execution:") ${BOLD}${_njobs}${RESET} $(L "moduli alla volta" "modules at a time")"
+    echo -e "  ${DIM}$(L "In parallelo l'interruzione con ESC non e' disponibile." \
+                        "ESC interruption is not available in parallel mode.")${RESET}"
+    echo ""
+
+    # Un file per modulo: gli array bash non risalgono dai processi figli.
+    local _POOLDIR; _POOLDIR=$(mktemp -d); register_tmp "$_POOLDIR"
+
+    # I moduli `defer` restano fuori dal pool: aggregano gli altri e devono
+    # vederli finiti. Sono gia' in coda, ma "in coda" non basta col parallelo.
+    local -a _par=() _seq=()
+    local _item _i _f _label _flags
+    for _item in "${_queue[@]}"; do
+        IFS='|' read -r _i _f _label _flags <<< "$_item"
+        if [[ "${_flags:-}" == *defer* ]]; then _seq+=("$_item"); else _par+=("$_item"); fi
+    done
+
+    local _running=0
+    for _item in "${_par[@]}"; do
+        IFS='|' read -r _i _f _label _flags <<< "$_item"
+        (
+            register_report() { [[ -n "${1:-}" && -f "$1" ]] && echo "$1" >> "${_POOLDIR}/${_i}.rep"; }
+            "$_f" > /dev/null 2>&1
+        ) &
+        _running=$((_running + 1))
+        if [[ "$_running" -ge "$_njobs" ]]; then
+            wait -n 2>/dev/null || wait
+            _running=$((_running - 1))
+        fi
+    done
+    wait
+
+    # Esiti raccolti nell'ordine dei moduli, non in quello di completamento:
+    # un riepilogo che cambia ordine a ogni esecuzione non e' confrontabile.
+    #
+    # Va fatto PRIMA di lanciare i deferred: la Master Timeline aggrega leggendo
+    # GENERATED_REPORTS, e se lo trovasse ancora vuoto produrrebbe una timeline
+    # vuota senza segnalare nulla. E' il difetto che questo ordine evita.
+    for _item in "${_par[@]}"; do
+        IFS='|' read -r _i _f _label _flags <<< "$_item"
+        local _rf="${_POOLDIR}/${_i}.rep"
+        if [[ -s "$_rf" ]]; then
+            local _rep
+            while IFS= read -r _rep; do
+                [[ -n "$_rep" && -f "$_rep" ]] && GENERATED_REPORTS+=("$_rep")
+            done < "$_rf"
+            local _last; _last=$(tail -1 "$_rf")
+            echo -e "  ${GREEN}[✓]${RESET} [${_i}/${_total}] $_label — report: ${DIM}${_last}${RESET}"
+            SUMMARY_TABLE+=("$_i|$_label|SI|$_last")
+        else
+            echo -e "  ${DIM}[i] [${_i}/${_total}] $_label — $(L "nessun risultato" "no results")${RESET}"
+            SUMMARY_TABLE+=("$_i|$_label|NO|-")
+        fi
+    done
+
+    # I deferred girano ora, in sequenza e nel percorso normale: il pool e'
+    # vuoto e GENERATED_REPORTS contiene gli altri moduli, che e' esattamente
+    # la condizione che si aspettano.
+    for _item in "${_seq[@]}"; do
+        IFS='|' read -r _i _f _label _flags <<< "$_item"
+        run_batch_module "$_i" "$_f" "$_label" "$_total"
+    done
+}
+
+# ================================================================
 #  DASHBOARD "FULL" — indice navigabile con tab + iframe centrale.
 #  Generata al termine di "esegui TUTTI i moduli" (Windows/Linux/macOS).
 #  Costruita interamente da SUMMARY_TABLE (righe "num|nome|SI/NONE/SKIP|path").
@@ -2844,13 +2952,15 @@ run_all_from_registry() {
     done
     _order+=("${_deferred[@]}")
 
+    # Le guardie si valutano prima, in sequenza: sono veloci e cosi' la coda
+    # da eseguire e' nota, che serve al pool per non lanciare lavoro inutile.
+    local -a _todo=()
     local _item _i
     for _item in "${_order[@]}"; do
         _i="${_item%%|*}"
         _entry="${_item#*|}"
         IFS='|' read -r _f _name _color _desc _guard _flags <<< "$_entry"
         local _label; _label=$(reg_text "$_name")
-        # Guardia facoltativa: se fallisce il modulo viene saltato con motivo.
         if [[ -n "${_guard:-}" ]] && declare -F "$_guard" > /dev/null; then
             local _reason
             if ! _reason=$("$_guard"); then
@@ -2859,8 +2969,17 @@ run_all_from_registry() {
                 continue
             fi
         fi
-        run_batch_module "$_i" "$_f" "$_label" "$_total"
+        _todo+=("${_i}|${_f}|${_label}|${_flags:-}")
     done
+
+    if [[ "${JOBS:-1}" -gt 1 ]]; then
+        run_batch_pool "$_total" "${_todo[@]}"
+    else
+        for _item in "${_todo[@]}"; do
+            IFS='|' read -r _i _f _label _flags <<< "$_item"
+            run_batch_module "$_i" "$_f" "$_label" "$_total"
+        done
+    fi
     BATCH_MODE=false
     echo ""
     section_header "$(L "Riepilogo Scansione Globale" "Global Scan Summary")" "$GREEN"
@@ -18625,6 +18744,7 @@ main() {
                     echo -e "    ./fiuto.sh /mnt/disk --all --yara /regole/     # applica regole YARA"
                     echo -e "    ./fiuto.sh /mnt/disk --all --yara r.yar --yara-scan /mnt/disk/Users  # ambito esplicito"
                     echo -e "    ./fiuto.sh /mnt/windows --all --sigma /sigma/rules/  # regole Sigma sugli EVTX"
+                    echo -e "    ./fiuto.sh /mnt/disk --all --jobs 4            # 4 moduli in parallelo"
                     echo ""
                     echo -e "  ${DIM}--yara non scansiona l'intero volume: si limita alle posizioni"
                     echo -e "    scrivibili senza privilegi e le ELENCA nel report. Usa --yara-scan"
@@ -18658,6 +18778,7 @@ main() {
                     echo -e "    ./fiuto.sh /mnt/disk --all --yara /rules/     # apply YARA rules"
                     echo -e "    ./fiuto.sh /mnt/disk --all --yara r.yar --yara-scan /mnt/disk/Users  # explicit scope"
                     echo -e "    ./fiuto.sh /mnt/windows --all --sigma /sigma/rules/  # Sigma rules over EVTX"
+                    echo -e "    ./fiuto.sh /mnt/disk --all --jobs 4            # 4 modules in parallel"
                     echo ""
                     echo -e "  ${DIM}--yara does not scan the whole volume: it covers the locations"
                     echo -e "    writable without privileges and LISTS them in the report. Use"
@@ -18710,6 +18831,14 @@ main() {
             --yara-scan)   YARA_SCAN_PATH="${2:-}"; shift ;;
             --yara-max-mb) YARA_MAX_MB="${2:-64}"; shift ;;
             --sigma)       SIGMA_RULES="${2:-}"; shift ;;
+            --jobs)
+                if [[ "${2:-}" =~ ^[1-9][0-9]*$ ]]; then
+                    JOBS="$2"
+                else
+                    err "$(L "--jobs richiede un intero positivo:" "--jobs requires a positive integer:") '${2:-}'"
+                    exit 1
+                fi
+                shift ;;
             --since|--until)
                 # Un limite scritto male non deve passare in silenzio: filtrerebbe
                 # tutto o niente, e in entrambi i casi il report sarebbe falso.

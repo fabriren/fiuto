@@ -39,7 +39,17 @@ teardown() {
     [[ -n "${FIXTURE:-}" && -d "$FIXTURE" ]] && rm -rf "$FIXTURE"
 }
 
-_has_yara() { python3 -c "import yara" 2>/dev/null; }
+# Saltare i test quando yara-python manca tiene la suite eseguibile su una
+# workstation senza dipendenze. In CI lo stesso comportamento farebbe sparire
+# nove test senza che nulla lo segnali: FIUTO_TEST_REQUIRE_DEPS lo vieta.
+_need_yara() {
+    python3 -c "import yara" 2>/dev/null && return 0
+    if [[ -n "${FIUTO_TEST_REQUIRE_DEPS:-}" ]]; then
+        echo "yara-python assente ma FIUTO_TEST_REQUIRE_DEPS è impostata"
+        return 1
+    fi
+    skip "yara-python non installato"
+}
 
 # La risposta a "Generare report HTML?" arriva da stdin: in BATCH_MODE ask_yn
 # non chiede, quindi il report viene sempre prodotto.
@@ -71,7 +81,7 @@ _report() { ls -d "$REPORT_BASE_DIR"/yara_*/report.html 2>/dev/null | head -1; }
 # --------------------------------------------------------------- scansione --
 
 @test "una regola che corrisponde produce il match" {
-    _has_yara || skip "yara-python non installato"
+    _need_yara
     YARA_RULES="$FIXTURE/rules.yar"
     YARA_SCAN_PATH="$VOL"
     _run_module
@@ -82,7 +92,7 @@ _report() { ls -d "$REPORT_BASE_DIR"/yara_*/report.html 2>/dev/null | head -1; }
 }
 
 @test "i file che non corrispondono non compaiono fra i match" {
-    _has_yara || skip "yara-python non installato"
+    _need_yara
     YARA_RULES="$FIXTURE/rules.yar"
     YARA_SCAN_PATH="$VOL"
     _run_module
@@ -93,7 +103,7 @@ _report() { ls -d "$REPORT_BASE_DIR"/yara_*/report.html 2>/dev/null | head -1; }
 }
 
 @test "il report elenca sempre le posizioni effettivamente scansionate" {
-    _has_yara || skip "yara-python non installato"
+    _need_yara
     YARA_RULES="$FIXTURE/rules.yar"
     YARA_SCAN_PATH="$VOL"
     _run_module
@@ -103,7 +113,7 @@ _report() { ls -d "$REPORT_BASE_DIR"/yara_*/report.html 2>/dev/null | head -1; }
 }
 
 @test "il report avverte che nessun match non equivale a volume pulito" {
-    _has_yara || skip "yara-python non installato"
+    _need_yara
     rm -f "$VOL/tmp/sospetto.bin"
     YARA_RULES="$FIXTURE/rules.yar"
     YARA_SCAN_PATH="$VOL"
@@ -113,7 +123,7 @@ _report() { ls -d "$REPORT_BASE_DIR"/yara_*/report.html 2>/dev/null | head -1; }
 }
 
 @test "i file oltre il tetto vengono dichiarati saltati, non ignorati" {
-    _has_yara || skip "yara-python non installato"
+    _need_yara
     # Un payload dentro un file enorme non verrebbe visto: chi legge deve
     # sapere che quel file esiste ed è stato escluso.
     head -c 2000000 /dev/zero > "$VOL/tmp/grosso.bin"
@@ -126,7 +136,7 @@ _report() { ls -d "$REPORT_BASE_DIR"/yara_*/report.html 2>/dev/null | head -1; }
 }
 
 @test "raggiunto il tetto di file la scansione si dichiara parziale" {
-    _has_yara || skip "yara-python non installato"
+    _need_yara
     local i
     for i in $(seq 1 12); do printf 'x\n' > "$VOL/tmp/f$i"; done
     YARA_RULES="$FIXTURE/rules.yar"
@@ -138,7 +148,7 @@ _report() { ls -d "$REPORT_BASE_DIR"/yara_*/report.html 2>/dev/null | head -1; }
 }
 
 @test "un file di regole non compilabile non impedisce agli altri di girare" {
-    _has_yara || skip "yara-python non installato"
+    _need_yara
     mkdir -p "$FIXTURE/rulesdir"
     cp "$FIXTURE/rules.yar" "$FIXTURE/rulesdir/buone.yar"
     printf 'rule rotta { condition: $inesistente }\n' > "$FIXTURE/rulesdir/rotte.yar"
@@ -151,7 +161,7 @@ _report() { ls -d "$REPORT_BASE_DIR"/yara_*/report.html 2>/dev/null | head -1; }
 }
 
 @test "i symlink non vengono seguiti" {
-    _has_yara || skip "yara-python non installato"
+    _need_yara
     # Seguirli su un volume montato porterebbe fuori dall'evidenza, fino al
     # file system della workstation di analisi.
     mkdir -p "$FIXTURE/fuori"

@@ -48,6 +48,12 @@ jobs:
   tests:
     name: Bats
     runs-on: ubuntu-latest
+    # I test dei motori di detection si auto-saltano quando la libreria manca,
+    # cosi' la suite resta eseguibile su una workstation senza dipendenze. In CI
+    # quel comportamento farebbe sparire la copertura senza che nulla lo
+    # segnali: FIUTO_TEST_REQUIRE_DEPS trasforma ogni skip in un errore.
+    env:
+      FIUTO_TEST_REQUIRE_DEPS: "1"
     steps:
       - uses: actions/checkout@v4
       - name: Installa bats
@@ -55,6 +61,8 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y bats
           bats --version
+      - name: Installa le dipendenze dei motori di detection
+        run: python3 -m pip install --quiet yara-python pyyaml
       - name: Esegui la suite
         run: bats --tap tests/
 

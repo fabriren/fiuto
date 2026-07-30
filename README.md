@@ -430,6 +430,36 @@ Files above the size limit (1 GB by default — `pagefile.sys`, `$MFT`,
 `Windows.edb`) are still listed, with the reason the hash is missing rather
 than silently omitting it.
 
+### Parallel execution (`--jobs`)
+
+```bash
+./fiuto.sh /mnt/disk --all --jobs 4
+```
+
+Opt-in, not the default. Modules are independent — different files in, different
+folders out — but on a volume mounted from a spinning disk or over the network,
+N readers are *slower* than one. The bottleneck here is almost always I/O rather
+than CPU, and only the person running the analysis knows which one they have.
+
+The guarantee is that **the outcome does not depend on the degree of
+parallelism**: same reports, same order in the summary. A result that changes
+with `--jobs` is a result you cannot rely on, and in expert-witness work that is
+worse than a slow tool. There are tests for exactly this.
+
+Modules flagged `defer` — the Master Timeline, which aggregates the others — run
+last, alone, once the pool has drained *and* the other results have been
+collected. They read the list of generated reports, so running them any earlier
+would produce an empty timeline without saying so.
+
+Registry hive recovery takes a lock: with several modules asking for the same
+hive at once, the second would otherwise read the reconstructed copy while the
+first is still writing it. A truncated hive raises no error — it just yields
+partial results, which is worse.
+
+ESC to skip a module is not available in parallel: intercepting it needs
+exclusive control of the terminal. This is stated at startup rather than letting
+the key quietly stop working.
+
 ### YARA (`--yara`)
 
 YARA is how the industry ships signatures: a threat-intel feed, a vendor IR
@@ -1121,6 +1151,36 @@ futuro sono coperti senza doverli toccare.
 I file oltre la soglia (1 GB di default — `pagefile.sys`, `$MFT`,
 `Windows.edb`) restano elencati, con il motivo per cui manca l'hash invece di
 ometterlo in silenzio.
+
+### Esecuzione parallela (`--jobs`)
+
+```bash
+./fiuto.sh /mnt/disk --all --jobs 4
+```
+
+Opt-in, non il default. I moduli sono indipendenti — leggono file diversi e
+scrivono in cartelle diverse — ma su un volume montato da disco meccanico o via
+rete N lettori vanno *più piano* di uno. Il collo di bottiglia qui è quasi
+sempre l'I/O e non la CPU, e qual è lo sa solo chi sta analizzando.
+
+La garanzia è che **l'esito non dipende dal grado di parallelismo**: stessi
+report, stesso ordine nel riepilogo. Un risultato che cambia con `--jobs` è un
+risultato di cui non ci si può fidare, e in ambito peritale è peggio di un tool
+lento. Ci sono test dedicati esattamente a questo.
+
+I moduli marcati `defer` — la Master Timeline, che aggrega gli altri — girano
+per ultimi, da soli, quando il pool si è svuotato *e* gli esiti degli altri sono
+stati raccolti. Leggono l'elenco dei report generati, quindi eseguirli prima
+produrrebbe una timeline vuota senza dirlo.
+
+Il recupero degli hive di registro prende un lock: con più moduli che chiedono
+lo stesso hive insieme, il secondo leggerebbe la copia ricostruita mentre il
+primo la sta ancora scrivendo. Un hive troncato non dà errore — dà risultati
+parziali, che è peggio.
+
+In parallelo l'interruzione con ESC non è disponibile: intercettarla richiede il
+controllo esclusivo del terminale. Viene dichiarato all'avvio, invece di lasciare
+che il tasto smetta di funzionare senza spiegazione.
 
 ### YARA — regole esterne (`--yara`)
 

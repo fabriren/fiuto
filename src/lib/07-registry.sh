@@ -82,6 +82,26 @@ recover_hive() {
     # evita di ritentare a ogni modulo.
     [[ -f "${OUT}.skip" ]] && { echo "$ORIG"; return; }
 
+    # Con --jobs piu' moduli possono chiedere lo stesso hive nello stesso
+    # istante. Senza lock il secondo leggerebbe la copia ricostruita mentre il
+    # primo la sta ancora scrivendo: un hive troncato non da' errore, da'
+    # risultati parziali — che e' peggio. mkdir e' atomico anche su NFS.
+    local LOCK="${OUT}.lock" _held=false _tries=0
+    while true; do
+        if mkdir "$LOCK" 2>/dev/null; then _held=true; break; fi
+        _tries=$((_tries + 1))
+        # Un lock orfano (processo ucciso) non deve bloccare la sessione: dopo
+        # due minuti si procede comunque, nel caso peggiore rifacendo il lavoro.
+        [[ $_tries -gt 240 ]] && break
+        sleep 0.5
+        # Nel frattempo puo' aver finito qualcun altro.
+        [[ -s "$OUT" ]] && { echo "$OUT"; return; }
+        [[ -f "${OUT}.skip" ]] && { echo "$ORIG"; return; }
+    done
+    # Rilascia il lock solo chi lo detiene davvero: dopo un timeout il lock e'
+    # di un altro processo, e rimuoverlo aprirebbe la corsa che il lock evita.
+    _unlock() { [[ "$_held" == "true" ]] && rmdir "$LOCK" 2>/dev/null; return 0; }
+
     local DIR BASE LOG1 LOG2
     DIR=$(dirname "$ORIG")
     BASE=$(basename "$ORIG")
@@ -92,7 +112,7 @@ recover_hive() {
     if [[ ( -z "$LOG1" || ! -s "$LOG1" ) && ( -z "$LOG2" || ! -s "$LOG2" ) ]]; then
         : > "${OUT}.skip"
         _hive_replay_note "clean" "$BASE" "$(L "nessun transaction log da applicare" "no transaction log to apply")"
-        echo "$ORIG"
+        _unlock; echo "$ORIG"
         return
     fi
 
@@ -107,7 +127,7 @@ recover_hive() {
         fi
         : > "${OUT}.skip"
         _hive_replay_note "skipped" "$BASE" "$(L "regipy non disponibile" "regipy unavailable")"
-        echo "$ORIG"
+        _unlock; echo "$ORIG"
         return
     fi
 
@@ -146,7 +166,7 @@ PYEOF
         _hive_replay_note "recovered" "$BASE" "${DETAIL} $(L "pagine dirty riapplicate" "dirty pages replayed")"
         info "$(L "Transaction log applicati a" "Transaction logs applied to") ${BOLD}${BASE}${RESET} — ${DETAIL} $(L "pagine dirty" "dirty pages")" >&2
         log_msg "[HIVE] replay OK: $ORIG -> $OUT (${DETAIL} dirty pages)"
-        echo "$OUT"
+        _unlock; echo "$OUT"
         return
     fi
 
@@ -156,7 +176,7 @@ PYEOF
     _hive_replay_note "failed" "$BASE" "$DETAIL"
     warn "$(L "Replay dei transaction log fallito per" "Transaction log replay failed for") ${BASE}: ${DETAIL}" >&2
     log_msg "[HIVE] replay FAILED: $ORIG — $DETAIL"
-    echo "$ORIG"
+    _unlock; echo "$ORIG"
 }
 
 # Torna il percorso di un hive di sistema, con i transaction log gia' applicati.

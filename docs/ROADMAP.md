@@ -34,7 +34,7 @@ Stato aggiornato al: **2026-07-30** (versione 2.2, Fasi 1-5 complete, Fase 6 ini
 | Area | Stato |
 |---|---|
 | CI (bash -n, ShellCheck, bats, parser Python su 3.9 + 3.12) | ✅ |
-| Suite di test — 161 test bats | ✅ |
+| Suite di test — 170 test bats | ✅ |
 | Replay transaction log registro (`.LOG1`/`.LOG2`) | ✅ |
 | Export JSONL / schema Timesketch (`--jsonl`) | ✅ |
 | macOS: FSEvents, Spotlight | ✅ |
@@ -51,6 +51,7 @@ Stato aggiornato al: **2026-07-30** (versione 2.2, Fasi 1-5 complete, Fase 6 ini
 | Fase 6.3 — executive summary, scoring e correlazione cross-modulo | ✅ |
 | Fase 6.4 — scansione YARA (`--yara`), ambito dichiarato | ✅ |
 | Fase 6.5 — motore Sigma sugli EVTX (`--sigma`), sottoinsieme dichiarato | ✅ |
+| Fase 6.6 — esecuzione parallela (`--jobs N`) con esito invariante | ✅ |
 | Libreria Python condivisa Sigma (`src/lib/19-pylib-sigma.sh`) | ✅ |
 | Libreria Python condivisa timeline (`src/lib/17-pylib-timeline.sh`) | ✅ |
 | Flag `defer` nel registro (numerazione stabile) | ✅ |
@@ -378,9 +379,30 @@ Ordinati per rapporto valore/costo.
    Sigma è registrato **solo per Windows**: le logsource mappate puntano a
    canali EVTX, offrirlo su Linux o macOS prometterebbe una copertura
    inesistente. C'è un test che lo presidia.
-5. **Parallelizzazione di `--all`.** Oggi strettamente sequenziale. Pool di job
-   sui moduli indipendenti; unico vincolo la master timeline, che è già un
-   aggregatore finale.
+5. ~~**Parallelizzazione di `--all`.**~~ ✅ **Fatto (6.6)** — `--jobs N`,
+   `run_batch_pool` in `src/lib/11-runner.sh`. Su un volume di prova: 15,5s
+   sequenziale, 7,3s con `--jobs 4`, esito identico.
+
+   **Opt-in, non default.** Su disco meccanico o volume di rete N lettori vanno
+   più piano di uno: il collo di bottiglia è l'I/O, non la CPU, e qual è lo sa
+   solo chi analizza.
+
+   **Il criterio è che l'esito non dipenda da `--jobs`**: stessi report, stesso
+   ordine nel riepilogo. Un risultato che cambia con il parallelismo non è
+   affidabile, e in ambito peritale è peggio di un tool lento.
+
+   Due trappole trovate implementando, entrambe con test di regressione:
+   - i moduli `defer` vanno lanciati **dopo** aver raccolto gli esiti del pool,
+     non solo dopo che il pool si è svuotato. La Master Timeline legge
+     `GENERATED_REPORTS`: nella prima versione girava con l'array ancora vuoto e
+     produceva una timeline vuota **senza segnalare nulla**;
+   - `recover_hive` ora prende un lock (`mkdir`, atomico). Due moduli che
+     chiedono lo stesso hive insieme facevano leggere al secondo la copia
+     ricostruita mentre il primo la stava scrivendo. Un hive troncato non dà
+     errore: dà risultati parziali.
+
+   ESC per saltare un modulo non è disponibile in parallelo — richiede il
+   controllo esclusivo del terminale — e viene dichiarato all'avvio.
 6. **IoC engine.** Oggi è match di sottostringa case-insensitive. Tipizzare
    (IP/dominio/hash/regex), import STIX/MISP, defanging in output.
 7. **`--redact`.** I report contengono hash NTLM, PSK Wi-Fi, token: serve una

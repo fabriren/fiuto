@@ -55,6 +55,7 @@ YARA_MAX_MB=64               # tetto per file: oltre, il file viene dichiarato s
 YARA_MAX_FILES=200000        # tetto complessivo: oltre, la scansione si dichiara parziale
 SIGMA_RULES=""               # file o directory di regole Sigma (--sigma)
 SIGMA_MAX_RECORDS=300000     # tetto sui record EVTX letti: oltre, valutazione parziale dichiarata
+JOBS=1                       # moduli eseguiti in parallelo con --all (--jobs N)
 # Lo stato del replay (cache, esiti, avvisi gia' emessi) vive su disco in
 # ${TMPDIR:-/tmp}/fiuto_hives_$$ e non in variabili: recover_hive gira quasi
 # sempre dentro una command substitution, quindi in subshell.
