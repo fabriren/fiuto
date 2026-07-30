@@ -33,6 +33,12 @@ def extract_blocks(path: str) -> list[tuple[int, str, str]]:
     blocks: list[tuple[int, str, str]] = []
     i = 0
     while i < len(lines):
+        # Le righe di commento non aprono heredoc: un esempio d'uso in un
+        # commento (`# ... << 'PYEOF'`) faceva credere al linter di essere
+        # dentro un blocco mai chiuso.
+        if lines[i].lstrip().startswith("#"):
+            i += 1
+            continue
         match = OPEN.search(lines[i])
         if not match:
             i += 1

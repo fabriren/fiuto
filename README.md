@@ -121,6 +121,7 @@ pip install libesedb-python   # ESE database parsing — SRUM (module 16)
 pip install mft               # MFT timeline (module 21)
 pip install python-snappy     # ChatGPT LevelDB decompression (module 39) — or: pip install cramjam
 pip install libpff-python     # Outlook PST/OST parsing (module 44)
+pip install libesedb-python   # WebCacheV01 and Windows.edb (modules 49, 50)
 ```
 
 > **Linux and macOS modules need no extra packages** — they rely only on the Python standard library (`sqlite3`, `plistlib`, …). Optionally, `journalctl` (for systemd journal) and the `rpm` CLI (for offline RPM dumps) improve coverage if present.
@@ -183,7 +184,7 @@ The script uses internal bash helpers for:
 ./fiuto.sh /mnt/disk
 ```
 
-The script detects the volume's OS and presents a numbered menu with the relevant modules (47 for Windows, 16 for Linux, 13 for macOS). Select the module number or type `--all` to run them all.
+The script detects the volume's OS and presents a numbered menu with the relevant modules (50 for Windows, 16 for Linux, 13 for macOS). Select the module number or type `--all` to run them all.
 
 ### Automated Batch Analysis
 
@@ -216,7 +217,7 @@ fiuto_reports/
 
 ---
 
-## 📊 The 47 Windows analysis modules
+## 📊 The 50 Windows analysis modules
 
 | #  | Module Name                   | Windows Artifact                    | Usage                                                           |
 | -- | ----------------------------- | ----------------------------------- | --------------------------------------------------------------- |
@@ -267,6 +268,9 @@ fiuto_reports/
 | 45 | Cloud Sync                    | OneDrive, Dropbox, Google Drive     | Synced files — the modern exfiltration path                     |
 | 46 | BITS Jobs                     | qmgr.db                             | Background downloads used as LOLBin (T1197)                     |
 | 47 | Thumbcache                    | thumbcache_*.db                     | Thumbnails of **deleted** files, carved                         |
+| 48 | Chat Desktop                  | Slack / Teams / Discord (LevelDB)   | Internal social engineering, files shared in private chats      |
+| 49 | WebCacheV01                   | WebCacheV01.dat (ESE)               | IE/Edge Legacy **and everything using WinINET**                 |
+| 50 | Windows Search Index          | Windows.edb (ESE)                   | Paths and content excerpts of **deleted** files                 |
 
 ---
 
@@ -618,6 +622,7 @@ pip install libesedb-python   # Parsing database ESE — SRUM (modulo 16)
 pip install mft               # MFT timeline (modulo 21)
 pip install python-snappy     # Decompressione LevelDB ChatGPT (modulo 39) — oppure: pip install cramjam
 pip install libpff-python     # Parsing PST/OST di Outlook (modulo 44)
+pip install libesedb-python   # WebCacheV01 e Windows.edb (moduli 49, 50)
 ```
 
 > **I moduli Linux e macOS non richiedono pacchetti aggiuntivi** — usano solo la libreria standard di Python (`sqlite3`, `plistlib`, …). Facoltativamente, `journalctl` (per il journal systemd) e la CLI `rpm` (per il dump RPM offline) migliorano la copertura se presenti.
@@ -680,7 +685,7 @@ Lo script utilizza internamente helper bash per:
 ./fiuto.sh /mnt/disk
 ```
 
-Lo script rileva l'OS del volume e presenta un menu numerato con i moduli pertinenti (47 per Windows, 16 per Linux, 13 per macOS). Seleziona il numero del modulo o digita `--all` per eseguirli tutti.
+Lo script rileva l'OS del volume e presenta un menu numerato con i moduli pertinenti (50 per Windows, 16 per Linux, 13 per macOS). Seleziona il numero del modulo o digita `--all` per eseguirli tutti.
 
 ### Analisi Batch Automatica
 
@@ -713,7 +718,7 @@ fiuto_reports/
 
 ---
 
-## 📊 I 47 Moduli di Analisi Windows
+## 📊 I 50 Moduli di Analisi Windows
 
 | #  | Nome Modulo                   | Artefatto Windows                   | Utilizzo                                                              |
 | -- | ----------------------------- | ----------------------------------- | --------------------------------------------------------------------- |
@@ -764,6 +769,9 @@ fiuto_reports/
 | 45 | Cloud Sync                    | OneDrive, Dropbox, Google Drive     | File sincronizzati — la via di esfiltrazione moderna                  |
 | 46 | BITS Jobs                     | qmgr.db                             | Download in background usati come LOLBin (T1197)                      |
 | 47 | Thumbcache                    | thumbcache_*.db                     | Miniature di file **cancellati**, estratte per carving                |
+| 48 | Chat Desktop                  | Slack / Teams / Discord (LevelDB)   | Social engineering interno, file condivisi in chat private            |
+| 49 | WebCacheV01                   | WebCacheV01.dat (ESE)               | IE/Edge Legacy **e tutto cio' che usa WinINET**                       |
+| 50 | Windows Search Index          | Windows.edb (ESE)                   | Percorsi ed estratti di contenuto di file **cancellati**              |
 
 ---
 
@@ -1029,7 +1037,9 @@ FIUTO è uno strumento per velocizzare le analisi forensi digitale legittimo, da
 
 **Date:** 2026-07-30 | **Version:** 2.2
 
-**Eight new Windows modules.** **SetupAPI Device Log** — the only source dating a USB device's *first* connection (the USBSTOR registry keeps the last one). **PowerShell Transcript** — full sessions including command output, invisible to PSReadLine (module 1) when commands come from scripts, `-EncodedCommand` or remoting. **LSA Secrets & DCC2** — cleartext service-account passwords and cached domain credentials from the SECURITY hive, complementing SAM (module 20). **Volume Shadow Copies** — inventory and differential-analysis workflow; their *absence* is reported as an indicator, since deleting them is a standard ransomware step. **Outlook PST/OST** — first local-mail coverage, with risky-attachment and IoC flagging. **Cloud Sync** — OneDrive/Dropbox/Google Drive accounts and synced files: the modern exfiltration path, which leaves no USB artefact. **BITS Jobs** — background downloads abused as a LOLBin (T1197), flagging non-Microsoft hosts, cleartext HTTP and risky targets. **Thumbcache** — thumbnails of deleted files, recovered by signature carving and shown as a gallery beside the report.
+**Eleven new Windows modules.** **SetupAPI Device Log** — the only source dating a USB device's *first* connection (the USBSTOR registry keeps the last one). **PowerShell Transcript** — full sessions including command output, invisible to PSReadLine (module 1) when commands come from scripts, `-EncodedCommand` or remoting. **LSA Secrets & DCC2** — cleartext service-account passwords and cached domain credentials from the SECURITY hive, complementing SAM (module 20). **Volume Shadow Copies** — inventory and differential-analysis workflow; their *absence* is reported as an indicator, since deleting them is a standard ransomware step. **Outlook PST/OST** — first local-mail coverage, with risky-attachment and IoC flagging. **Cloud Sync** — OneDrive/Dropbox/Google Drive accounts and synced files: the modern exfiltration path, which leaves no USB artefact. **BITS Jobs** — background downloads abused as a LOLBin (T1197), flagging non-Microsoft hosts, cleartext HTTP and risky targets. **Thumbcache** — thumbnails of deleted files, recovered by signature carving and shown as a gallery beside the report. **Chat Desktop** — Slack/Teams/Discord message fragments carved from LevelDB, flagging sensitive terms. **WebCacheV01** — IE/Edge Legacy history and, more importantly, everything routed through the WinINET APIs, including non-browser code. **Windows Search Index** — indexed paths and content excerpts, which survive file deletion.
+
+Both ESE-based modules fall back to string extraction when libesedb cannot open the database — the normal case for a file acquired from a running machine — and state in the report which parser actually produced the data.
 
 **Internals.** Module dispatch is now data-driven for Windows too: three parallel dispatchers were removed (a hand-written menu and two separate 39-branch `case` statements). Registry entries support bilingual labels and optional guards. Module numbering is unchanged — `--module N` keeps invoking the same modules.
 

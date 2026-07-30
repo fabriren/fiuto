@@ -10045,7 +10045,7 @@ module_ai_chat() {
     #   riga 1: STATS:<file>|<utenti>|<tool>|<sensibili>|<ioc>
     #   resto : HTML delle card (contenuto di <div class='cards'>)
     local PARSER_OUT
-    PARSER_OUT=$("$PY3" - "$MANIFEST" "$IOCTMP" << 'PYEOF'
+    PARSER_OUT=$(run_py_with_lib pylib_leveldb "$MANIFEST" "$IOCTMP" << 'PYEOF'
 import sys, os, re, json, html, sqlite3, shutil, tempfile, hashlib, datetime
 from collections import OrderedDict
 
@@ -10268,355 +10268,6 @@ def sha256_short(p):
     except Exception:
         return '?'
 
-# Carving di stringhe da file LevelDB (.ldb/.log) usati da ChatGPT Desktop
-# (IndexedDB / Local Storage). I file SSTable non sono parsabili senza la
-# libreria leveldb, ma i messaggi delle conversazioni sono memorizzati come
-# stringhe in chiaro UTF-8/UTF-16. Estraiamo le run leggibili e teniamo SOLO
-# quelle che sembrano linguaggio naturale (prosa), scartando i frammenti
-# JSON/serializzati di configurazione (feature flag, chiavi JWK, metadati) che
-# popolano soprattutto il Local Storage e non hanno valore investigativo.
-MIN_LDB = 6
-
-# Marcatori di dato serializzato: "key":  ,"  :{  :[  }] ,  ecc.
-_JSON_FRAG = re.compile(r'["\}\]]\s*[:,]|[:,]\s*["\{\[]')
-_WORD      = re.compile(r'[A-Za-zÀ-ÿ]{2,}')
-# Prefisso V8/IndexedDB: chiave nota + " + 1 byte-tag (rumore di serializzazione)
-_VPFX = re.compile(
-    r'^(?:text|parts|content|content_type|message|title|name|author|value|role)".')
-# Byte di controllo C0/C1 (tranne tab/CR/LF): tag e varint di lunghezza V8 che
-# capitano stampabili e sporcano il testo (es. \x02 davanti a un messaggio).
-_CTRL = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]')
-# Segnali di risposta AI nel contenuto (markdown/struttura): grassetto, heading,
-# liste, code fence, tabelle, link/citazioni. Più affidabile dell'encoding per
-# distinguere assistente da utente (un prompt utente con € o emoji è comunque UTF-16).
-_AI_SIG = re.compile(
-    r'\*\*.+?\*\*|^#{1,6}\s|^\s*[-*]\s|^\s*\d+\.\s|```|\|.+\||\]\(https?://',
-    re.MULTILINE)
-# Marcatori dei record di metadati IndexedDB (id, utenti, flag) → mai nella prosa
-_META = re.compile(
-    r'accountUserId|authUserId|isArchived|client-created-root|conversationId|'
-    r'currentNode|asyncStatus|updateTime[A-Z]|messagesa[A-Z]|gizmoId|'
-    r'id"\$?[0-9a-f]{8}-[0-9a-f]{4}-')
-
-def _ldb_interesting(s):
-    if len(s) < 12:
-        return False
-    # Una frase reale contiene spazi → scarta blob base64/hex/cert/token
-    if ' ' not in s:
-        return False
-    # Scarta i record di metadati IndexedDB (id conversazione, userId, flag…)
-    if _META.search(s):
-        return False
-    # Scarta frammenti JSON / config / JWK / feature-flag
-    if _JSON_FRAG.search(s):
-        return False
-    if s.count('"') >= 2 and (':' in s or ',' in s):
-        return False
-    # Richiede almeno 3 parole "vere" → frase, non token isolato
-    if len(_WORD.findall(s)) < 3:
-        return False
-    # Prevalenza di caratteri alfabetici → testo, non blob/codice
-    alpha = sum(c.isalpha() for c in s)
-    if alpha / max(len(s), 1) < 0.55:
-        return False
-    return True
-
-def _carve_bytes(data):
-    """Estrae le run di testo stampabile da un buffer, restituendole in ordine
-    di posizione. Nei valori V8/IndexedDB i prompt utente sono spesso one-byte
-    (Latin-1) e le risposte AI two-byte (UTF-16, per markdown/caratteri speciali):
-    mescolandole per offset la conversazione si legge in ordine cronologico."""
-    # Caratteri base di una run: stampabili ASCII + supplemento Latin-1
-    # (accenti à,è,é,ù…) + tab/CR/LF (i messaggi multi-riga restano interi).
-    # One-byte = Latin-1, two-byte = UTF-16LE (high byte 0x00).
-    def _dec(s, e, enc):
-        return data[s:e].decode('latin-1' if enc == 'l' else 'utf-16-le', errors='replace')
-    runs = []  # [start, end, enc, text, is_meta]
-    for m in re.finditer(rb'[\x09\x0a\x0d\x20-\x7e\xa0-\xff]{%d,}' % MIN_LDB, data):
-        t = _dec(m.start(), m.end(), 'l')
-        runs.append([m.start(), m.end(), 'l', t, bool(_META.search(t))])
-    for m in re.finditer(rb'(?:[\x09\x0a\x0d\x20-\x7e\xa0-\xff]\x00){%d,}' % MIN_LDB, data):
-        t = _dec(m.start(), m.end(), 'u')
-        runs.append([m.start(), m.end(), 'u', t, bool(_META.search(t))])
-    runs.sort(key=lambda x: x[0])
-    # Fusione di run di CONTENUTO adiacenti, stesso encoding, gap ≤12 byte: è
-    # quasi sempre un simbolo Unicode (→ • ✓ —, emoji) o un a-capo che spezza il
-    # testo; ri-decodificando lo span viene assorbito. NON si fonde mai attraverso
-    # un record di metadati (id/userId/flag), per non trascinare via il testo utente.
-    merged = []
-    for r in runs:
-        if merged:
-            last = merged[-1]
-            gap = r[0] - last[1]
-            if (not r[4] and not last[4] and r[2] == last[2] and 0 <= gap <= 12
-                    and (r[2] == 'l' or (gap % 2 == 0 and last[0] % 2 == r[0] % 2))):
-                last[1] = r[1]
-                last[3] = _dec(last[0], last[1], last[2])
-                continue
-        merged.append(r)
-    # Ritorna (testo, encoding): one-byte 'l' ≈ prompt utente (testo semplice),
-    # two-byte 'u' ≈ risposta AI (markdown/simboli/emoji → UTF-16). Euristica.
-    return [(r[3], r[2]) for r in merged]
-
-# ── Decompressione Snappy (opzionale) ──────────────────────────────
-# I blocchi dati delle SSTable LevelDB sono spesso compressi con Snappy
-# (raw block format). Senza decomprimerli, gran parte del testo delle
-# conversazioni resta non carvabile. Proviamo python-snappy, poi cramjam.
-_SNAPPY = None
-try:
-    import snappy as _sn
-    _SNAPPY = ('snappy', _sn)
-except Exception:
-    try:
-        import cramjam as _cj
-        _SNAPPY = ('cramjam', _cj)
-    except Exception:
-        _SNAPPY = None
-
-# Decompressore Snappy "raw" in puro Python (nessuna dipendenza): preambolo
-# varint con la lunghezza non compressa, poi tag literal/copy LZ77. Usato come
-# fallback quando python-snappy/cramjam non sono installati nel Python in uso.
-def _snappy_py(buf):
-    try:
-        n = len(buf); pos = 0
-        shift = 0
-        while pos < n:                       # preambolo: lunghezza (scartata)
-            b = buf[pos]; pos += 1
-            if not (b & 0x80):
-                break
-            shift += 7
-        out = bytearray()
-        while pos < n:
-            tag = buf[pos]; pos += 1
-            t = tag & 0x03
-            if t == 0:                       # literal
-                length = (tag >> 2) + 1
-                if length > 60:
-                    nb = length - 60
-                    length = 1
-                    for i in range(nb):
-                        length += buf[pos + i] << (8 * i)
-                    pos += nb
-                out += buf[pos:pos + length]
-                pos += length
-            else:
-                if t == 1:                   # copy, offset 1 byte
-                    length = ((tag >> 2) & 0x07) + 4
-                    offset = ((tag >> 5) << 8) | buf[pos]; pos += 1
-                elif t == 2:                 # copy, offset 2 byte
-                    length = (tag >> 2) + 1
-                    offset = buf[pos] | (buf[pos + 1] << 8); pos += 2
-                else:                        # copy, offset 4 byte
-                    length = (tag >> 2) + 1
-                    offset = (buf[pos] | (buf[pos + 1] << 8) |
-                              (buf[pos + 2] << 16) | (buf[pos + 3] << 24)); pos += 4
-                if offset == 0 or offset > len(out):
-                    break
-                start = len(out) - offset
-                for i in range(length):      # copia byte-a-byte (gestisce overlap)
-                    out.append(out[start + i])
-        return bytes(out)
-    except Exception:
-        return b''
-
-def _snappy_raw(buf):
-    if _SNAPPY is not None:
-        kind, mod = _SNAPPY
-        try:
-            if kind == 'snappy':
-                return mod.uncompress(buf)
-            return bytes(mod.snappy.decompress_raw(buf))
-        except Exception:
-            pass
-    return _snappy_py(buf)
-
-def _uvarint(buf, pos):
-    result = shift = 0
-    while pos < len(buf):
-        b = buf[pos]; pos += 1
-        result |= (b & 0x7f) << shift
-        if not (b & 0x80):
-            return result, pos
-        shift += 7
-    return result, pos
-
-# Legge un blocco SSTable a (offset,size); il trailer è 1 byte tipo + 4 byte CRC.
-def _read_block(data, off, size):
-    if off < 0 or off + size > len(data):
-        return b''
-    raw = data[off:off + size]
-    ctype = data[off + size] if off + size < len(data) else 0
-    if ctype == 0:
-        return raw
-    if ctype == 1:                       # Snappy
-        return _snappy_raw(raw)
-    return b''                            # zstd/altro non gestito
-
-# Estrae i valori (record) da un blocco SSTable (formato entry + restart array).
-def _block_values(block):
-    if len(block) < 4:
-        return []
-    num_restarts = int.from_bytes(block[-4:], 'little')
-    restart_start = len(block) - 4 - num_restarts * 4
-    if restart_start < 0:
-        return []
-    pos = 0; last_key = b''; vals = []
-    while pos < restart_start and len(vals) < 100000:
-        shared, pos = _uvarint(block, pos)
-        nonshared, pos = _uvarint(block, pos)
-        vlen, pos = _uvarint(block, pos)
-        key = last_key[:shared] + block[pos:pos + nonshared]; pos += nonshared
-        value = block[pos:pos + vlen]; pos += vlen
-        last_key = key
-        vals.append(value)
-    return vals
-
-_LDB_MAGIC = 0xdb4775248b80fb57
-
-def _printable_ratio(b, n=4096):
-    s = b[:n]
-    if not s:
-        return 0.0
-    return sum(0x20 <= c < 0x7f or c in (9, 10, 13) for c in s) / len(s)
-
-# Chromium/Blink comprime i singoli valori IndexedDB con Snappy, dietro un
-# breve header wrapper (lunghezza variabile). Proviamo a decomprimere saltando
-# 0..15 byte iniziali; se otteniamo testo plausibile e più lungo, lo usiamo.
-def _decompress_value(v):
-    if len(v) < 32:
-        return v
-    for k in range(0, 16):
-        d = _snappy_raw(v[k:])
-        # Soglia bassa: i valori IndexedDB V8 contengono stringhe UTF-16
-        # (byte \x00 alternati) che abbassano la quota di stampabili.
-        if d and len(d) > len(v) * 1.2 and _printable_ratio(d) > 0.45:
-            return d
-    return v
-
-# Estrae il contenuto applicativo da una SSTable (.ldb): decomprime i data-block
-# (livello LevelDB) e poi decomprime i singoli valori dei record (livello Blink).
-# Best-effort: b'' se il file non è una SSTable valida.
-def _sstable_data(data):
-    if len(data) < 48:
-        return b''
-    footer = data[-48:]
-    if int.from_bytes(footer[40:48], 'little') != _LDB_MAGIC:
-        return b''
-    try:
-        pos = 0
-        _mi_off, pos = _uvarint(footer, pos); _mi_sz, pos = _uvarint(footer, pos)
-        ix_off, pos = _uvarint(footer, pos); ix_sz, pos = _uvarint(footer, pos)
-        index_block = _read_block(data, ix_off, ix_sz)
-        out = bytearray()
-        for h in _block_values(index_block):
-            p = 0
-            off, p = _uvarint(h, p); sz, p = _uvarint(h, p)
-            blk = _read_block(data, off, sz)        # livello LevelDB (Snappy/none)
-            if not blk:
-                continue
-            for v in _block_values(blk):            # valori dei record
-                out += _decompress_value(v) + b'\x00'   # livello Blink (Snappy)
-                if len(out) > 96 * 1024 * 1024:
-                    return bytes(out)
-        return bytes(out)
-    except Exception:
-        return b''
-
-# Estrae i valori scritti da un write-ahead log LevelDB (.log): blocchi fisici
-# da 32 KB con record header crc(4)+len(2)+type(1); i record logici (FULL o
-# FIRST/MIDDLE/LAST) sono WriteBatch (seq 8 + count 4 + voci put/delete). Per
-# ogni PUT decomprimiamo il valore (livello Blink). Best-effort.
-_WAL_BLOCK = 32768
-
-def _wal_data(data):
-    try:
-        logical, cur, pos, n = [], bytearray(), 0, len(data)
-        while pos + 7 <= n:
-            off = pos % _WAL_BLOCK
-            if _WAL_BLOCK - off < 7:          # trailer di blocco → blocco succ.
-                pos += _WAL_BLOCK - off
-                continue
-            length = data[pos + 4] | (data[pos + 5] << 8)
-            rtype = data[pos + 6]
-            payload = data[pos + 7:pos + 7 + length]
-            pos += 7 + length
-            if rtype == 1:                     # FULL
-                logical.append(bytes(payload))
-            elif rtype == 2:                   # FIRST
-                cur = bytearray(payload)
-            elif rtype == 3:                   # MIDDLE
-                cur += payload
-            elif rtype == 4:                   # LAST
-                cur += payload; logical.append(bytes(cur)); cur = bytearray()
-            elif length == 0:                  # padding → blocco successivo
-                pos = (pos // _WAL_BLOCK + 1) * _WAL_BLOCK
-        out = bytearray()
-        for rec in logical:
-            p, L = 12, len(rec)                # salta seq(8)+count(4)
-            while p < L:
-                t = rec[p]; p += 1
-                if t not in (0, 1):
-                    break                      # formato inatteso
-                klen, p = _uvarint(rec, p); p += klen      # salta key
-                if t == 1:                     # kTypeValue
-                    vlen, p = _uvarint(rec, p)
-                    out += _decompress_value(rec[p:p + vlen]) + b'\x00'
-                    p += vlen
-                if len(out) > 96 * 1024 * 1024:
-                    return bytes(out)
-        return bytes(out)
-    except Exception:
-        return b''
-
-def carve_leveldb(path, cap=2500):
-    try:
-        with open(path, 'rb') as f:
-            data = f.read(64 * 1024 * 1024)
-    except Exception as e:
-        return [('', 'error', str(e))]
-    # Decomprimiamo il contenuto e carviamo SOLO quello (pulito): per le SSTable
-    # (.ldb) i data-block, per i write-ahead log (.log) i record WriteBatch. In
-    # entrambi i casi i valori IndexedDB vengono poi de-comprimati (livello Blink).
-    # Il carving del file grezzo darebbe frammenti spezzati → solo come fallback.
-    low = path.lower()
-    if low.endswith('.ldb'):
-        blocks = _sstable_data(data)
-    elif low.endswith('.log'):
-        blocks = _wal_data(data)
-    else:
-        # File blob esterno IndexedDB (valore grande wrappato+Snappy da Blink):
-        # un singolo valore → proviamo a decomprimerlo direttamente.
-        dv = _decompress_value(data)
-        blocks = dv if len(dv) > len(data) else b''
-    cand = _carve_bytes(blocks) if blocks else _carve_bytes(data)
-    out, seen = [], set()
-    for s, enc in cand:
-        s = s.strip()
-        # Strip conservativo del prefisso V8: chiave IndexedDB nota + " + 1
-        # byte-tag (es. text"T… → non…). Solo se resta del testo.
-        s2 = _VPFX.sub('', s)
-        if s2:
-            s = s2.strip()
-        # Rimuove i byte di controllo residui (tag/varint V8) ovunque nel testo.
-        s = _CTRL.sub('', s).strip()
-        # Rimuove il tag V8 di fine-oggetto '{' (kEndJSObject) in coda al messaggio.
-        s = re.sub(r'\s*\{+\s*$', '', s)
-        if not _ldb_interesting(s):
-            continue
-        key = s.lower()[:80]
-        if key in seen:
-            continue
-        seen.add(key)
-        # Ruolo dal contenuto: la presenza di markdown/struttura indica una
-        # risposta AI; altrimenti è un prompt utente (più robusto dell'encoding).
-        role = 'assistant' if _AI_SIG.search(s) else 'user'
-        out.append(('', role, s[:MAX_TXT]))
-        if len(out) >= cap:
-            break
-    if not out:
-        out.append(('', 'info',
-                    'Nessuna stringa leggibile estratta (file vuoto, binario o solo metadati).'))
-    return out
 
 VSCDB_KEYS = ['chat','copilot','aichat','interactive.session','cascade',
               'composer','aiservice','windsurf','continue','prompt']
@@ -12009,6 +11660,590 @@ PYEOF
     register_report "$REPORT_HTML"
     ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
     open_report_prompt "$REPORT_HTML"
+}
+
+# ================================================================
+#  MODULO 48 — Chat Desktop (Slack / Teams / Discord)
+#
+#  Le app di messaggistica aziendale sono Electron e conservano i messaggi in
+#  LevelDB, esattamente come ChatGPT Desktop (modulo 39). In un'indagine
+#  contano per due ragioni:
+#
+#  - social engineering interno: il messaggio che ha convinto la vittima ad
+#    aprire l'allegato o ad autorizzare un pagamento spesso arriva da qui,
+#    non dalla posta;
+#  - esfiltrazione: file e credenziali condivisi in chat privata non passano
+#    dal gateway di posta e non lasciano traccia negli artefatti USB.
+#
+#  Il carving riusa la libreria condivisa pylib_leveldb: le stringhe
+#  recuperate sono frammenti di conversazione, non un export strutturato —
+#  mancano interlocutori e timestamp, e il report lo dichiara.
+# ================================================================
+module_chat_desktop() {
+    section_header "Chat Desktop — Slack / Teams / Discord" "$MAGENTA"
+    check_win_root || return 1
+
+    local MANIFEST; MANIFEST=$(mktemp); register_tmp "$MANIFEST"
+    local HOME_DIR NAPP=0
+    local -a FOUND_APPS=()
+
+    while IFS= read -r HOME_DIR; do
+        local U; U=$(basename "$HOME_DIR")
+        local ROAM LOCAL
+        ROAM=$(ci_find_dir "$HOME_DIR" "AppData/Roaming")
+        LOCAL=$(ci_find_dir "$HOME_DIR" "AppData/Local")
+
+        # app|percorso relativo alla radice indicata
+        local SPEC APP REL BASE DIR N
+        for SPEC in "Slack|Slack|roam" "Discord|discord|roam" "Teams|Microsoft/Teams|roam" \
+                    "Teams (new)|Packages|local"; do
+            IFS='|' read -r APP REL BASE <<< "$SPEC"
+            local ROOT; [[ "$BASE" == "roam" ]] && ROOT="$ROAM" || ROOT="$LOCAL"
+            [[ -z "$ROOT" ]] && continue
+            local APPDIR; APPDIR=$(ci_find_dir "$ROOT" "$REL")
+            [[ -z "$APPDIR" ]] && continue
+
+            # Teams "new" sta dentro Packages/MSTeams_*: si restringe la ricerca.
+            if [[ "$APP" == "Teams (new)" ]]; then
+                APPDIR=$(find "$ROOT" -maxdepth 1 -type d -iname 'MSTeams_*' 2>/dev/null | head -1)
+                [[ -z "$APPDIR" ]] && continue
+            fi
+
+            N=0
+            while IFS= read -r F; do
+                [[ -s "$F" ]] || continue
+                printf '%s\t%s\t%s\n' "$APP" "$U" "$F" >> "$MANIFEST"
+                N=$((N + 1))
+            done < <(find "$APPDIR" -maxdepth 8 -type f \( -iname '*.ldb' -o -iname '*.log' \) \
+                          \( -ipath '*Local Storage*' -o -ipath '*IndexedDB*' -o -ipath '*leveldb*' \) 2>/dev/null)
+            if [[ "$N" -gt 0 ]]; then
+                NAPP=$((NAPP + 1))
+                FOUND_APPS+=("$APP ($U): $N")
+                ok "$APP — $U: ${BOLD}${N}${RESET} $(L "file LevelDB" "LevelDB files")"
+            fi
+        done
+    done < <(get_user_homes)
+
+    if [[ ! -s "$MANIFEST" ]]; then
+        warn "$(L "Nessuna app di chat desktop con dati LevelDB trovata." "No desktop chat app with LevelDB data found.")"
+        return 0
+    fi
+    local NFILES; NFILES=$(wc -l < "$MANIFEST")
+    info "$(L "File da analizzare:" "Files to analyse:") ${BOLD}$NFILES"
+    info "$(L "Carving in corso (puo' richiedere tempo)..." "Carving (may take a while)...")"
+
+    local IOCTMP; IOCTMP=$(mktemp); register_tmp "$IOCTMP"
+    printf '%s\n' "${IOC_LIST[@]:-}" > "$IOCTMP"
+
+    local OUT; OUT=$(mktemp); register_tmp "$OUT"
+    run_py_with_lib pylib_leveldb "$MANIFEST" "$IOCTMP" "$OUT" << 'PYEOF' 2>/dev/null
+import sys, os
+
+manifest, ioc_path, out_path = sys.argv[1], sys.argv[2], sys.argv[3]
+
+try:
+    iocs = [l.strip().lower() for l in open(ioc_path, encoding='utf-8', errors='replace') if l.strip()]
+except Exception:
+    iocs = []
+
+# Termini che, dentro una chat aziendale, meritano di essere portati in cima.
+SENSITIVE = ('password', 'passwd', 'credenziali', 'credential', 'token', 'api key',
+             'apikey', 'secret', 'iban', 'bonifico', 'wire transfer', 'urgente',
+             'urgent', 'riservato', 'confidential', 'vpn', 'rdp', '2fa', 'otp',
+             'codice di verifica', 'verification code', 'invoice', 'fattura')
+
+rows = []
+seen = set()
+for line in open(manifest, encoding='utf-8', errors='replace'):
+    parts = line.rstrip('\n').split('\t')
+    if len(parts) != 3:
+        continue
+    app, user, path = parts
+    try:
+        items = carve_leveldb(path, cap=1200)
+    except Exception:
+        continue
+    src = os.path.basename(path)
+    for _, role, text in items:
+        if role in ('error', 'info'):
+            continue
+        t = text.strip()
+        if not t:
+            continue
+        key = (app, user, t.lower()[:90])
+        if key in seen:
+            continue
+        seen.add(key)
+        low = t.lower()
+        flags = []
+        if any(s in low for s in SENSITIVE):
+            flags.append('SENSIBILE')
+        if iocs and any(i in low for i in iocs):
+            flags.append('IOC')
+        rows.append((app, user, role, t[:1500], ';'.join(flags), src))
+
+# Prima i messaggi segnalati.
+rows.sort(key=lambda r: (r[4] == '', r[0], r[1]))
+with open(out_path, 'w', encoding='utf-8') as fh:
+    for r in rows:
+        fh.write('\t'.join(x.replace('\t', ' ').replace('\n', ' ') for x in r) + '\n')
+PYEOF
+
+    local TOTAL=0
+    [[ -s "$OUT" ]] && TOTAL=$(wc -l < "$OUT")
+    if [[ "$TOTAL" -eq 0 ]]; then
+        warn "$(L "Nessun frammento di conversazione recuperato." "No conversation fragment recovered.")"
+        return 0
+    fi
+    local NFLAG; NFLAG=$(awk -F'\t' '$5!=""' "$OUT" | wc -l)
+
+    ok "$(L "Frammenti recuperati:" "Fragments recovered:") ${BOLD}$TOTAL"
+    if [[ "$NFLAG" -gt 0 ]]; then
+        warn "$(L "Frammenti segnalati (termini sensibili o IoC):" "Flagged fragments (sensitive terms or IoC):") ${BOLD}$NFLAG"
+        awk -F'\t' '$5!=""{printf "      [%s] %s — %s\n", $5, $1, substr($4,1,80)}' "$OUT" | head -15 | while IFS= read -r LN; do
+            echo -e "      ${MAGENTA}${LN}${RESET}"
+        done
+    fi
+
+    ask_yn "Generare report HTML?" || return 0
+
+    local ROWS; ROWS=$(awk -F'\t' '{print $1"\t"$2"\t"$3"\t"$4"\t"$5"\t"$6}' "$OUT" | head -20000)
+    local TABLE; TABLE=$(_rows_to_table "$ROWS" \
+        "App" "$(L "Utente" "User")" "$(L "Ruolo" "Role")" "$(L "Testo" "Text")" \
+        "$(L "Segnalazioni" "Flags")" "$(L "Origine" "Source")")
+
+    local NOTE="<div class='card' style='margin-bottom:1rem'><div style='padding:1rem 1.5rem;font-size:.8rem;line-height:1.7'>"
+    NOTE+="<b>$(L "Cosa sono questi frammenti" "What these fragments are")</b><br>"
+    NOTE+="$(L "Sono stringhe carvate dai database LevelDB delle app: NON sono un export strutturato della conversazione. Mancano interlocutore, canale e timestamp, l'ordine non e' quello cronologico e i messaggi possono risultare troncati. Servono a stabilire che una conversazione e' avvenuta e cosa conteneva, non a ricostruirne il filo." \
+        "These are strings carved from the apps' LevelDB stores: they are NOT a structured conversation export. Counterpart, channel and timestamp are missing, the order is not chronological and messages may be truncated. They establish that a conversation happened and what it contained, not its thread.")<br><br>"
+    NOTE+="$(L "Il ruolo indicato e' dedotto dalla presenza di markdown nel testo: e' un'euristica, non un dato del formato." \
+        "The role shown is inferred from markdown present in the text: it is a heuristic, not a field of the format.")"
+    NOTE+="</div></div>"
+
+    local STATS
+    STATS="$(stat_box "$(L "Frammenti" "Fragments")" "$TOTAL")"
+    STATS+="$(stat_box "App" "$NAPP" "info")"
+    STATS+="$(stat_box "$(L "Segnalati" "Flagged")" "$NFLAG" "$([[ "$NFLAG" -gt 0 ]] && echo warn || echo info)")"
+    finish_report "chat_desktop" "Chat Desktop" "CHT" "Slack · Teams · Discord (LevelDB)" "$STATS" \
+        "${NOTE}<div class='cards'>$(generic_card_html "$(L "Frammenti di conversazione" "Conversation fragments")" "$(L "segnalati in testa" "flagged first")" "$TOTAL" "$TABLE" "💬")</div>"
+}
+
+# ================================================================
+#  MODULO 49 — WebCacheV01.dat (Internet Explorer / Edge Legacy)
+#
+#  Il modulo 17 legge la cronologia dai database SQLite di Chrome, Edge
+#  Chromium e Firefox. Prima di Edge Chromium, pero', Windows registrava la
+#  navigazione in WebCacheV01.dat, un database ESE che contiene:
+#
+#  - la cronologia di IE e Edge Legacy;
+#  - i download;
+#  - i cookie;
+#  - e soprattutto la cronologia di TUTTO cio' che usa WinINET, quindi anche
+#    la navigazione fatta da applicazioni, script e malware che si appoggiano
+#    alle API di sistema invece che a un browser.
+#
+#  Quest'ultimo punto e' il motivo per cui il file resta rilevante anche su
+#  macchine dove nessuno usa piu' Internet Explorer.
+# ================================================================
+module_webcache() {
+    section_header "WebCacheV01 — IE / Edge Legacy / WinINET" "$CYAN"
+    check_win_root || return 1
+
+    local -a DBS=()
+    local HOME_DIR F
+    while IFS= read -r HOME_DIR; do
+        local D; D=$(ci_find_dir "$HOME_DIR" "AppData/Local/Microsoft/Windows/WebCache")
+        [[ -z "$D" ]] && continue
+        while IFS= read -r F; do
+            [[ -s "$F" ]] && DBS+=("$F")
+        done < <(find "$D" -maxdepth 1 -type f -iname 'WebCacheV*.dat' 2>/dev/null)
+    done < <(get_user_homes)
+
+    if [[ ${#DBS[@]} -eq 0 ]]; then
+        warn "$(L "Nessun WebCacheV01.dat trovato." "No WebCacheV01.dat found.")"
+        return 0
+    fi
+    info "$(L "Database trovati:" "Databases found:") ${BOLD}${#DBS[@]}"
+
+    local HAVE_ESE=false
+    "$PY3" -c "import pyesedb" 2>/dev/null && HAVE_ESE=true
+    $HAVE_ESE || info "$(L "libesedb (pyesedb) non disponibile: si usera' l'estrazione dalle stringhe." \
+                          "libesedb (pyesedb) unavailable: string extraction will be used.")"
+
+    local OUT; OUT=$(mktemp); register_tmp "$OUT"
+    # Il parser effettivamente riuscito viene riportato dallo script.
+    local METHOD; METHOD=$("$PY3" - "$OUT" "$($HAVE_ESE && echo 1 || echo 0)" "${DBS[@]}" << 'PYEOF' 2>/dev/null
+import sys, os, re, datetime
+
+out_path = sys.argv[1]
+have_ese = sys.argv[2] == '1'
+dbs = sys.argv[3:]
+
+def filetime(v):
+    """FILETIME (100ns dal 1601) -> stringa UTC."""
+    try:
+        v = int(v)
+        if v <= 0:
+            return ''
+        return (datetime.datetime(1601, 1, 1)
+                + datetime.timedelta(microseconds=v / 10)).strftime('%Y-%m-%d %H:%M:%S')
+    except Exception:
+        return ''
+
+rows = []
+seen = set()
+
+def add(kind, when, url, extra, src):
+    key = (kind, url[:150], when)
+    if key in seen:
+        return
+    seen.add(key)
+    rows.append((when, kind, url[:500], extra[:200], src))
+
+def parse_ese():
+    import pyesedb
+    for db in dbs:
+        src = os.path.basename(db)
+        try:
+            f = pyesedb.file()
+            f.open(db)
+        except Exception:
+            continue
+        for i in range(f.get_number_of_tables()):
+            try:
+                t = f.get_table(i)
+                name = t.get_name()
+            except Exception:
+                continue
+            # Le tabelle utili sono Container_N (cronologia, cookie, download).
+            if not name.startswith('Container_'):
+                continue
+            try:
+                cols = [t.get_column(c).get_name() for c in range(t.get_number_of_columns())]
+            except Exception:
+                continue
+            idx = {c: n for n, c in enumerate(cols)}
+            for r in range(t.get_number_of_records()):
+                try:
+                    rec = t.get_record(r)
+                except Exception:
+                    continue
+                def val(col):
+                    n = idx.get(col)
+                    if n is None:
+                        return ''
+                    try:
+                        v = rec.get_value_data_as_string(n)
+                        return v if v else ''
+                    except Exception:
+                        try:
+                            v = rec.get_value_data_as_integer(n)
+                            return str(v) if v is not None else ''
+                        except Exception:
+                            return ''
+                url = val('Url')
+                if not url:
+                    continue
+                # WinINET prefissa le voci con "Visited:", "Cookie:", "iecompat:"...
+                kind = 'history'
+                low = url.lower()
+                if low.startswith('cookie:'):
+                    kind = 'cookie'
+                elif low.startswith('visited:'):
+                    kind = 'visited'
+                elif low.startswith('iedownload') or 'download' in name.lower():
+                    kind = 'download'
+                when = filetime(val('AccessedTime')) or filetime(val('ModifiedTime')) or filetime(val('CreationTime'))
+                extra = ' '.join(x for x in (val('Filename'), val('AccessCount') and f"hits={val('AccessCount')}") if x)
+                add(kind, when, url, extra, src)
+        try:
+            f.close()
+        except Exception:
+            pass
+
+
+def parse_strings():
+    """Gli URL restano in chiaro nel file anche quando l'ESE non e' apribile."""
+    URL = re.compile(r'(?:https?|ftp)://[!-~]{4,400}')
+    for db in dbs:
+        src = os.path.basename(db)
+        try:
+            with open(db, 'rb') as fh:
+                raw = fh.read(1024 * 1024 * 1024)
+        except Exception:
+            continue
+        for enc in ('utf-16-le', 'latin-1'):
+            try:
+                text = raw.decode(enc, 'ignore')
+            except Exception:
+                continue
+            for m in URL.finditer(text):
+                add('string', '', m.group(0).rstrip('\x00').strip(), '', src)
+
+# Un WebCacheV01 acquisito da macchina accesa e' quasi sempre dirty: pyesedb
+# non lo apre. Ripiegare sulle stringhe invece di restituire un report vuoto
+# e' la differenza fra "nessun dato" e "dati parziali ma reali".
+method = 'strings'
+if have_ese:
+    parse_ese()
+    if rows:
+        method = 'ESE'
+if not rows:
+    parse_strings()
+print(method if rows else 'nessuno')
+
+rows.sort(key=lambda r: (r[0] == '', r[0]), reverse=False)
+with open(out_path, 'w', encoding='utf-8') as fh:
+    for r in rows:
+        fh.write('\t'.join(str(x).replace('\t', ' ') for x in r) + '\n')
+PYEOF
+    )
+
+    local TOTAL=0
+    [[ -s "$OUT" ]] && TOTAL=$(wc -l < "$OUT")
+    if [[ "$TOTAL" -eq 0 ]]; then
+        warn "$(L "Nessuna voce estratta da WebCacheV01." "No entry extracted from WebCacheV01.")"
+        return 0
+    fi
+    ok "$(L "Voci estratte:" "Entries extracted:") ${BOLD}$TOTAL${RESET} ($(L "parser" "parser"): ${METHOD:-strings})"
+    if [[ "$METHOD" != "ESE" ]] && $HAVE_ESE; then
+        warn "$(L "Database non apribile con libesedb (probabilmente dirty): estrazione dalle stringhe, senza date." \
+                 "Database not openable with libesedb (likely dirty): string extraction, without dates.")"
+    fi
+    if [[ ${#IOC_LIST[@]} -gt 0 ]]; then
+        local NIOC=0 LINE
+        while IFS= read -r LINE; do
+            check_ioc "$LINE" && NIOC=$((NIOC + 1))
+        done < "$OUT"
+        [[ $NIOC -gt 0 ]] && warn "$(L "Voci con match IoC:" "Entries matching IoC:") ${BOLD}$NIOC"
+    fi
+
+    ask_yn "Generare report HTML?" || return 0
+
+    local ROWS; ROWS=$(head -30000 "$OUT")
+    local TABLE; TABLE=$(_rows_to_table "$ROWS" \
+        "$(L "Data (UTC)" "Date (UTC)")" "$(L "Tipo" "Type")" "URL" "$(L "Dettaglio" "Detail")" "$(L "Origine" "Source")")
+
+    local NOTE="<div class='card' style='margin-bottom:1rem'><div style='padding:1rem 1.5rem;font-size:.8rem;line-height:1.7'>"
+    NOTE+="<b>$(L "Perche' guardarlo anche senza Internet Explorer" "Why look at it even without Internet Explorer")</b><br>"
+    NOTE+="$(L "WebCacheV01 non registra solo la navigazione del browser: raccoglie tutto cio' che passa dalle API WinINET, quindi anche le richieste fatte da applicazioni, script e malware che si appoggiano alle librerie di sistema. Su una macchina dove nessuno usa piu' IE, una voce qui e' spesso proprio codice non-browser che ha contattato la rete." \
+        "WebCacheV01 does not only record browser activity: it collects everything going through the WinINET APIs, including requests made by applications, scripts and malware relying on system libraries. On a machine where nobody uses IE any more, an entry here is often exactly the non-browser code that reached out to the network.")"
+    if [[ "$METHOD" != "ESE" ]]; then
+        NOTE+="<br><br><b>$(L "Estrazione parziale" "Partial extraction")</b><br>"
+        if $HAVE_ESE; then
+            NOTE+="$(L "libesedb era disponibile ma non ha potuto aprire il database (file dirty o danneggiato, tipico di un'acquisizione a caldo): si e' ripiegato sull'estrazione degli URL dalle stringhe, senza date, tipo di voce e conteggi." \
+                "libesedb was available but could not open the database (dirty or damaged file, typical of a live acquisition): extraction fell back to URLs from strings, without dates, entry type and counts.")"
+        else
+            NOTE+="$(L "libesedb non era disponibile: sono stati estratti solo gli URL dalle stringhe, senza date, tipo di voce e conteggi di accesso." \
+                "libesedb was unavailable: only URLs were extracted from strings, without dates, entry type and access counts.")"
+        fi
+    fi
+    NOTE+="</div></div>"
+
+    local STATS
+    STATS="$(stat_box "$(L "Voci" "Entries")" "$TOTAL")"
+    STATS+="$(stat_box "Database" "${#DBS[@]}" "info")"
+    STATS+="$(stat_box "$(L "Parser" "Parser")" "${METHOD:-strings}" "$([[ "$METHOD" == "ESE" ]] && echo info || echo warn)")"
+    finish_report "webcache" "WebCacheV01" "WEB" "AppData/Local/Microsoft/Windows/WebCache" "$STATS" \
+        "${NOTE}<div class='cards'>$(generic_card_html "$(L "Voci WinINET" "WinINET entries")" "${DBS[0]}" "$TOTAL" "$TABLE" "🌐")</div>"
+}
+
+# ================================================================
+#  MODULO 50 — Windows Search Index (Windows.edb)
+#
+#  L'indice di ricerca di Windows conserva nome, percorso, autore e — per molti
+#  formati — un estratto del CONTENUTO dei file indicizzati. L'indice non viene
+#  ripulito quando un file viene cancellato: la voce sopravvive fino al
+#  successivo passaggio dell'indicizzatore.
+#
+#  Di conseguenza Windows.edb e' spesso l'unica fonte che conserva testo di
+#  documenti eliminati, e i percorsi di file che non esistono piu' sul volume.
+#
+#  Il file e' un database ESE che puo' superare il gigabyte. Con libesedb si
+#  legge la tabella SystemIndex_Gthr; senza, si ripiega sull'estrazione dei
+#  percorsi dalle stringhe, che resta utile per sapere COSA c'era.
+# ================================================================
+module_search_index() {
+    section_header "Windows Search Index" "$YELLOW"
+    check_win_root || return 1
+
+    local -a DBS=()
+    local D F
+    for D in "ProgramData/Microsoft/Search/Data/Applications/Windows" \
+             "Documents and Settings/All Users/Application Data/Microsoft/Search/Data/Applications/Windows"; do
+        local R; R=$(ci_find_dir "$WIN_ROOT" "$D")
+        [[ -z "$R" ]] && continue
+        while IFS= read -r F; do
+            [[ -s "$F" ]] && DBS+=("$F")
+        done < <(find "$R" -maxdepth 1 -type f -iname 'Windows.edb' 2>/dev/null)
+    done
+
+    if [[ ${#DBS[@]} -eq 0 ]]; then
+        warn "$(L "Windows.edb non trovato (indicizzazione disattivata o percorso non standard)." \
+                 "Windows.edb not found (indexing disabled or non-standard path).")"
+        return 0
+    fi
+    local SZ; SZ=$(stat -c %s "${DBS[0]}" 2>/dev/null || echo 0)
+    info "Windows.edb — ${BOLD}$(numfmt --to=iec "$SZ" 2>/dev/null || echo "$SZ")"
+
+    local HAVE_ESE=false
+    "$PY3" -c "import pyesedb" 2>/dev/null && HAVE_ESE=true
+    $HAVE_ESE || info "$(L "libesedb (pyesedb) non disponibile: si usera' l'estrazione dalle stringhe." \
+                          "libesedb (pyesedb) unavailable: string extraction will be used.")"
+
+    info "$(L "Analisi in corso (il database puo' essere molto grande)..." "Analysing (the database can be very large)...")"
+    local OUT; OUT=$(mktemp); register_tmp "$OUT"
+    local METHOD; METHOD=$("$PY3" - "$OUT" "$($HAVE_ESE && echo 1 || echo 0)" "${DBS[@]}" << 'PYEOF' 2>/dev/null
+import sys, os, re
+
+out_path = sys.argv[1]
+have_ese = sys.argv[2] == '1'
+dbs = sys.argv[3:]
+
+MAX_ROWS = 60000
+rows = []
+seen = set()
+
+def add(path, extra, src):
+    key = path.lower()[:200]
+    if key in seen:
+        return
+    seen.add(key)
+    rows.append((path[:400], extra[:200], src))
+
+def parse_ese():
+    import pyesedb
+    for db in dbs:
+        src = os.path.basename(db)
+        try:
+            f = pyesedb.file()
+            f.open(db)
+        except Exception:
+            continue
+        for i in range(f.get_number_of_tables()):
+            if len(rows) >= MAX_ROWS:
+                break
+            try:
+                t = f.get_table(i)
+                tname = t.get_name()
+            except Exception:
+                continue
+            # SystemIndex_Gthr contiene i percorsi indicizzati e i tempi di
+            # ultima indicizzazione; SystemIndex_PropertyStore le proprieta'.
+            if 'Gthr' not in tname and 'PropertyStore' not in tname:
+                continue
+            try:
+                cols = [t.get_column(c).get_name() for c in range(t.get_number_of_columns())]
+                ncols = len(cols)
+            except Exception:
+                continue
+            for r in range(min(t.get_number_of_records(), MAX_ROWS)):
+                try:
+                    rec = t.get_record(r)
+                except Exception:
+                    continue
+                path = ''
+                extra = ''
+                for n in range(ncols):
+                    try:
+                        v = rec.get_value_data_as_string(n)
+                    except Exception:
+                        continue
+                    if not v:
+                        continue
+                    if not path and ('://' in v or re.match(r'^[A-Za-z]:\\', v)):
+                        path = v
+                    elif len(v) > 8 and not extra:
+                        extra = v
+                if path:
+                    add(path, f"{tname} {extra}".strip(), src)
+                if len(rows) >= MAX_ROWS:
+                    break
+        try:
+            f.close()
+        except Exception:
+            pass
+
+
+def parse_strings():
+    """I percorsi indicizzati restano leggibili anche se l'ESE non si apre."""
+    PATH = re.compile(r'(?:file:///)?[A-Za-z]:\\[^\x00<>|?*"\r\n]{4,250}')
+    for db in dbs:
+        src = os.path.basename(db)
+        try:
+            with open(db, 'rb') as fh:
+                # Tetto di lettura: Windows.edb puo' superare il gigabyte.
+                raw = fh.read(2 * 1024 * 1024 * 1024)
+        except Exception:
+            continue
+        for enc in ('utf-16-le', 'latin-1'):
+            try:
+                text = raw.decode(enc, 'ignore')
+            except Exception:
+                continue
+            for m in PATH.finditer(text):
+                add(m.group(0).strip(), '', src)
+                if len(rows) >= MAX_ROWS:
+                    break
+
+# Windows.edb e' quasi sempre in uso al momento dell'acquisizione, quindi
+# spesso dirty e non apribile: ripiegare sulle stringhe evita un report vuoto.
+method = 'strings'
+if have_ese:
+    parse_ese()
+    if rows:
+        method = 'ESE'
+if not rows:
+    parse_strings()
+print(method if rows else 'nessuno')
+
+rows.sort()
+with open(out_path, 'w', encoding='utf-8') as fh:
+    for r in rows:
+        fh.write('\t'.join(str(x).replace('\t', ' ') for x in r) + '\n')
+PYEOF
+    )
+
+    local TOTAL=0
+    [[ -s "$OUT" ]] && TOTAL=$(wc -l < "$OUT")
+    if [[ "$TOTAL" -eq 0 ]]; then
+        warn "$(L "Nessuna voce estratta dall'indice." "No entry extracted from the index.")"
+        return 0
+    fi
+    ok "$(L "Voci indicizzate estratte:" "Indexed entries extracted:") ${BOLD}$TOTAL${RESET} ($(L "parser" "parser"): ${METHOD:-strings})"
+    if [[ "$METHOD" != "ESE" ]] && $HAVE_ESE; then
+        warn "$(L "Database non apribile con libesedb (in uso al momento dell'acquisizione): estrazione dalle stringhe." \
+                 "Database not openable with libesedb (in use when acquired): string extraction.")"
+    fi
+
+    # Il valore forense sta nelle voci che puntano a file non piu' presenti, ma
+    # il confronto non e' automatizzabile in modo affidabile: i percorsi
+    # indicizzati usano la lettera di unita' vista dal sistema (C:\...), che non
+    # corrisponde al punto di mount in analisi. Meglio dirlo che dedurre a caso.
+    info "$(L "Il confronto con i file ancora presenti richiede la mappatura delle lettere di unita': va fatto a mano." \
+             "Comparing against files still present requires drive-letter mapping: do it manually.")"
+
+    ask_yn "Generare report HTML?" || return 0
+
+    local ROWS; ROWS=$(head -30000 "$OUT")
+    local TABLE; TABLE=$(_rows_to_table "$ROWS" "$(L "Percorso indicizzato" "Indexed path")" "$(L "Dettaglio" "Detail")" "$(L "Origine" "Source")")
+
+    local NOTE="<div class='card' style='margin-bottom:1rem'><div style='padding:1rem 1.5rem;font-size:.8rem;line-height:1.7'>"
+    NOTE+="<b>$(L "Come usarlo" "How to use it")</b><br>"
+    NOTE+="$(L "L'indice non viene ripulito alla cancellazione di un file: una voce che punta a un percorso non piu' esistente sul volume e' la traccia di un file eliminato. Il confronto va fatto tenendo conto della lettera di unita': il volume montato in analisi non corrisponde necessariamente a C: come lo vedeva il sistema." \
+        "The index is not purged when a file is deleted: an entry pointing to a path no longer present on the volume is the trace of a removed file. Compare with the drive letter in mind: the mounted volume does not necessarily correspond to C: as the system saw it.")"
+    if [[ "$METHOD" != "ESE" ]]; then
+        NOTE+="<br><br>$(L "Sono stati estratti i soli percorsi: gli estratti di contenuto e le date di indicizzazione richiedono il parsing ESE, non riuscito su questo database." \
+            "Only paths were extracted: content excerpts and indexing dates require ESE parsing, which did not succeed on this database.")"
+    fi
+    NOTE+="</div></div>"
+
+    local STATS
+    STATS="$(stat_box "$(L "Voci" "Entries")" "$TOTAL")"
+    STATS+="$(stat_box "$(L "Dimensione DB" "DB size")" "$(numfmt --to=iec "$SZ" 2>/dev/null || echo "$SZ")" "info")"
+    STATS+="$(stat_box "$(L "Parser" "Parser")" "${METHOD:-strings}" "$([[ "$METHOD" == "ESE" ]] && echo info || echo warn)")"
+    finish_report "search_index" "Windows Search Index" "IDX" "Windows.edb" "$STATS" \
+        "${NOTE}<div class='cards'>$(generic_card_html "$(L "Percorsi indicizzati" "Indexed paths")" "${DBS[0]}" "$TOTAL" "$TABLE" "⌕")</div>"
 }
 
 # ================================================================
@@ -13696,6 +13931,405 @@ PYEOF
 }
 
 # ================================================================
+#  LIBRERIA PYTHON CONDIVISA — LevelDB / Snappy
+#
+#  Le app Electron (ChatGPT Desktop, Slack, Discord, Teams) memorizzano i
+#  messaggi in LevelDB: SSTable .ldb e write-ahead log .log, con i data-block
+#  compressi in Snappy e i singoli valori IndexedDB compressi una seconda
+#  volta da Blink.
+#
+#  Questo codice nasceva dentro il modulo 39 (AI Chat). Serve identico al
+#  modulo 48 (chat desktop), quindi vive qui: duplicarlo avrebbe significato
+#  correggere ogni bug in due punti.
+#
+#  Uso da un modulo:
+#      OUT=$(run_py_with_lib pylib_leveldb "$ARG" << 'PYEOF'
+#      import sys
+#      for _, role, text in carve_leveldb(sys.argv[1]):
+#          ...
+#      PYEOF
+#      )
+# ================================================================
+
+# Emette il sorgente della libreria sullo stdout.
+pylib_leveldb() {
+    cat << 'FIUTO_PYLIB_EOF'
+import re
+
+# Lunghezza massima del testo estratto per messaggio. Il modulo chiamante puo'
+# ridefinirla: la sua assegnazione viene dopo questa e quindi prevale.
+MAX_TXT = 6000
+
+# Carving di stringhe da file LevelDB (.ldb/.log) usati da ChatGPT Desktop
+# (IndexedDB / Local Storage). I file SSTable non sono parsabili senza la
+# libreria leveldb, ma i messaggi delle conversazioni sono memorizzati come
+# stringhe in chiaro UTF-8/UTF-16. Estraiamo le run leggibili e teniamo SOLO
+# quelle che sembrano linguaggio naturale (prosa), scartando i frammenti
+# JSON/serializzati di configurazione (feature flag, chiavi JWK, metadati) che
+# popolano soprattutto il Local Storage e non hanno valore investigativo.
+MIN_LDB = 6
+
+# Marcatori di dato serializzato: "key":  ,"  :{  :[  }] ,  ecc.
+_JSON_FRAG = re.compile(r'["\}\]]\s*[:,]|[:,]\s*["\{\[]')
+_WORD      = re.compile(r'[A-Za-zÀ-ÿ]{2,}')
+# Prefisso V8/IndexedDB: chiave nota + " + 1 byte-tag (rumore di serializzazione)
+_VPFX = re.compile(
+    r'^(?:text|parts|content|content_type|message|title|name|author|value|role)".')
+# Byte di controllo C0/C1 (tranne tab/CR/LF): tag e varint di lunghezza V8 che
+# capitano stampabili e sporcano il testo (es. \x02 davanti a un messaggio).
+_CTRL = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]')
+# Segnali di risposta AI nel contenuto (markdown/struttura): grassetto, heading,
+# liste, code fence, tabelle, link/citazioni. Più affidabile dell'encoding per
+# distinguere assistente da utente (un prompt utente con € o emoji è comunque UTF-16).
+_AI_SIG = re.compile(
+    r'\*\*.+?\*\*|^#{1,6}\s|^\s*[-*]\s|^\s*\d+\.\s|```|\|.+\||\]\(https?://',
+    re.MULTILINE)
+# Marcatori dei record di metadati IndexedDB (id, utenti, flag) → mai nella prosa
+_META = re.compile(
+    r'accountUserId|authUserId|isArchived|client-created-root|conversationId|'
+    r'currentNode|asyncStatus|updateTime[A-Z]|messagesa[A-Z]|gizmoId|'
+    r'id"\$?[0-9a-f]{8}-[0-9a-f]{4}-')
+
+def _ldb_interesting(s):
+    if len(s) < 12:
+        return False
+    # Una frase reale contiene spazi → scarta blob base64/hex/cert/token
+    if ' ' not in s:
+        return False
+    # Scarta i record di metadati IndexedDB (id conversazione, userId, flag…)
+    if _META.search(s):
+        return False
+    # Scarta frammenti JSON / config / JWK / feature-flag
+    if _JSON_FRAG.search(s):
+        return False
+    if s.count('"') >= 2 and (':' in s or ',' in s):
+        return False
+    # Richiede almeno 3 parole "vere" → frase, non token isolato
+    if len(_WORD.findall(s)) < 3:
+        return False
+    # Prevalenza di caratteri alfabetici → testo, non blob/codice
+    alpha = sum(c.isalpha() for c in s)
+    if alpha / max(len(s), 1) < 0.55:
+        return False
+    return True
+
+def _carve_bytes(data):
+    """Estrae le run di testo stampabile da un buffer, restituendole in ordine
+    di posizione. Nei valori V8/IndexedDB i prompt utente sono spesso one-byte
+    (Latin-1) e le risposte AI two-byte (UTF-16, per markdown/caratteri speciali):
+    mescolandole per offset la conversazione si legge in ordine cronologico."""
+    # Caratteri base di una run: stampabili ASCII + supplemento Latin-1
+    # (accenti à,è,é,ù…) + tab/CR/LF (i messaggi multi-riga restano interi).
+    # One-byte = Latin-1, two-byte = UTF-16LE (high byte 0x00).
+    def _dec(s, e, enc):
+        return data[s:e].decode('latin-1' if enc == 'l' else 'utf-16-le', errors='replace')
+    runs = []  # [start, end, enc, text, is_meta]
+    for m in re.finditer(rb'[\x09\x0a\x0d\x20-\x7e\xa0-\xff]{%d,}' % MIN_LDB, data):
+        t = _dec(m.start(), m.end(), 'l')
+        runs.append([m.start(), m.end(), 'l', t, bool(_META.search(t))])
+    for m in re.finditer(rb'(?:[\x09\x0a\x0d\x20-\x7e\xa0-\xff]\x00){%d,}' % MIN_LDB, data):
+        t = _dec(m.start(), m.end(), 'u')
+        runs.append([m.start(), m.end(), 'u', t, bool(_META.search(t))])
+    runs.sort(key=lambda x: x[0])
+    # Fusione di run di CONTENUTO adiacenti, stesso encoding, gap ≤12 byte: è
+    # quasi sempre un simbolo Unicode (→ • ✓ —, emoji) o un a-capo che spezza il
+    # testo; ri-decodificando lo span viene assorbito. NON si fonde mai attraverso
+    # un record di metadati (id/userId/flag), per non trascinare via il testo utente.
+    merged = []
+    for r in runs:
+        if merged:
+            last = merged[-1]
+            gap = r[0] - last[1]
+            if (not r[4] and not last[4] and r[2] == last[2] and 0 <= gap <= 12
+                    and (r[2] == 'l' or (gap % 2 == 0 and last[0] % 2 == r[0] % 2))):
+                last[1] = r[1]
+                last[3] = _dec(last[0], last[1], last[2])
+                continue
+        merged.append(r)
+    # Ritorna (testo, encoding): one-byte 'l' ≈ prompt utente (testo semplice),
+    # two-byte 'u' ≈ risposta AI (markdown/simboli/emoji → UTF-16). Euristica.
+    return [(r[3], r[2]) for r in merged]
+
+# ── Decompressione Snappy (opzionale) ──────────────────────────────
+# I blocchi dati delle SSTable LevelDB sono spesso compressi con Snappy
+# (raw block format). Senza decomprimerli, gran parte del testo delle
+# conversazioni resta non carvabile. Proviamo python-snappy, poi cramjam.
+_SNAPPY = None
+try:
+    import snappy as _sn
+    _SNAPPY = ('snappy', _sn)
+except Exception:
+    try:
+        import cramjam as _cj
+        _SNAPPY = ('cramjam', _cj)
+    except Exception:
+        _SNAPPY = None
+
+# Decompressore Snappy "raw" in puro Python (nessuna dipendenza): preambolo
+# varint con la lunghezza non compressa, poi tag literal/copy LZ77. Usato come
+# fallback quando python-snappy/cramjam non sono installati nel Python in uso.
+def _snappy_py(buf):
+    try:
+        n = len(buf); pos = 0
+        shift = 0
+        while pos < n:                       # preambolo: lunghezza (scartata)
+            b = buf[pos]; pos += 1
+            if not (b & 0x80):
+                break
+            shift += 7
+        out = bytearray()
+        while pos < n:
+            tag = buf[pos]; pos += 1
+            t = tag & 0x03
+            if t == 0:                       # literal
+                length = (tag >> 2) + 1
+                if length > 60:
+                    nb = length - 60
+                    length = 1
+                    for i in range(nb):
+                        length += buf[pos + i] << (8 * i)
+                    pos += nb
+                out += buf[pos:pos + length]
+                pos += length
+            else:
+                if t == 1:                   # copy, offset 1 byte
+                    length = ((tag >> 2) & 0x07) + 4
+                    offset = ((tag >> 5) << 8) | buf[pos]; pos += 1
+                elif t == 2:                 # copy, offset 2 byte
+                    length = (tag >> 2) + 1
+                    offset = buf[pos] | (buf[pos + 1] << 8); pos += 2
+                else:                        # copy, offset 4 byte
+                    length = (tag >> 2) + 1
+                    offset = (buf[pos] | (buf[pos + 1] << 8) |
+                              (buf[pos + 2] << 16) | (buf[pos + 3] << 24)); pos += 4
+                if offset == 0 or offset > len(out):
+                    break
+                start = len(out) - offset
+                for i in range(length):      # copia byte-a-byte (gestisce overlap)
+                    out.append(out[start + i])
+        return bytes(out)
+    except Exception:
+        return b''
+
+def _snappy_raw(buf):
+    if _SNAPPY is not None:
+        kind, mod = _SNAPPY
+        try:
+            if kind == 'snappy':
+                return mod.uncompress(buf)
+            return bytes(mod.snappy.decompress_raw(buf))
+        except Exception:
+            pass
+    return _snappy_py(buf)
+
+def _uvarint(buf, pos):
+    result = shift = 0
+    while pos < len(buf):
+        b = buf[pos]; pos += 1
+        result |= (b & 0x7f) << shift
+        if not (b & 0x80):
+            return result, pos
+        shift += 7
+    return result, pos
+
+# Legge un blocco SSTable a (offset,size); il trailer è 1 byte tipo + 4 byte CRC.
+def _read_block(data, off, size):
+    if off < 0 or off + size > len(data):
+        return b''
+    raw = data[off:off + size]
+    ctype = data[off + size] if off + size < len(data) else 0
+    if ctype == 0:
+        return raw
+    if ctype == 1:                       # Snappy
+        return _snappy_raw(raw)
+    return b''                            # zstd/altro non gestito
+
+# Estrae i valori (record) da un blocco SSTable (formato entry + restart array).
+def _block_values(block):
+    if len(block) < 4:
+        return []
+    num_restarts = int.from_bytes(block[-4:], 'little')
+    restart_start = len(block) - 4 - num_restarts * 4
+    if restart_start < 0:
+        return []
+    pos = 0; last_key = b''; vals = []
+    while pos < restart_start and len(vals) < 100000:
+        shared, pos = _uvarint(block, pos)
+        nonshared, pos = _uvarint(block, pos)
+        vlen, pos = _uvarint(block, pos)
+        key = last_key[:shared] + block[pos:pos + nonshared]; pos += nonshared
+        value = block[pos:pos + vlen]; pos += vlen
+        last_key = key
+        vals.append(value)
+    return vals
+
+_LDB_MAGIC = 0xdb4775248b80fb57
+
+def _printable_ratio(b, n=4096):
+    s = b[:n]
+    if not s:
+        return 0.0
+    return sum(0x20 <= c < 0x7f or c in (9, 10, 13) for c in s) / len(s)
+
+# Chromium/Blink comprime i singoli valori IndexedDB con Snappy, dietro un
+# breve header wrapper (lunghezza variabile). Proviamo a decomprimere saltando
+# 0..15 byte iniziali; se otteniamo testo plausibile e più lungo, lo usiamo.
+def _decompress_value(v):
+    if len(v) < 32:
+        return v
+    for k in range(0, 16):
+        d = _snappy_raw(v[k:])
+        # Soglia bassa: i valori IndexedDB V8 contengono stringhe UTF-16
+        # (byte \x00 alternati) che abbassano la quota di stampabili.
+        if d and len(d) > len(v) * 1.2 and _printable_ratio(d) > 0.45:
+            return d
+    return v
+
+# Estrae il contenuto applicativo da una SSTable (.ldb): decomprime i data-block
+# (livello LevelDB) e poi decomprime i singoli valori dei record (livello Blink).
+# Best-effort: b'' se il file non è una SSTable valida.
+def _sstable_data(data):
+    if len(data) < 48:
+        return b''
+    footer = data[-48:]
+    if int.from_bytes(footer[40:48], 'little') != _LDB_MAGIC:
+        return b''
+    try:
+        pos = 0
+        _mi_off, pos = _uvarint(footer, pos); _mi_sz, pos = _uvarint(footer, pos)
+        ix_off, pos = _uvarint(footer, pos); ix_sz, pos = _uvarint(footer, pos)
+        index_block = _read_block(data, ix_off, ix_sz)
+        out = bytearray()
+        for h in _block_values(index_block):
+            p = 0
+            off, p = _uvarint(h, p); sz, p = _uvarint(h, p)
+            blk = _read_block(data, off, sz)        # livello LevelDB (Snappy/none)
+            if not blk:
+                continue
+            for v in _block_values(blk):            # valori dei record
+                out += _decompress_value(v) + b'\x00'   # livello Blink (Snappy)
+                if len(out) > 96 * 1024 * 1024:
+                    return bytes(out)
+        return bytes(out)
+    except Exception:
+        return b''
+
+# Estrae i valori scritti da un write-ahead log LevelDB (.log): blocchi fisici
+# da 32 KB con record header crc(4)+len(2)+type(1); i record logici (FULL o
+# FIRST/MIDDLE/LAST) sono WriteBatch (seq 8 + count 4 + voci put/delete). Per
+# ogni PUT decomprimiamo il valore (livello Blink). Best-effort.
+_WAL_BLOCK = 32768
+
+def _wal_data(data):
+    try:
+        logical, cur, pos, n = [], bytearray(), 0, len(data)
+        while pos + 7 <= n:
+            off = pos % _WAL_BLOCK
+            if _WAL_BLOCK - off < 7:          # trailer di blocco → blocco succ.
+                pos += _WAL_BLOCK - off
+                continue
+            length = data[pos + 4] | (data[pos + 5] << 8)
+            rtype = data[pos + 6]
+            payload = data[pos + 7:pos + 7 + length]
+            pos += 7 + length
+            if rtype == 1:                     # FULL
+                logical.append(bytes(payload))
+            elif rtype == 2:                   # FIRST
+                cur = bytearray(payload)
+            elif rtype == 3:                   # MIDDLE
+                cur += payload
+            elif rtype == 4:                   # LAST
+                cur += payload; logical.append(bytes(cur)); cur = bytearray()
+            elif length == 0:                  # padding → blocco successivo
+                pos = (pos // _WAL_BLOCK + 1) * _WAL_BLOCK
+        out = bytearray()
+        for rec in logical:
+            p, L = 12, len(rec)                # salta seq(8)+count(4)
+            while p < L:
+                t = rec[p]; p += 1
+                if t not in (0, 1):
+                    break                      # formato inatteso
+                klen, p = _uvarint(rec, p); p += klen      # salta key
+                if t == 1:                     # kTypeValue
+                    vlen, p = _uvarint(rec, p)
+                    out += _decompress_value(rec[p:p + vlen]) + b'\x00'
+                    p += vlen
+                if len(out) > 96 * 1024 * 1024:
+                    return bytes(out)
+        return bytes(out)
+    except Exception:
+        return b''
+
+def carve_leveldb(path, cap=2500):
+    try:
+        with open(path, 'rb') as f:
+            data = f.read(64 * 1024 * 1024)
+    except Exception as e:
+        return [('', 'error', str(e))]
+    # Decomprimiamo il contenuto e carviamo SOLO quello (pulito): per le SSTable
+    # (.ldb) i data-block, per i write-ahead log (.log) i record WriteBatch. In
+    # entrambi i casi i valori IndexedDB vengono poi de-comprimati (livello Blink).
+    # Il carving del file grezzo darebbe frammenti spezzati → solo come fallback.
+    low = path.lower()
+    if low.endswith('.ldb'):
+        blocks = _sstable_data(data)
+    elif low.endswith('.log'):
+        blocks = _wal_data(data)
+    else:
+        # File blob esterno IndexedDB (valore grande wrappato+Snappy da Blink):
+        # un singolo valore → proviamo a decomprimerlo direttamente.
+        dv = _decompress_value(data)
+        blocks = dv if len(dv) > len(data) else b''
+    cand = _carve_bytes(blocks) if blocks else _carve_bytes(data)
+    out, seen = [], set()
+    for s, enc in cand:
+        s = s.strip()
+        # Strip conservativo del prefisso V8: chiave IndexedDB nota + " + 1
+        # byte-tag (es. text"T… → non…). Solo se resta del testo.
+        s2 = _VPFX.sub('', s)
+        if s2:
+            s = s2.strip()
+        # Rimuove i byte di controllo residui (tag/varint V8) ovunque nel testo.
+        s = _CTRL.sub('', s).strip()
+        # Rimuove il tag V8 di fine-oggetto '{' (kEndJSObject) in coda al messaggio.
+        s = re.sub(r'\s*\{+\s*$', '', s)
+        if not _ldb_interesting(s):
+            continue
+        key = s.lower()[:80]
+        if key in seen:
+            continue
+        seen.add(key)
+        # Ruolo dal contenuto: la presenza di markdown/struttura indica una
+        # risposta AI; altrimenti è un prompt utente (più robusto dell'encoding).
+        role = 'assistant' if _AI_SIG.search(s) else 'user'
+        out.append(('', role, s[:MAX_TXT]))
+        if len(out) >= cap:
+            break
+    if not out:
+        out.append(('', 'info',
+                    'Nessuna stringa leggibile estratta (file vuoto, binario o solo metadati).'))
+    return out
+FIUTO_PYLIB_EOF
+}
+
+# Esegue uno script Python letto da stdin, anteponendogli una libreria condivisa.
+#
+# Concatenare invece di importare tiene il programma finale identico a com'era
+# quando la libreria stava dentro il modulo: stesso spazio dei nomi, nessuna
+# differenza di comportamento da dimostrare.
+#
+#   run_py_with_lib <funzione_libreria> [argomenti...] << 'PYEOF' ... PYEOF
+run_py_with_lib() {
+    local LIBF="$1"; shift
+    local TMP; TMP=$(mktemp) || return 1
+    { "$LIBF"; printf '\n'; cat; } > "$TMP"
+    "$PY3" "$TMP" "$@"
+    local RC=$?
+    rm -f "$TMP"
+    return $RC
+}
+
+# ================================================================
 #  REGISTRO MODULI PER OS (data-driven)
 #
 #  Formato entry:
@@ -13770,6 +14404,9 @@ MODULES_WIN=(
     "module_cloud_sync|Cloud Sync|BLUE|OneDrive/Dropbox/Drive — file sincronizzati§OneDrive/Dropbox/Drive — synced files"
     "module_bits|BITS Jobs|ORANGE|Download in background (T1197)§Background downloads (T1197)"
     "module_thumbcache|Thumbcache|GREEN|Miniature di file cancellati§Thumbnails of deleted files"
+    "module_chat_desktop|Chat Desktop|MAGENTA|Slack/Teams/Discord — LevelDB§Slack/Teams/Discord — LevelDB"
+    "module_webcache|WebCacheV01|CYAN|IE/Edge Legacy + WinINET§IE/Edge Legacy + WinINET"
+    "module_search_index|Search Index|YELLOW|Windows.edb — file indicizzati§Windows.edb — indexed files"
 )
 
 MODULES_LINUX=(
@@ -13854,7 +14491,7 @@ main() {
                     echo -e "    riapplicati su una copia temporanea: senza questo passaggio le"
                     echo -e "    scritture piu' recenti dell'hive non sono visibili.${RESET}"
                     echo ""
-                    echo -e "  ${BOLD}Moduli disponibili (1-47):${RESET}"
+                    echo -e "  ${BOLD}Moduli disponibili (1-50):${RESET}"
                 else
                     echo -e "${CYAN}${BOLD}fiuto.sh${RESET} — DFIR Toolkit for offline Windows disk analysis"
                     echo ""
@@ -13872,7 +14509,7 @@ main() {
                     echo -e "    onto a temporary copy: without this step the most recent hive"
                     echo -e "    writes are not visible.${RESET}"
                     echo ""
-                    echo -e "  ${BOLD}Available modules (1-47):${RESET}"
+                    echo -e "  ${BOLD}Available modules (1-50):${RESET}"
                 fi
                 echo -e "    1  PowerShell History        2  Notepad TabState"
                 echo -e "    3  IFEO Hijacking            4  BAM"

@@ -58,6 +58,9 @@ src/modules/win/44-pst-ost.sh
 src/modules/win/45-cloud-sync.sh
 src/modules/win/46-bits.sh
 src/modules/win/47-thumbcache.sh
+src/modules/win/48-chat-desktop.sh
+src/modules/win/49-webcache.sh
+src/modules/win/50-search-index.sh
 src/modules/linux/01-syslog.sh
 src/modules/linux/02-journal.sh
 src/modules/linux/03-logins.sh
@@ -86,5 +89,6 @@ src/modules/macos/10-recent.sh
 src/modules/macos/11-fsevents.sh
 src/modules/macos/12-spotlight.sh
 src/modules/xplat/01-master-timeline.sh
+src/lib/13-pylib-leveldb.sh
 src/lib/12-registries.sh
 src/main.sh
