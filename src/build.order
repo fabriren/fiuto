@@ -4,6 +4,7 @@ src/lib/01-i18n.sh
 src/lib/02-ui.sh
 src/lib/03-util.sh
 src/lib/04-ioc.sh
+src/lib/16-time.sh
 src/lib/15-custody.sh
 src/lib/05-fs.sh
 src/lib/06-hostinfo.sh

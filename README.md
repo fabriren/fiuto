@@ -91,6 +91,7 @@ On macOS volumes FIUTO collects and analyzes:
 ./fiuto.sh /mnt/disk --module 3     # Run a specific module (numbering depends on the OS)
 ./fiuto.sh /mnt/disk --modules 1,4,6-8   # Run a list/range of modules
 ./fiuto.sh /mnt/disk --all --jsonl       # Also export JSONL (Timesketch schema)
+./fiuto.sh /mnt/disk --all --since 2026-03-01 --until 2026-03-08  # Restrict to a time window
 ./fiuto.sh /mnt/disk --all --no-log-replay   # Do not replay registry .LOG1/.LOG2
 ```
 
@@ -425,6 +426,44 @@ Files above the size limit (1 GB by default — `pagefile.sys`, `$MFT`,
 `Windows.edb`) are still listed, with the reason the hash is missing rather
 than silently omitting it.
 
+### Time window (`--since` / `--until`)
+
+On a large disk a report can run to hundreds of thousands of rows spanning
+years, while the incident sits in three days.
+
+```bash
+./fiuto.sh /mnt/disk --all --since 2026-03-01 --until 2026-03-08
+./fiuto.sh /mnt/disk --all --since -7d      # last 7 days
+./fiuto.sh /mnt/disk --all --since "2026-03-01 14:30"
+```
+
+Accepted forms: `YYYY-MM-DD`, `YYYY-MM-DD HH:MM[:SS]`, the same with `T` and/or
+a trailing `Z`, and the relative `-7d` / `-36h` / `-90m`. A bound that cannot be
+parsed **stops the run** instead of being ignored: silently dropping the filter
+would produce a report that claims a coverage it does not have.
+
+The filter applies to tables and to `<pre>` log blocks alike, and to the JSONL
+export, so the two views of a module cannot contradict each other. Two rules
+keep it from removing evidence:
+
+- **rows carrying no date are always kept** — they cannot be evaluated;
+- a row carrying **several** dates is kept if *any* of them falls in the window
+  (a file created before the window but used inside it stays).
+
+Every filtered table and log block declares how many rows it hid, and the
+manifest records the window along with the total, so a filtered report can never
+be mistaken for an empty one. Line numbers in `<pre>` blocks stay those of the
+original file: the gaps are the visible sign that something was removed.
+
+**On timezones.** FIUTO detects the volume's timezone (`/etc/timezone`,
+`/etc/localtime`, `SYSTEM\Control\TimeZoneInformation`) and declares it — at
+startup, in the manifest and in every JSONL record — but does **not** convert
+anything. Artefacts on a single volume mix UTC (registry, Windows event logs)
+and local time (syslog, shell history); converting blindly would shift events by
+hours, which is far worse than dates that are honestly ambiguous. The window
+therefore compares dates *as they appear in the artefact*: for windows of days
+this is irrelevant, for windows of hours widen them by the volume's offset.
+
 ### JSONL export (Timesketch / plaso)
 
 ```bash
@@ -529,7 +568,7 @@ python3 tests/lint_embedded_python.py fiuto.sh   # compile the embedded parsers
 ```
 
 CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs on every push:
-bash syntax, ShellCheck, the bats suite, and compilation of the ~76 Python
+bash syntax, ShellCheck, the bats suite, and compilation of the ~92 Python
 parsers embedded as heredocs on both Python 3.9 and 3.12.
 
 That last job is not decoration: `bash -n` treats heredocs as opaque text, so a
@@ -639,6 +678,7 @@ Sui volumi macOS: **log** (`system.log`, `install.log`, ASL — i unified log `.
 ./fiuto.sh /mnt/disk --all          # Esegui tutti i moduli dell'OS rilevato
 ./fiuto.sh /mnt/disk --module 3     # Esegui un modulo specifico (numerazione per OS)
 ./fiuto.sh /mnt/disk --all --jsonl  # Esporta anche in JSONL (schema Timesketch)
+./fiuto.sh /mnt/disk --all --since 2026-03-01 --until 2026-03-08  # Limita a una finestra
 ./fiuto.sh /mnt/disk --all --no-log-replay   # Non applicare i .LOG1/.LOG2 del registro
 ```
 
@@ -970,6 +1010,47 @@ I file oltre la soglia (1 GB di default — `pagefile.sys`, `$MFT`,
 `Windows.edb`) restano elencati, con il motivo per cui manca l'hash invece di
 ometterlo in silenzio.
 
+### Finestra temporale (`--since` / `--until`)
+
+Su un disco grande un report può contenere centinaia di migliaia di righe che
+coprono anni, mentre l'incidente sta in tre giorni.
+
+```bash
+./fiuto.sh /mnt/disk --all --since 2026-03-01 --until 2026-03-08
+./fiuto.sh /mnt/disk --all --since -7d      # ultimi 7 giorni
+./fiuto.sh /mnt/disk --all --since "2026-03-01 14:30"
+```
+
+Formati ammessi: `YYYY-MM-DD`, `YYYY-MM-DD HH:MM[:SS]`, le stesse con `T` e/o
+`Z` finale, e le forme relative `-7d` / `-36h` / `-90m`. Un limite che non si
+riesce a interpretare **ferma l'esecuzione** invece di essere ignorato:
+lasciar cadere il filtro in silenzio produrrebbe un report che dichiara una
+copertura che non ha.
+
+Il filtro vale sia per le tabelle sia per i blocchi di log `<pre>`, e per
+l'export JSONL, così le due viste di uno stesso modulo non possono
+contraddirsi. Due regole gli impediscono di cancellare evidenza:
+
+- **le righe prive di data vengono sempre mantenute** — non sono valutabili;
+- una riga con **più** date resta se *almeno una* cade nella finestra (un file
+  creato prima della finestra ma usato dentro non sparisce).
+
+Ogni tabella e ogni blocco di log filtrato dichiara quante righe ha nascosto, e
+il manifesto registra la finestra insieme al totale: un report filtrato non può
+essere scambiato per un report vuoto. Nei blocchi `<pre>` i numeri di riga
+restano quelli del file originale, quindi i salti di numerazione sono il segnale
+visibile che qualcosa è stato tolto.
+
+**Sui fusi orari.** FIUTO rileva il fuso del volume (`/etc/timezone`,
+`/etc/localtime`, `SYSTEM\Control\TimeZoneInformation`) e lo dichiara — all'avvio,
+nel manifesto e in ogni record JSONL — ma **non converte niente**. Gli artefatti
+di uno stesso volume mescolano UTC (registro, log eventi Windows) e ora locale
+(syslog, shell history): una conversione applicata alla cieca sposterebbe gli
+eventi di ore, che è molto peggio di date dichiarate ambigue. Il confronto usa
+quindi le date *così come compaiono nell'artefatto*: su finestre di giorni la
+differenza è irrilevante, su finestre di ore vanno allargate dell'offset del
+volume.
+
 ### Export JSONL (Timesketch / plaso)
 
 ```bash
@@ -1073,7 +1154,7 @@ python3 tests/lint_embedded_python.py fiuto.sh   # compila i parser incorporati
 ```
 
 La CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) gira a ogni push:
-sintassi bash, ShellCheck, suite bats e compilazione dei ~76 parser Python
+sintassi bash, ShellCheck, suite bats e compilazione dei ~92 parser Python
 incorporati come heredoc, sia su Python 3.9 sia su 3.12.
 
 Quest'ultimo job non è un ornamento: `bash -n` tratta gli heredoc come testo
@@ -1145,6 +1226,8 @@ Both ESE-based modules fall back to string extraction when libesedb cannot open 
 **macOS: six new modules** — Messages, Safari cookies and downloads, XProtect/Gatekeeper, application inventory, Time Machine/snapshots, and unified logs.
 
 **Chain of custody.** Every session now writes an `evidence_manifest.json` recording tool version, command line, operator, analysed volume, and the SHA-256 of every evidence file consulted and every report produced. Until 2.1 hashing was scattered across a handful of modules and there was no way to answer "which files were read, in what state, and are the attached reports the ones produced then?".
+
+**Time window `--since` / `--until`.** On a large disk the incident is three days inside years of artefacts. The window applies to tables, to `<pre>` log blocks and to the JSONL export together, so no two views of a module can disagree. It never removes what it cannot judge: rows without a date are kept, and a row with several dates survives if any of them falls in the window. Every filtered block declares how many rows it hid, and the manifest records the window — a filtered report must not be mistakable for an empty one. The volume timezone is detected and declared, but **nothing is converted**: artefacts on one volume mix UTC and local time, and a blind conversion would shift events by hours.
 
 **Two cross-OS modules**, available on all three systems. **SQLite Recovery** — nearly every modern artefact is a SQLite database, and every module reading one sees only the *live* records; a deleted record stays in the file until overwritten, in the freelist or in a page's unallocated space. This module carves it back, which is often the only place a "cleared" history still exists. **EFI System Partition** — code in the ESP runs before the OS, the kernel and any EDR, and survives a full system reinstall; the module inventories it, hashes everything and flags structural anomalies.
 

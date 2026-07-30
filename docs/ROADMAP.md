@@ -34,7 +34,7 @@ Stato aggiornato al: **2026-07-30** (versione 2.2, Fasi 1-5 complete, Fase 6 ini
 | Area | Stato |
 |---|---|
 | CI (bash -n, ShellCheck, bats, parser Python su 3.9 + 3.12) | ✅ |
-| Suite di test — 53 test bats | ✅ |
+| Suite di test — 107 test bats | ✅ |
 | Replay transaction log registro (`.LOG1`/`.LOG2`) | ✅ |
 | Export JSONL / schema Timesketch (`--jsonl`) | ✅ |
 | macOS: FSEvents, Spotlight | ✅ |
@@ -47,6 +47,7 @@ Stato aggiornato al: **2026-07-30** (versione 2.2, Fasi 1-5 complete, Fase 6 ini
 | Fase 5 — 2 moduli cross-OS (SQLite recovery, ESP/bootkit) | ✅ |
 | Libreria Python condivisa SQLite (`src/lib/14-pylib-sqlite.sh`) | ✅ |
 | Fase 6.1 — chain of custody (`evidence_manifest.json`) | ✅ |
+| Fase 6.2 — finestra temporale `--since`/`--until` + fuso del volume | ✅ |
 | Flag `defer` nel registro (numerazione stabile) | ✅ |
 | Libreria Python condivisa LevelDB/Snappy (`src/lib/13-pylib-leveldb.sh`) | ✅ |
 
@@ -265,9 +266,32 @@ Ordinati per rapporto valore/costo.
    toccato, versione del tool, timestamp UTC, comando eseguito, hash dei report
    finali, firma GPG opzionale. Oggi `sha256_file()` esiste ma è usata in pochi
    moduli. Per uso peritale è un requisito, non un extra.
-2. **Normalizzazione temporale.** ISO8601 UTC ovunque, timezone del volume
-   (`/etc/timezone`, `TimeZoneInformation`), filtro globale `--since/--until`.
-   Riduce molto il rumore sui dischi grandi.
+2. ~~**Normalizzazione temporale.**~~ ✅ **Fatto (6.2)** — `src/lib/16-time.sh`.
+   Fuso del volume rilevato da `/etc/timezone`, `/etc/localtime` e
+   `SYSTEM\Control\TimeZoneInformation`, filtro globale `--since/--until`.
+
+   **Decisione da non ribaltare senza motivo:** la voce chiedeva "ISO8601 UTC
+   ovunque", cioè convertire tutte le date a UTC. Non è stato fatto, ed è
+   deliberato: gli artefatti di uno stesso volume mescolano UTC (registro, log
+   eventi) e ora locale (syslog, shell history), e non esiste un modo affidabile
+   per sapere *dalla stringa* in quale dei due si è. Una conversione applicata
+   alla cieca sposterebbe una parte degli eventi di ore — un errore inventato,
+   molto peggio di una data dichiarata ambigua. Si rileva quindi il fuso e lo si
+   dichiara (avvio, manifesto, campo `volume_timezone` nel JSONL), e il
+   confronto usa le date così come compaiono. Convertire davvero è possibile
+   solo artefatto per artefatto, sapendo cosa produce quel formato: è un lavoro
+   per singolo modulo, non per il motore.
+
+   Agganci universali usati: `_rows_to_table` (tabelle), `render_pre_block`
+   (blocchi di log) ed `export_report_jsonl`. Filtrare solo il JSONL avrebbe
+   prodotto due viste dello stesso modulo in contraddizione.
+
+   Regole del filtro, presidiate dai test: le righe **prive** di data si
+   tengono sempre (non sono valutabili), una riga con **più** date si tiene se
+   *almeno una* cade nella finestra, i limiti sono inclusivi, e ogni blocco
+   filtrato dichiara quante righe ha nascosto. Un limite malformato **ferma
+   l'esecuzione**: ignorarlo produrrebbe un report che dichiara una copertura
+   che non ha.
 3. **Executive summary con scoring.** Findings ordinati per severità e
    correlazione cross-modulo (es. USB inserito + LNK + picco USN nella stessa
    finestra ⇒ candidato esfiltrazione). È ciò che distingue un tool DFIR da un

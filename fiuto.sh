@@ -462,6 +462,236 @@ check_ioc() {
 }
 
 # ================================================================
+#  TEMPO — timezone del volume e finestra di analisi
+#
+#  Due problemi distinti, spesso confusi.
+#
+#  1) IN CHE FUSO SONO LE DATE CHE LEGGO. Gli artefatti non concordano: gli
+#     hive di registro e i log Windows portano quasi sempre UTC, syslog e le
+#     shell history portano l'ora locale della macchina, i database SQLite dei
+#     browser dipendono dal browser. Convertire tutto a UTC richiederebbe di
+#     sapere, artefatto per artefatto, quale delle due si sta leggendo: una
+#     conversione applicata alla cieca produrrebbe date sbagliate di qualche
+#     ora, che e' molto peggio di date dichiarate ambigue. Qui quindi NON si
+#     converte nulla: si rileva il fuso del volume e lo si dichiara, cosi'
+#     l'analista sa cosa significa un'ora locale trovata in un report.
+#
+#  2) QUANTE DATE DEVO GUARDARE. Su un disco da un terabyte un report puo'
+#     contenere centinaia di migliaia di righe che coprono anni, mentre
+#     l'incidente sta in tre giorni. --since/--until tagliano tutto cio' che
+#     cade fuori dalla finestra.
+#
+#  Il filtro confronta le date COSI' COME COMPAIONO nell'artefatto, senza
+#  riportarle a un fuso comune: e' l'unico confronto che non introduce errori
+#  inventati. Su una finestra di giorni la differenza e' irrilevante; se la
+#  finestra e' di ore, va allargata di un margine pari all'offset del volume.
+#  Il report lo dichiara esplicitamente.
+# ================================================================
+
+TIME_SINCE=""          # limite inferiore normalizzato (YYYY-MM-DDTHH:MM:SS)
+TIME_UNTIL=""          # limite superiore normalizzato
+VOLUME_TZ=""           # fuso del volume analizzato, se rilevato
+VOLUME_TZ_SOURCE=""    # da dove e' stato letto (serve a poterlo contestare)
+
+# Directory di stato: come per custody e hive, il percorso e' deterministico
+# perche' il conteggio delle righe scartate viene incrementato da subshell.
+_time_dir() {
+    local D="${TMPDIR:-/tmp}/fiuto_time_$$"
+    [[ -d "$D" ]] || mkdir -p "$D" 2>/dev/null || return 1
+    echo "$D"
+}
+
+# --- normalizzazione dei limiti ---------------------------------------------
+
+# parse_time_bound <stringa> [end]
+# Accetta: YYYY-MM-DD, YYYY-MM-DD HH:MM[:SS], la stessa con 'T' e/o 'Z' finale,
+# e le forme relative -7d / -36h / -90m rispetto all'istante di avvio.
+# Con "end" una data senza orario diventa fine giornata invece che inizio,
+# cosi' --until 2026-03-01 include il 1 marzo per intero: e' quello che
+# chiunque si aspetta scrivendolo.
+parse_time_bound() {
+    local RAW="$1" KIND="${2:-start}"
+    [[ -n "$RAW" ]] || return 1
+
+    # Forme relative: -7d, -36h, -90m
+    if [[ "$RAW" =~ ^-([0-9]+)([dhm])$ ]]; then
+        local N="${BASH_REMATCH[1]}" U="${BASH_REMATCH[2]}" SPEC BSD
+        # Le unita' di date(1) BSD non coincidono con le nostre: 'm' li' sono
+        # MESI, i minuti sono 'M'. Usare la stessa lettera darebbe una finestra
+        # sbagliata di ordini di grandezza, in silenzio.
+        case "$U" in
+            d) SPEC="$N days ago";    BSD="-${N}d" ;;
+            h) SPEC="$N hours ago";   BSD="-${N}H" ;;
+            m) SPEC="$N minutes ago"; BSD="-${N}M" ;;
+        esac
+        date -d "$SPEC" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null && return 0
+        # date(1) BSD (macOS): non ha -d.
+        date -v"$BSD" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null && return 0
+        return 1
+    fi
+
+    local S="${RAW%Z}"
+    S="${S//T/ }"
+    if [[ "$S" =~ ^([0-9]{4}-[0-9]{2}-[0-9]{2})$ ]]; then
+        [[ "$KIND" == "end" ]] && { echo "${S}T23:59:59"; return 0; }
+        echo "${S}T00:00:00"; return 0
+    fi
+    if [[ "$S" =~ ^([0-9]{4}-[0-9]{2}-[0-9]{2})\ ([0-9]{2}:[0-9]{2})$ ]]; then
+        echo "${BASH_REMATCH[1]}T${BASH_REMATCH[2]}:$([[ "$KIND" == "end" ]] && echo 59 || echo 00)"
+        return 0
+    fi
+    if [[ "$S" =~ ^([0-9]{4}-[0-9]{2}-[0-9]{2})\ ([0-9]{2}:[0-9]{2}:[0-9]{2})$ ]]; then
+        echo "${BASH_REMATCH[1]}T${BASH_REMATCH[2]}"; return 0
+    fi
+    return 1
+}
+
+# Vero se e' stata impostata almeno una delle due estremita'.
+time_window_active() { [[ -n "$TIME_SINCE" || -n "$TIME_UNTIL" ]]; }
+
+# Descrizione leggibile della finestra, per console e report.
+time_window_label() {
+    time_window_active || return 0
+    if [[ -n "$TIME_SINCE" && -n "$TIME_UNTIL" ]]; then
+        echo "${TIME_SINCE/T/ } → ${TIME_UNTIL/T/ }"
+    elif [[ -n "$TIME_SINCE" ]]; then
+        echo "$(L "dal" "from") ${TIME_SINCE/T/ }"
+    else
+        echo "$(L "fino al" "until") ${TIME_UNTIL/T/ }"
+    fi
+}
+
+# --- rilevamento del fuso del volume ----------------------------------------
+
+# Legge il fuso dal volume analizzato. Non converte niente: serve a dichiarare
+# cosa significano le ore locali che compaiono nei report.
+detect_volume_timezone() {
+    VOLUME_TZ=""; VOLUME_TZ_SOURCE=""
+    [[ -n "$WIN_ROOT" ]] || return 0
+
+    case "$OS_TYPE" in
+        linux)
+            local TZF; TZF=$(ci_find_file "$WIN_ROOT/etc" "timezone" 2>/dev/null)
+            if [[ -n "$TZF" && -s "$TZF" ]]; then
+                VOLUME_TZ=$(head -1 "$TZF" | tr -d '[:space:]')
+                VOLUME_TZ_SOURCE="/etc/timezone"
+            fi
+            # Su systemd /etc/timezone puo' mancare: il fuso e' allora nel
+            # target del symlink /etc/localtime.
+            if [[ -z "$VOLUME_TZ" && -L "$WIN_ROOT/etc/localtime" ]]; then
+                local T; T=$(readlink "$WIN_ROOT/etc/localtime" 2>/dev/null)
+                VOLUME_TZ="${T##*/zoneinfo/}"
+                VOLUME_TZ_SOURCE="/etc/localtime"
+            fi
+            ;;
+        macos)
+            if [[ -L "$WIN_ROOT/etc/localtime" || -L "$WIN_ROOT/private/etc/localtime" ]]; then
+                local T
+                T=$(readlink "$WIN_ROOT/etc/localtime" 2>/dev/null \
+                    || readlink "$WIN_ROOT/private/etc/localtime" 2>/dev/null)
+                VOLUME_TZ="${T##*/zoneinfo/}"
+                VOLUME_TZ_SOURCE="/etc/localtime"
+            fi
+            ;;
+        windows)
+            local HIVE; HIVE=$(get_hive SYSTEM 2>/dev/null)
+            [[ -n "$HIVE" && -f "$HIVE" ]] || return 0
+            local OUT
+            OUT=$("$PY3" - "$HIVE" << 'PYEOF' 2>/dev/null
+import sys
+try:
+    from regipy.registry import RegistryHive
+except Exception:
+    sys.exit(0)
+
+try:
+    hive = RegistryHive(sys.argv[1])
+except Exception:
+    sys.exit(0)
+
+# Il ControlSet corrente non e' sempre il 001: su una macchina che ha avuto un
+# avvio fallito la differenza c'e' davvero.
+sel = 1
+try:
+    for v in hive.get_key('\\Select').get_values():
+        if v['name'].lower() == 'current':
+            sel = int(v['value'])
+except Exception:
+    pass
+
+name = bias = std_bias = None
+for cs in (f'ControlSet{sel:03d}', 'ControlSet001', 'CurrentControlSet'):
+    try:
+        vals = hive.get_key(f'\\{cs}\\Control\\TimeZoneInformation').get_values()
+    except Exception:
+        continue
+    for v in vals:
+        n = v['name'].lower()
+        if n == 'timezonekeyname' and v['value']:
+            name = str(v['value']).rstrip('\x00').strip()
+        elif n == 'bias':
+            bias = v['value']
+        elif n == 'standardbias':
+            std_bias = v['value']
+    if name or bias is not None:
+        break
+
+if not name and bias is None:
+    sys.exit(0)
+
+# Bias e' in minuti da sottrarre all'ora locale per ottenere UTC: il segno e'
+# quindi invertito rispetto all'offset che si scrive di solito (UTC+1 -> -60).
+off = ''
+if isinstance(bias, int):
+    total = -(bias + (std_bias if isinstance(std_bias, int) else 0))
+    sign = '+' if total >= 0 else '-'
+    total = abs(total)
+    off = f'UTC{sign}{total // 60:02d}:{total % 60:02d}'
+print('\t'.join([name or '', off]))
+PYEOF
+            )
+            local TZNAME TZOFF
+            IFS=$'\t' read -r TZNAME TZOFF <<< "$OUT"
+            if [[ -n "${TZNAME:-}" || -n "${TZOFF:-}" ]]; then
+                VOLUME_TZ="${TZNAME:-?}${TZOFF:+ (${TZOFF})}"
+                VOLUME_TZ_SOURCE="SYSTEM\\Control\\TimeZoneInformation"
+            fi
+            ;;
+    esac
+    [[ -n "$VOLUME_TZ" ]] && log_msg "[TZ] volume: $VOLUME_TZ (${VOLUME_TZ_SOURCE})"
+    return 0
+}
+
+# --- filtro ------------------------------------------------------------------
+
+# Somma le righe scartate dal filtro, per poterlo dichiarare a fine sessione.
+time_filtered_add() {
+    local N="${1:-0}"
+    [[ "$N" -gt 0 ]] 2>/dev/null || return 0
+    local D; D=$(_time_dir) || return 0
+    echo "$N" >> "${D}/dropped" 2>/dev/null || true
+}
+
+time_filtered_total() {
+    local D="${TMPDIR:-/tmp}/fiuto_time_$$"
+    [[ -f "${D}/dropped" ]] || { echo 0; return 0; }
+    awk '{s+=$1} END{print s+0}' "${D}/dropped" 2>/dev/null || echo 0
+}
+
+# Nota HTML da inserire nei report quando la finestra e' attiva. Un report
+# filtrato che non dichiara di esserlo e' una trappola: chi lo legge conclude
+# che prima di quella data non e' successo niente.
+time_window_html() {
+    time_window_active || return 0
+    printf "<div class='card' style='margin-bottom:1rem'><div style='padding:.9rem 1.5rem;font-size:.8rem;line-height:1.7'><b>%s</b> %s<br>%s%s</div></div>" \
+        "$(L "Report filtrato per data:" "Report filtered by date:")" \
+        "$(html_esc "$(time_window_label)")" \
+        "$(L "Le righe con una data fuori dalla finestra non compaiono. Le righe prive di data sono state mantenute: non erano valutabili." \
+             "Rows carrying a date outside the window are not shown. Rows without a date were kept: they could not be evaluated.")" \
+        "$([[ -n "$VOLUME_TZ" ]] && printf " %s" "$(L "Il confronto usa le date come compaiono nell'artefatto, senza riportarle a un fuso comune; il volume risulta configurato su" "The comparison uses dates as they appear in the artefact, without normalising them to a common zone; the volume is configured for") $(html_esc "$VOLUME_TZ").")"
+}
+
+# ================================================================
 #  CATENA DI CUSTODIA
 #
 #  Un report forense vale quanto la tracciabilita' di cio' su cui si basa. Fino
@@ -531,6 +761,8 @@ write_evidence_manifest() {
     export FIUTO_VERSION PY3_VERSION REPORT_BASE_DIR WIN_ROOT OS_TYPE HOST_NAME
     export CUSTODY_HASH CUSTODY_HASH_LIMIT_MB CUSTODY_START_UTC
     export CUSTODY_CMDLINE CUSTODY_OPERATOR CUSTODY_HOST
+    export TIME_SINCE TIME_UNTIL VOLUME_TZ VOLUME_TZ_SOURCE
+    FIUTO_TIME_DROPPED=$(time_filtered_total); export FIUTO_TIME_DROPPED
     local REPORTS; REPORTS=$(mktemp)
     printf '%s\n' "${GENERATED_REPORTS[@]:-}" > "$REPORTS"
     local REPLAY; REPLAY=$(mktemp)
@@ -642,6 +874,20 @@ manifest = {
         "volume_root": env.get('WIN_ROOT', ''),
         "detected_os": env.get('OS_TYPE', ''),
         "hostname_from_artefacts": env.get('HOST_NAME', ''),
+        "timezone": env.get('VOLUME_TZ', '') or None,
+        "timezone_source": env.get('VOLUME_TZ_SOURCE', '') or None,
+    },
+    # Un report filtrato che non dichiara il filtro fa concludere a chi legge
+    # che fuori dalla finestra non e' successo nulla: il manifesto lo registra
+    # anche quando la finestra non e' attiva, cosi' l'assenza e' un fatto.
+    "analysis_window": {
+        "since": env.get('TIME_SINCE', '') or None,
+        "until": env.get('TIME_UNTIL', '') or None,
+        "rows_excluded": int(env.get('FIUTO_TIME_DROPPED', '0') or 0),
+        "comparison": ("Le date sono confrontate come compaiono nell'artefatto, "
+                       "senza conversione a un fuso comune: gli artefatti di uno "
+                       "stesso volume mescolano UTC e ora locale e una conversione "
+                       "applicata alla cieca sposterebbe gli eventi di ore."),
     },
     "integrity_policy": {
         "algorithm": "SHA-256",
@@ -1660,11 +1906,41 @@ EOF
 # $1 = file, $2 = keyword separate da '|' (case-insensitive) per marcare le righe sensibili.
 render_pre_block() {
     local FILE="$1" KW="$2" MODE="${3:-}"
-    "$PY3" - "$FILE" "$KW" "$MODE" << 'PYEOF'
-import sys, html, re, datetime
+    local _PTMP; _PTMP=$(mktemp)
+    FIUTO_SINCE="${TIME_SINCE:-}" FIUTO_UNTIL="${TIME_UNTIL:-}" \
+    "$PY3" - "$FILE" "$KW" "$MODE" "$_PTMP" << 'PYEOF'
+import sys, os, html, re, datetime
 path, kw = sys.argv[1], sys.argv[2].lower()
 mode = sys.argv[3] if len(sys.argv) > 3 else ''
+drop_file = sys.argv[4] if len(sys.argv) > 4 else ''
 keys = [k for k in kw.split('|') if k]
+
+# Finestra --since/--until. I blocchi <pre> sono log e history: senza filtro
+# qui l'HTML mostrerebbe righe che l'export JSONL, che gia' filtra, esclude —
+# due viste dello stesso modulo che si contraddicono.
+since = os.environ.get('FIUTO_SINCE', '')
+until = os.environ.get('FIUTO_UNTIL', '')
+_TS_ISO = re.compile(r'\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2})?)?')
+_MONTHS = {'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04', 'May': '05', 'Jun': '06',
+           'Jul': '07', 'Aug': '08', 'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'}
+_TS_SYS = re.compile(r'\b(' + '|'.join(_MONTHS) + r')\s+(\d{1,2})\s+(\d{2}:\d{2}:\d{2})')
+_YEAR = str(datetime.date.today().year)
+
+def _line_in_window(line):
+    """None se la riga non porta date: non valutabile, quindi si tiene."""
+    found = []
+    for m in _TS_ISO.finditer(line):
+        t = m.group(0).replace(' ', 'T')
+        found.append(t + 'T00:00:00'[len(t) - 10:] if len(t) < 19 else t)
+    if not found:
+        # syslog non scrive l'anno: si assume quello corrente, come fa
+        # l'export JSONL. Approssimazione dichiarata, non nascosta.
+        m = _TS_SYS.search(line)
+        if m:
+            found.append(f"{_YEAR}-{_MONTHS[m.group(1)]}-{int(m.group(2)):02d}T{m.group(3)}")
+    if not found:
+        return None
+    return any((not since or t >= since) and (not until or t <= until) for t in found)
 
 # Decodifica i timestamp UNIX nelle history di shell in formato leggibile.
 # zsh extended_history:  ": <epoch>:<elapsed>;<comando>"
@@ -1690,16 +1966,32 @@ try:
         raw = f.read()
     text = raw.decode('utf-8', 'replace').replace('\r\n', '\n').replace('\r', '\n')
     out = []
+    dropped = 0
     for i, line in enumerate(text.split('\n'), 1):
         if mode == 'histts':
             line = decode_histts(line)
+        if (since or until) and _line_in_window(line) is False:
+            # Il numero di riga resta quello del file: i salti nella
+            # numerazione rendono visibile che qualcosa e' stato tolto.
+            dropped += 1
+            continue
         esc = html.escape(line)
         css = 'line sensitive' if any(k in line.lower() for k in keys) else 'line'
         out.append(f'<span class="{css}"><span class="lnum">{i:5d}</span> {esc}</span>')
     print('\n'.join(out))
+    if drop_file and dropped:
+        with open(drop_file, 'w') as fh:
+            fh.write(str(dropped))
 except Exception as e:
     print(f'<span class="line bad">{html.escape(str(e))}</span>')
 PYEOF
+    if [[ -s "$_PTMP" ]]; then
+        local _D; _D=$(cat "$_PTMP")
+        time_filtered_add "$_D"
+        printf "\n<span class='line' style='color:var(--text-mid)'>      %s %s</span>" \
+            "$_D" "$(L "righe nascoste dal filtro --since/--until" "rows hidden by the --since/--until filter")"
+    fi
+    rm -f "$_PTMP"
 }
 
 # Stampa a console le righe di un file con evidenziazione IoC (rosso sulle corrispondenze).
@@ -1753,6 +2045,7 @@ finish_report() {
         [[ -n "$5" ]] && printf "<div class='statsbar'>%s</div>\n" "$5"
         echo "<main>"
         pre_style_block
+        time_window_html
         printf '%s\n' "$6"
         echo "</main>"
         html_footer "$SCAN" "$WIN_ROOT"
@@ -1770,22 +2063,68 @@ stat_box() { printf "<div class='stat %s'><div class='label'>%s</div><div class=
 # ================================================================
 
 # Renderizza una tabella HTML da righe tab-separated. $1=righe, $2.. = intestazioni
+#
+# E' anche il punto in cui si applica la finestra --since/--until: e' la
+# funzione che quasi tutti i moduli usano per emettere dati datati, quindi il
+# filtro copre l'intero toolkit senza toccare i moduli uno per uno.
 _rows_to_table() {
     local ROWS="$1"; shift
     local _RTMP; _RTMP=$(mktemp); printf '%s\n' "$ROWS" > "$_RTMP"
     printf '%s\n' "$@" > "${_RTMP}.h"
-    "$PY3" - "$_RTMP" "${_RTMP}.h" << 'PYEOF'
-import sys, html
+    FIUTO_SINCE="${TIME_SINCE:-}" FIUTO_UNTIL="${TIME_UNTIL:-}" \
+    "$PY3" - "$_RTMP" "${_RTMP}.h" "${_RTMP}.d" << 'PYEOF'
+import sys, os, re, html
 heads=[h.rstrip('\n') for h in open(sys.argv[2])]
+
+since = os.environ.get('FIUTO_SINCE', '')
+until = os.environ.get('FIUTO_UNTIL', '')
+# Le date compaiono nelle forme piu' varie ma quasi sempre iniziano con
+# YYYY-MM-DD: ci si limita a quelle, perche' un pattern piu' permissivo
+# scarterebbe righe sulla base di numeri che date non sono.
+TS = re.compile(r'\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2})?)?')
+
+def in_window(cells):
+    """None se la riga non porta date: non e' valutabile, quindi si tiene."""
+    found = False
+    for c in cells:
+        for m in TS.finditer(c):
+            found = True
+            # Confronto lessicografico: su ISO 8601 equivale a quello
+            # cronologico, e non richiede di parsare formati parziali.
+            t = m.group(0).replace(' ', 'T')
+            # Completa le forme parziali ("2026-03-01", "2026-03-01T10:30")
+            # con l'inizio del periodo, cosi' tutte hanno la stessa lunghezza.
+            t = t + 'T00:00:00'[len(t) - 10:] if len(t) < 19 else t
+            if since and t < since:
+                continue
+            if until and t > until:
+                continue
+            return True
+    return False if found else None
+
 print("<table><tr>"+''.join(f'<th>{html.escape(h)}</th>' for h in heads)+"</tr>")
+dropped = 0
 for line in open(sys.argv[1], errors='replace'):
     if not line.strip(): continue
     cells=line.rstrip('\n').split('\t')
+    if (since or until) and in_window(cells) is False:
+        dropped += 1
+        continue
     tds=''.join(f"<td class='mono'>{html.escape(c)}</td>" for c in cells)
     print(f"<tr>{tds}</tr>")
 print("</table>")
+with open(sys.argv[3], 'w') as fh:
+    fh.write(str(dropped))
 PYEOF
-    rm -f "$_RTMP" "${_RTMP}.h"
+    if [[ -s "${_RTMP}.d" ]]; then
+        local _DROP; _DROP=$(cat "${_RTMP}.d")
+        if [[ "$_DROP" -gt 0 ]]; then
+            time_filtered_add "$_DROP"
+            printf "<div style='font-size:.72rem;color:var(--text-mid);padding:.4rem 0'>%s %s</div>" \
+                "$_DROP" "$(L "righe nascoste dal filtro --since/--until" "rows hidden by the --since/--until filter")"
+        fi
+    fi
+    rm -f "$_RTMP" "${_RTMP}.h" "${_RTMP}.d"
 }
 
 # ----------------------------------------------------------------
@@ -1807,13 +2146,22 @@ export_report_jsonl() {
     local SLUG; SLUG=$(basename "$DIR" | sed -E 's/_[0-9]{8}_[0-9]{6}$//')
     local OUT="${DIR}/report.jsonl"
 
+    local DROPF; DROPF=$(mktemp); register_tmp "$DROPF"
+    FIUTO_SINCE="${TIME_SINCE:-}" FIUTO_UNTIL="${TIME_UNTIL:-}" FIUTO_TZ="${VOLUME_TZ:-}" \
+    FIUTO_DROPFILE="$DROPF" \
     "$PY3" - "$HTML" "$SLUG" "${WIN_ROOT:-}" "${HOST_NAME:-}" "${OS_TYPE:-}" > "$OUT" << 'PYEOF' 2>/dev/null
-import sys, re, json, html as H, datetime
+import sys, os, re, json, html as H, datetime
 
 html_path, slug = sys.argv[1], sys.argv[2]
 volume  = sys.argv[3] if len(sys.argv) > 3 else ''
 host    = sys.argv[4] if len(sys.argv) > 4 else ''
 os_type = sys.argv[5] if len(sys.argv) > 5 else ''
+
+# La stessa finestra applicata ai report HTML: se l'export non la rispettasse,
+# la timeline caricata in Timesketch conterrebbe eventi che il report esclude.
+since = os.environ.get('FIUTO_SINCE', '')
+until = os.environ.get('FIUTO_UNTIL', '')
+volume_tz = os.environ.get('FIUTO_TZ', '')
 
 MONTHS = {'Jan':'01','Feb':'02','Mar':'03','Apr':'04','May':'05','Jun':'06',
           'Jul':'07','Aug':'08','Sep':'09','Oct':'10','Nov':'11','Dec':'12'}
@@ -1847,9 +2195,18 @@ except Exception:
 seen = set()
 out  = []
 
+dropped = 0
+
 def emit(dt, message, assumed):
+    global dropped
     message = ' '.join(message.split())[:2000]
     if not message:
+        return
+    if since and dt < since:
+        dropped += 1
+        return
+    if until and dt > until:
+        dropped += 1
         return
     key = (dt, message[:120])
     if key in seen:
@@ -1867,6 +2224,11 @@ def emit(dt, message, assumed):
         "hostname": host,
         "os": os_type,
     }
+    if volume_tz:
+        # Il campo datetime NON e' riportato a UTC: dichiarare il fuso del
+        # volume e' l'unico modo perche' chi carica la timeline sappia in che
+        # riferimento sono gli eventi presi dagli artefatti in ora locale.
+        rec["volume_timezone"] = volume_tz
     if assumed:
         # L'anno non era nel dato di origine: va dichiarato, non nascosto.
         rec["year_inferred"] = True
@@ -1910,7 +2272,20 @@ for pm in PRE.finditer(content):
 
 for rec in sorted(out, key=lambda r: r["datetime"]):
     print(json.dumps(rec, ensure_ascii=False))
+
+drop_file = os.environ.get('FIUTO_DROPFILE')
+if drop_file and dropped:
+    try:
+        with open(drop_file, 'w') as fh:
+            fh.write(str(dropped))
+    except Exception:
+        pass
 PYEOF
+
+    if [[ -s "$DROPF" ]]; then
+        log_msg "[JSONL] $(cat "$DROPF") eventi esclusi dalla finestra --since/--until"
+    fi
+    rm -f "$DROPF"
 
     local N=0
     [[ -s "$OUT" ]] && N=$(wc -l < "$OUT")
@@ -2107,6 +2482,12 @@ _apply_win_root() {
 
     # Recupera info macchina (hostname, OS, IP, dominio)
     gather_host_info
+    # Fuso del volume: non converte nulla, serve a dichiarare cosa significano
+    # le ore locali che compaiono nei report. Va rifatto a ogni cambio di root.
+    detect_volume_timezone
+    if [[ -n "$VOLUME_TZ" ]]; then
+        info "$(L "Fuso orario del volume:" "Volume timezone:") ${BOLD}${VOLUME_TZ}${RESET} ${DIM}(${VOLUME_TZ_SOURCE})${RESET}"
+    fi
     # Resetta REPORT_BASE_DIR per ricalcolarla con il nuovo hostname
     REPORT_BASE_DIR=""
     setup_report_dir || true
@@ -16737,6 +17118,7 @@ main() {
     # quando non verra' mai creata e' innocuo.
     register_tmp "${TMPDIR:-/tmp}/fiuto_hives_$$"
     register_tmp "${TMPDIR:-/tmp}/fiuto_custody_$$"
+    register_tmp "${TMPDIR:-/tmp}/fiuto_time_$$"
 
     # Contesto della sessione, congelato all'avvio per il manifesto.
     CUSTODY_START_UTC=$(date -u "+%Y-%m-%dT%H:%M:%SZ")
@@ -16773,6 +17155,13 @@ main() {
                     echo -e "    ./fiuto.sh /mnt/windows --all --no-log-replay  # non applicare i .LOG1/.LOG2"
                     echo -e "    ./fiuto.sh /mnt/windows --all --jsonl  # esporta anche JSONL per Timesketch"
                     echo -e "    ./fiuto.sh /mnt/windows --all --no-hash  # manifesto senza SHA256 (piu' veloce)"
+                    echo -e "    ./fiuto.sh /mnt/windows --all --since 2026-03-01 --until 2026-03-08  # solo la finestra"
+                    echo -e "    ./fiuto.sh /mnt/windows --all --since -7d     # ultimi 7 giorni"
+                    echo ""
+                    echo -e "  ${DIM}--since/--until confrontano le date come compaiono nell'artefatto,"
+                    echo -e "    senza riportarle a un fuso comune: gli artefatti dello stesso volume"
+                    echo -e "    mescolano UTC e ora locale. Per finestre di poche ore, allargale"
+                    echo -e "    dell'offset del volume (dichiarato all'avvio).${RESET}"
                     echo ""
                     echo -e "  ${DIM}Di default i transaction log del registro (.LOG1/.LOG2) vengono"
                     echo -e "    riapplicati su una copia temporanea: senza questo passaggio le"
@@ -16792,6 +17181,13 @@ main() {
                     echo -e "    ./fiuto.sh /mnt/windows --all --no-log-replay  # skip .LOG1/.LOG2 replay"
                     echo -e "    ./fiuto.sh /mnt/windows --all --jsonl  # also export JSONL for Timesketch"
                     echo -e "    ./fiuto.sh /mnt/windows --all --no-hash  # manifest without SHA256 (faster)"
+                    echo -e "    ./fiuto.sh /mnt/windows --all --since 2026-03-01 --until 2026-03-08  # window only"
+                    echo -e "    ./fiuto.sh /mnt/windows --all --since -7d     # last 7 days"
+                    echo ""
+                    echo -e "  ${DIM}--since/--until compare dates as they appear in the artefact, without"
+                    echo -e "    normalising them to a common zone: artefacts on the same volume mix"
+                    echo -e "    UTC and local time. For windows of a few hours, widen them by the"
+                    echo -e "    volume offset (declared at startup).${RESET}"
                     echo ""
                     echo -e "  ${DIM}By default registry transaction logs (.LOG1/.LOG2) are replayed"
                     echo -e "    onto a temporary copy: without this step the most recent hive"
@@ -16831,12 +17227,35 @@ main() {
             --no-custody)  CUSTODY=false ;;
             --no-hash)     CUSTODY_HASH=false ;;
             --hash-limit)  CUSTODY_HASH_LIMIT_MB="${2:-1024}"; shift ;;
+            --since|--until)
+                # Un limite scritto male non deve passare in silenzio: filtrerebbe
+                # tutto o niente, e in entrambi i casi il report sarebbe falso.
+                local _BOUND _KIND
+                [[ "$1" == "--since" ]] && _KIND=start || _KIND=end
+                if ! _BOUND=$(parse_time_bound "${2:-}" "$_KIND"); then
+                    err "$(L "Data non valida per" "Invalid date for") $1: '${2:-}'"
+                    info "$(L "Formati ammessi: 2026-03-01 · '2026-03-01 14:30' · 2026-03-01T14:30:00 · -7d · -36h · -90m" \
+                             "Accepted formats: 2026-03-01 · '2026-03-01 14:30' · 2026-03-01T14:30:00 · -7d · -36h · -90m")"
+                    exit 1
+                fi
+                [[ "$1" == "--since" ]] && TIME_SINCE="$_BOUND" || TIME_UNTIL="$_BOUND"
+                shift ;;
             --format)    [[ "${2:-}" == "jsonl" ]] && EXPORT_JSONL=true; shift ;;
             -*)          local UNKNOWN_OPT="$([ "$LANG" = "it" ] && echo "Opzione sconosciuta:" || echo "Unknown option:")"; warn "$UNKNOWN_OPT $1" ;;
             *)           [[ -z "$ARG_ROOT" ]] && ARG_ROOT="$1" ;;
         esac
         shift
     done
+
+    if [[ -n "$TIME_SINCE" && -n "$TIME_UNTIL" && "$TIME_SINCE" > "$TIME_UNTIL" ]]; then
+        err "$(L "Finestra temporale vuota:" "Empty time window:") --since ${TIME_SINCE/T/ } > --until ${TIME_UNTIL/T/ }"
+        exit 1
+    fi
+    if time_window_active; then
+        info "$(L "Finestra di analisi:" "Analysis window:") ${BOLD}$(time_window_label)"
+        info "$(L "Le righe datate fuori dalla finestra saranno escluse dai report e dall'export." \
+                 "Dated rows outside the window will be excluded from reports and export.")"
+    fi
 
     if [[ -n "$ARG_ROOT" ]]; then
         if [[ ! -d "$ARG_ROOT" ]]; then

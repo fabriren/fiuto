@@ -180,6 +180,12 @@ _apply_win_root() {
 
     # Recupera info macchina (hostname, OS, IP, dominio)
     gather_host_info
+    # Fuso del volume: non converte nulla, serve a dichiarare cosa significano
+    # le ore locali che compaiono nei report. Va rifatto a ogni cambio di root.
+    detect_volume_timezone
+    if [[ -n "$VOLUME_TZ" ]]; then
+        info "$(L "Fuso orario del volume:" "Volume timezone:") ${BOLD}${VOLUME_TZ}${RESET} ${DIM}(${VOLUME_TZ_SOURCE})${RESET}"
+    fi
     # Resetta REPORT_BASE_DIR per ricalcolarla con il nuovo hostname
     REPORT_BASE_DIR=""
     setup_report_dir || true

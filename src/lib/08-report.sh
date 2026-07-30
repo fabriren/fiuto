@@ -331,11 +331,41 @@ EOF
 # $1 = file, $2 = keyword separate da '|' (case-insensitive) per marcare le righe sensibili.
 render_pre_block() {
     local FILE="$1" KW="$2" MODE="${3:-}"
-    "$PY3" - "$FILE" "$KW" "$MODE" << 'PYEOF'
-import sys, html, re, datetime
+    local _PTMP; _PTMP=$(mktemp)
+    FIUTO_SINCE="${TIME_SINCE:-}" FIUTO_UNTIL="${TIME_UNTIL:-}" \
+    "$PY3" - "$FILE" "$KW" "$MODE" "$_PTMP" << 'PYEOF'
+import sys, os, html, re, datetime
 path, kw = sys.argv[1], sys.argv[2].lower()
 mode = sys.argv[3] if len(sys.argv) > 3 else ''
+drop_file = sys.argv[4] if len(sys.argv) > 4 else ''
 keys = [k for k in kw.split('|') if k]
+
+# Finestra --since/--until. I blocchi <pre> sono log e history: senza filtro
+# qui l'HTML mostrerebbe righe che l'export JSONL, che gia' filtra, esclude —
+# due viste dello stesso modulo che si contraddicono.
+since = os.environ.get('FIUTO_SINCE', '')
+until = os.environ.get('FIUTO_UNTIL', '')
+_TS_ISO = re.compile(r'\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2})?)?')
+_MONTHS = {'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04', 'May': '05', 'Jun': '06',
+           'Jul': '07', 'Aug': '08', 'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'}
+_TS_SYS = re.compile(r'\b(' + '|'.join(_MONTHS) + r')\s+(\d{1,2})\s+(\d{2}:\d{2}:\d{2})')
+_YEAR = str(datetime.date.today().year)
+
+def _line_in_window(line):
+    """None se la riga non porta date: non valutabile, quindi si tiene."""
+    found = []
+    for m in _TS_ISO.finditer(line):
+        t = m.group(0).replace(' ', 'T')
+        found.append(t + 'T00:00:00'[len(t) - 10:] if len(t) < 19 else t)
+    if not found:
+        # syslog non scrive l'anno: si assume quello corrente, come fa
+        # l'export JSONL. Approssimazione dichiarata, non nascosta.
+        m = _TS_SYS.search(line)
+        if m:
+            found.append(f"{_YEAR}-{_MONTHS[m.group(1)]}-{int(m.group(2)):02d}T{m.group(3)}")
+    if not found:
+        return None
+    return any((not since or t >= since) and (not until or t <= until) for t in found)
 
 # Decodifica i timestamp UNIX nelle history di shell in formato leggibile.
 # zsh extended_history:  ": <epoch>:<elapsed>;<comando>"
@@ -361,16 +391,32 @@ try:
         raw = f.read()
     text = raw.decode('utf-8', 'replace').replace('\r\n', '\n').replace('\r', '\n')
     out = []
+    dropped = 0
     for i, line in enumerate(text.split('\n'), 1):
         if mode == 'histts':
             line = decode_histts(line)
+        if (since or until) and _line_in_window(line) is False:
+            # Il numero di riga resta quello del file: i salti nella
+            # numerazione rendono visibile che qualcosa e' stato tolto.
+            dropped += 1
+            continue
         esc = html.escape(line)
         css = 'line sensitive' if any(k in line.lower() for k in keys) else 'line'
         out.append(f'<span class="{css}"><span class="lnum">{i:5d}</span> {esc}</span>')
     print('\n'.join(out))
+    if drop_file and dropped:
+        with open(drop_file, 'w') as fh:
+            fh.write(str(dropped))
 except Exception as e:
     print(f'<span class="line bad">{html.escape(str(e))}</span>')
 PYEOF
+    if [[ -s "$_PTMP" ]]; then
+        local _D; _D=$(cat "$_PTMP")
+        time_filtered_add "$_D"
+        printf "\n<span class='line' style='color:var(--text-mid)'>      %s %s</span>" \
+            "$_D" "$(L "righe nascoste dal filtro --since/--until" "rows hidden by the --since/--until filter")"
+    fi
+    rm -f "$_PTMP"
 }
 
 # Stampa a console le righe di un file con evidenziazione IoC (rosso sulle corrispondenze).
@@ -424,6 +470,7 @@ finish_report() {
         [[ -n "$5" ]] && printf "<div class='statsbar'>%s</div>\n" "$5"
         echo "<main>"
         pre_style_block
+        time_window_html
         printf '%s\n' "$6"
         echo "</main>"
         html_footer "$SCAN" "$WIN_ROOT"
@@ -441,20 +488,66 @@ stat_box() { printf "<div class='stat %s'><div class='label'>%s</div><div class=
 # ================================================================
 
 # Renderizza una tabella HTML da righe tab-separated. $1=righe, $2.. = intestazioni
+#
+# E' anche il punto in cui si applica la finestra --since/--until: e' la
+# funzione che quasi tutti i moduli usano per emettere dati datati, quindi il
+# filtro copre l'intero toolkit senza toccare i moduli uno per uno.
 _rows_to_table() {
     local ROWS="$1"; shift
     local _RTMP; _RTMP=$(mktemp); printf '%s\n' "$ROWS" > "$_RTMP"
     printf '%s\n' "$@" > "${_RTMP}.h"
-    "$PY3" - "$_RTMP" "${_RTMP}.h" << 'PYEOF'
-import sys, html
+    FIUTO_SINCE="${TIME_SINCE:-}" FIUTO_UNTIL="${TIME_UNTIL:-}" \
+    "$PY3" - "$_RTMP" "${_RTMP}.h" "${_RTMP}.d" << 'PYEOF'
+import sys, os, re, html
 heads=[h.rstrip('\n') for h in open(sys.argv[2])]
+
+since = os.environ.get('FIUTO_SINCE', '')
+until = os.environ.get('FIUTO_UNTIL', '')
+# Le date compaiono nelle forme piu' varie ma quasi sempre iniziano con
+# YYYY-MM-DD: ci si limita a quelle, perche' un pattern piu' permissivo
+# scarterebbe righe sulla base di numeri che date non sono.
+TS = re.compile(r'\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2})?)?')
+
+def in_window(cells):
+    """None se la riga non porta date: non e' valutabile, quindi si tiene."""
+    found = False
+    for c in cells:
+        for m in TS.finditer(c):
+            found = True
+            # Confronto lessicografico: su ISO 8601 equivale a quello
+            # cronologico, e non richiede di parsare formati parziali.
+            t = m.group(0).replace(' ', 'T')
+            # Completa le forme parziali ("2026-03-01", "2026-03-01T10:30")
+            # con l'inizio del periodo, cosi' tutte hanno la stessa lunghezza.
+            t = t + 'T00:00:00'[len(t) - 10:] if len(t) < 19 else t
+            if since and t < since:
+                continue
+            if until and t > until:
+                continue
+            return True
+    return False if found else None
+
 print("<table><tr>"+''.join(f'<th>{html.escape(h)}</th>' for h in heads)+"</tr>")
+dropped = 0
 for line in open(sys.argv[1], errors='replace'):
     if not line.strip(): continue
     cells=line.rstrip('\n').split('\t')
+    if (since or until) and in_window(cells) is False:
+        dropped += 1
+        continue
     tds=''.join(f"<td class='mono'>{html.escape(c)}</td>" for c in cells)
     print(f"<tr>{tds}</tr>")
 print("</table>")
+with open(sys.argv[3], 'w') as fh:
+    fh.write(str(dropped))
 PYEOF
-    rm -f "$_RTMP" "${_RTMP}.h"
+    if [[ -s "${_RTMP}.d" ]]; then
+        local _DROP; _DROP=$(cat "${_RTMP}.d")
+        if [[ "$_DROP" -gt 0 ]]; then
+            time_filtered_add "$_DROP"
+            printf "<div style='font-size:.72rem;color:var(--text-mid);padding:.4rem 0'>%s %s</div>" \
+                "$_DROP" "$(L "righe nascoste dal filtro --since/--until" "rows hidden by the --since/--until filter")"
+        fi
+    fi
+    rm -f "$_RTMP" "${_RTMP}.h" "${_RTMP}.d"
 }

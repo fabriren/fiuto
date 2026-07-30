@@ -11,6 +11,7 @@ main() {
     # quando non verra' mai creata e' innocuo.
     register_tmp "${TMPDIR:-/tmp}/fiuto_hives_$$"
     register_tmp "${TMPDIR:-/tmp}/fiuto_custody_$$"
+    register_tmp "${TMPDIR:-/tmp}/fiuto_time_$$"
 
     # Contesto della sessione, congelato all'avvio per il manifesto.
     CUSTODY_START_UTC=$(date -u "+%Y-%m-%dT%H:%M:%SZ")
@@ -47,6 +48,13 @@ main() {
                     echo -e "    ./fiuto.sh /mnt/windows --all --no-log-replay  # non applicare i .LOG1/.LOG2"
                     echo -e "    ./fiuto.sh /mnt/windows --all --jsonl  # esporta anche JSONL per Timesketch"
                     echo -e "    ./fiuto.sh /mnt/windows --all --no-hash  # manifesto senza SHA256 (piu' veloce)"
+                    echo -e "    ./fiuto.sh /mnt/windows --all --since 2026-03-01 --until 2026-03-08  # solo la finestra"
+                    echo -e "    ./fiuto.sh /mnt/windows --all --since -7d     # ultimi 7 giorni"
+                    echo ""
+                    echo -e "  ${DIM}--since/--until confrontano le date come compaiono nell'artefatto,"
+                    echo -e "    senza riportarle a un fuso comune: gli artefatti dello stesso volume"
+                    echo -e "    mescolano UTC e ora locale. Per finestre di poche ore, allargale"
+                    echo -e "    dell'offset del volume (dichiarato all'avvio).${RESET}"
                     echo ""
                     echo -e "  ${DIM}Di default i transaction log del registro (.LOG1/.LOG2) vengono"
                     echo -e "    riapplicati su una copia temporanea: senza questo passaggio le"
@@ -66,6 +74,13 @@ main() {
                     echo -e "    ./fiuto.sh /mnt/windows --all --no-log-replay  # skip .LOG1/.LOG2 replay"
                     echo -e "    ./fiuto.sh /mnt/windows --all --jsonl  # also export JSONL for Timesketch"
                     echo -e "    ./fiuto.sh /mnt/windows --all --no-hash  # manifest without SHA256 (faster)"
+                    echo -e "    ./fiuto.sh /mnt/windows --all --since 2026-03-01 --until 2026-03-08  # window only"
+                    echo -e "    ./fiuto.sh /mnt/windows --all --since -7d     # last 7 days"
+                    echo ""
+                    echo -e "  ${DIM}--since/--until compare dates as they appear in the artefact, without"
+                    echo -e "    normalising them to a common zone: artefacts on the same volume mix"
+                    echo -e "    UTC and local time. For windows of a few hours, widen them by the"
+                    echo -e "    volume offset (declared at startup).${RESET}"
                     echo ""
                     echo -e "  ${DIM}By default registry transaction logs (.LOG1/.LOG2) are replayed"
                     echo -e "    onto a temporary copy: without this step the most recent hive"
@@ -105,12 +120,35 @@ main() {
             --no-custody)  CUSTODY=false ;;
             --no-hash)     CUSTODY_HASH=false ;;
             --hash-limit)  CUSTODY_HASH_LIMIT_MB="${2:-1024}"; shift ;;
+            --since|--until)
+                # Un limite scritto male non deve passare in silenzio: filtrerebbe
+                # tutto o niente, e in entrambi i casi il report sarebbe falso.
+                local _BOUND _KIND
+                [[ "$1" == "--since" ]] && _KIND=start || _KIND=end
+                if ! _BOUND=$(parse_time_bound "${2:-}" "$_KIND"); then
+                    err "$(L "Data non valida per" "Invalid date for") $1: '${2:-}'"
+                    info "$(L "Formati ammessi: 2026-03-01 · '2026-03-01 14:30' · 2026-03-01T14:30:00 · -7d · -36h · -90m" \
+                             "Accepted formats: 2026-03-01 · '2026-03-01 14:30' · 2026-03-01T14:30:00 · -7d · -36h · -90m")"
+                    exit 1
+                fi
+                [[ "$1" == "--since" ]] && TIME_SINCE="$_BOUND" || TIME_UNTIL="$_BOUND"
+                shift ;;
             --format)    [[ "${2:-}" == "jsonl" ]] && EXPORT_JSONL=true; shift ;;
             -*)          local UNKNOWN_OPT="$([ "$LANG" = "it" ] && echo "Opzione sconosciuta:" || echo "Unknown option:")"; warn "$UNKNOWN_OPT $1" ;;
             *)           [[ -z "$ARG_ROOT" ]] && ARG_ROOT="$1" ;;
         esac
         shift
     done
+
+    if [[ -n "$TIME_SINCE" && -n "$TIME_UNTIL" && "$TIME_SINCE" > "$TIME_UNTIL" ]]; then
+        err "$(L "Finestra temporale vuota:" "Empty time window:") --since ${TIME_SINCE/T/ } > --until ${TIME_UNTIL/T/ }"
+        exit 1
+    fi
+    if time_window_active; then
+        info "$(L "Finestra di analisi:" "Analysis window:") ${BOLD}$(time_window_label)"
+        info "$(L "Le righe datate fuori dalla finestra saranno escluse dai report e dall'export." \
+                 "Dated rows outside the window will be excluded from reports and export.")"
+    fi
 
     if [[ -n "$ARG_ROOT" ]]; then
         if [[ ! -d "$ARG_ROOT" ]]; then

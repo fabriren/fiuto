@@ -69,6 +69,8 @@ write_evidence_manifest() {
     export FIUTO_VERSION PY3_VERSION REPORT_BASE_DIR WIN_ROOT OS_TYPE HOST_NAME
     export CUSTODY_HASH CUSTODY_HASH_LIMIT_MB CUSTODY_START_UTC
     export CUSTODY_CMDLINE CUSTODY_OPERATOR CUSTODY_HOST
+    export TIME_SINCE TIME_UNTIL VOLUME_TZ VOLUME_TZ_SOURCE
+    FIUTO_TIME_DROPPED=$(time_filtered_total); export FIUTO_TIME_DROPPED
     local REPORTS; REPORTS=$(mktemp)
     printf '%s\n' "${GENERATED_REPORTS[@]:-}" > "$REPORTS"
     local REPLAY; REPLAY=$(mktemp)
@@ -180,6 +182,20 @@ manifest = {
         "volume_root": env.get('WIN_ROOT', ''),
         "detected_os": env.get('OS_TYPE', ''),
         "hostname_from_artefacts": env.get('HOST_NAME', ''),
+        "timezone": env.get('VOLUME_TZ', '') or None,
+        "timezone_source": env.get('VOLUME_TZ_SOURCE', '') or None,
+    },
+    # Un report filtrato che non dichiara il filtro fa concludere a chi legge
+    # che fuori dalla finestra non e' successo nulla: il manifesto lo registra
+    # anche quando la finestra non e' attiva, cosi' l'assenza e' un fatto.
+    "analysis_window": {
+        "since": env.get('TIME_SINCE', '') or None,
+        "until": env.get('TIME_UNTIL', '') or None,
+        "rows_excluded": int(env.get('FIUTO_TIME_DROPPED', '0') or 0),
+        "comparison": ("Le date sono confrontate come compaiono nell'artefatto, "
+                       "senza conversione a un fuso comune: gli artefatti di uno "
+                       "stesso volume mescolano UTC e ora locale e una conversione "
+                       "applicata alla cieca sposterebbe gli eventi di ore."),
     },
     "integrity_policy": {
         "algorithm": "SHA-256",
