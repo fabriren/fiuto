@@ -24,29 +24,23 @@ setup() {
     }
 }
 
-@test "ogni voce del registro Linux punta a una funzione esistente" {
-    for entry in "${MODULES_LINUX[@]}"; do
-        fn="${entry%%|*}"
-        declare -F "$fn" > /dev/null || {
-            echo "Funzione mancante nel registro Linux: $fn"
-            false
-        }
+@test "ogni voce dei registri punta a una funzione esistente" {
+    for reg in MODULES_WIN MODULES_LINUX MODULES_MACOS; do
+        declare -n _r="$reg"
+        for entry in "${_r[@]}"; do
+            fn="${entry%%|*}"
+            declare -F "$fn" > /dev/null || {
+                echo "Funzione mancante nel registro $reg: $fn"
+                false
+            }
+        done
+        unset -n _r
     done
 }
 
-@test "ogni voce del registro macOS punta a una funzione esistente" {
-    for entry in "${MODULES_MACOS[@]}"; do
-        fn="${entry%%|*}"
-        declare -F "$fn" > /dev/null || {
-            echo "Funzione mancante nel registro macOS: $fn"
-            false
-        }
-    done
-}
-
-@test "ogni voce di registro ha i 4 campi attesi" {
-    for entry in "${MODULES_LINUX[@]}" "${MODULES_MACOS[@]}"; do
-        IFS='|' read -r fn name color desc <<< "$entry"
+@test "ogni voce di registro ha almeno i 4 campi attesi" {
+    for entry in "${MODULES_WIN[@]}" "${MODULES_LINUX[@]}" "${MODULES_MACOS[@]}"; do
+        IFS='|' read -r fn name color desc _guard <<< "$entry"
         [ -n "$fn" ]
         [ -n "$name" ]
         [ -n "$color" ]
@@ -54,8 +48,29 @@ setup() {
     done
 }
 
+@test "i colori dei registri sono variabili definite" {
+    for entry in "${MODULES_WIN[@]}" "${MODULES_LINUX[@]}" "${MODULES_MACOS[@]}"; do
+        IFS='|' read -r _fn _name color _rest <<< "$entry"
+        [ -n "${!color:-}" ] || {
+            echo "Colore non definito: $color"
+            false
+        }
+    done
+}
+
+@test "le guardie dichiarate nei registri esistono" {
+    for entry in "${MODULES_WIN[@]}" "${MODULES_LINUX[@]}" "${MODULES_MACOS[@]}"; do
+        IFS='|' read -r _fn _name _color _desc guard <<< "$entry"
+        [ -z "${guard:-}" ] && continue
+        declare -F "$guard" > /dev/null || {
+            echo "Guardia mancante: $guard"
+            false
+        }
+    done
+}
+
 @test "i nomi dei moduli sono univoci dentro ogni registro" {
-    for reg in MODULES_LINUX MODULES_MACOS; do
+    for reg in MODULES_WIN MODULES_LINUX MODULES_MACOS; do
         declare -n _r="$reg"
         names="$(printf '%s\n' "${_r[@]}" | cut -d'|' -f2 | sort)"
         [ "$(echo "$names" | wc -l)" -eq "$(echo "$names" | sort -u | wc -l)" ] || {
@@ -66,15 +81,42 @@ setup() {
     done
 }
 
-@test "ogni numero del menu Windows invoca una funzione esistente" {
-    # Estrae le righe "N)  module_xxx ;;" dal dispatcher run_module_by_number.
-    while read -r fn; do
-        declare -F "$fn" > /dev/null || {
-            echo "Funzione Windows mancante: $fn"
-            false
-        }
-    done < <(sed -n '/^run_module_by_number()/,/^}/p' "$SCRIPT" \
-             | grep -oE '\bmodule_[a-z0-9_]+' | sort -u)
+# La numerazione e' un contratto con l'utente: --module N e --modules 1,4,6-8
+# sono documentati nel README e usati negli script. Riordinare un registro
+# senza aggiornare il README rompe entrambi in silenzio.
+@test "il numero di moduli per OS coincide con quanto dichiarato nel README" {
+    readme="$REPO_ROOT/README.md"
+    grep -q "The ${#MODULES_WIN[@]} Windows analysis modules" "$readme"
+    grep -q "The ${#MODULES_LINUX[@]} Linux analysis modules" "$readme"
+    grep -q "The ${#MODULES_MACOS[@]} macOS analysis modules" "$readme"
+}
+
+# reg_text estrae la variante linguistica dalla forma "italiano§english".
+@test "reg_text seleziona la lingua corretta" {
+    LANG=it
+    [ "$(reg_text 'Persistenza§Persistence')" = "Persistenza" ]
+    LANG=en
+    [ "$(reg_text 'Persistenza§Persistence')" = "Persistence" ]
+}
+
+@test "reg_text lascia intatto il testo non bilingue" {
+    LANG=it
+    [ "$(reg_text 'SRUM')" = "SRUM" ]
+    LANG=en
+    [ "$(reg_text 'SRUM')" = "SRUM" ]
+}
+
+# Le descrizioni contengono $Recycle.Bin e $UsnJrnl:$J: dentro le virgolette
+# doppie del registro il dollaro va escapato, o bash espande una variabile.
+@test "i dollari letterali nelle descrizioni sopravvivono" {
+    printf '%s\n' "${MODULES_WIN[@]}" | grep -q 'Recycle.Bin'
+    printf '%s\n' "${MODULES_WIN[@]}" | grep -q 'UsnJrnl'
+}
+
+@test "i dispatcher duplicati sono stati rimossi" {
+    ! grep -q '^run_module_by_number()' "$SCRIPT"
+    ! grep -q '^print_menu()' "$SCRIPT"
+    ! grep -q '^run_all_modules()' "$SCRIPT"
 }
 
 @test "lo script non contiene marcatori di conflitto git" {

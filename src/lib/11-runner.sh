@@ -193,104 +193,24 @@ HTMLEOF
     open_report_prompt "$DASH"
 }
 
-run_all_modules() {
-    clear
-    print_banner
-    info "$(t batch_running)"
-    echo ""
-    if [[ -z "$REPORT_BASE_DIR" ]]; then
-        REPORT_BASE_DIR="${INVOCATION_DIR}/fiuto_reports_$(date +%Y%m%d_%H%M%S)"
-        LOG_FILE="${REPORT_BASE_DIR}/fiuto_session_$(date +%Y%m%d_%H%M%S).log"
-    fi
-    info "$(t batch_report_dir) ${BOLD}$REPORT_BASE_DIR${RESET}"
-    log_msg "$(t batch_started)$WIN_ROOT ==="
-    sleep 1
-
-    BATCH_MODE=true
-    SUMMARY_TABLE=()
-
-    echo ""
-    run_batch_module 1 module_ps_history "PowerShell History" 39
-    run_batch_module 2 module_notepad_tabstate "Notepad TabState" 39
-    run_batch_module 3 module_ifeo "IFEO" 39
-    run_batch_module 4 module_bam "BAM" 39
-    run_batch_module 5 module_run_keys "Run Keys" 39
-    run_batch_module 6 module_prefetch "Prefetch" 39
-    run_batch_module 7 module_scheduled_tasks "Scheduled Tasks" 39
-    run_batch_module 8 module_usb "USB Devices" 39
-    run_batch_module 9 module_lnk "LNK Files" 39
-    run_batch_module 10 module_rdp_cache "RDP Cache" 39
-    run_batch_module 11 module_services "Services" 39
-    run_batch_module 12 module_evtx "EVTX" 39
-    run_batch_module 13 module_amcache "Amcache" 39
-    run_batch_module 14 module_recycle_bin "Recycle Bin" 39
-    run_batch_module 15 module_wmi "WMI" 39
-    run_batch_module 16 module_srum "SRUM" 39
-    run_batch_module 17 module_browser "Browser History" 39
-    run_batch_module 18 module_userassist "UserAssist" 39
-    run_batch_module 19 module_shellbags "Shellbags" 39
-    run_batch_module 20 module_sam "SAM" 39
-    run_batch_module 21 module_mft "MFT" 39
-    run_batch_module 22 module_opensave "Open/Save MRU" 39
-    run_batch_module 23 module_usn "USN Journal" 39
-    run_batch_module 24 module_ntds "NTDS.dit" 39
-    run_batch_module 25 module_hiberfil "Hibernation / Pagefile" 39
-    run_batch_module 26 module_wer_files "WER Files" 39
-    run_batch_module 27 module_credential_manager "Credential Manager" 39
-    run_batch_module 28 module_wlan "WLAN Profiles" 39
-    run_batch_module 29 module_appx "AppX / UWP" 39
-    run_batch_module 30 module_browser_extra "Browser Logins/Downloads" 39
-    run_batch_module 31 module_clipboard "Clipboard History" 39
-    run_batch_module 32 module_office_mru "Office MRU" 39
-    run_batch_module 33 module_defender_quarantine "Defender Quarantine" 39
-    run_batch_module 34 module_ps_scriptblock "PS ScriptBlock Log" 39
-    run_batch_module 35 module_jumplists "JumpLists" 39
-    run_batch_module 36 module_network_artifacts "Network Artifacts" 39
-    run_batch_module 37 module_master_timeline "Master Timeline" 39
-    # Modulo 38: eseguito solo se il disco è un Domain Controller (ntds.dit presente)
-    local _ntds_check
-    _ntds_check=$(find "$WIN_ROOT" -maxdepth 8 -iname "ntds.dit" -type f 2>/dev/null | head -1)
-    if [[ -n "$_ntds_check" ]]; then
-        run_batch_module 38 module_pad_offline "PAD Offline AD" 39
+# Estrae dalla forma bilingue "italiano§english" la variante per la lingua
+# corrente. Senza separatore il testo vale per entrambe.
+reg_text() {
+    local _s="$1"
+    [[ "$_s" != *§* ]] && { printf '%s' "$_s"; return; }
+    if [[ "${LANG:-en}" == "it" ]]; then
+        printf '%s' "${_s%%§*}"
     else
-        echo -e "  ${DIM}[i] [38/39] PAD Offline AD — $(L "saltato (non è un Domain Controller)" "skipped (not a Domain Controller)")${RESET}"
-        SUMMARY_TABLE+=("38|PAD Offline AD|SKIP|$(L "non è un DC" "not a DC")")
+        printf '%s' "${_s##*§}"
     fi
-    run_batch_module 39 module_ai_chat "AI Chat History" 39
-
-    BATCH_MODE=false
-
-    echo ""
-    section_header "$(L "Riepilogo Scansione Globale" "Global Scan Summary")" "$GREEN"
-    local _hdr_mod;    _hdr_mod="$(L    "MOD" "MOD")"
-    local _hdr_name;   _hdr_name="$(L  "NOME MODULO" "MODULE NAME")"
-    local _hdr_evid;   _hdr_evid="$(L  "EVIDENZE" "FINDINGS")"
-    local _hdr_file;   _hdr_file="$(L  "FILE GENERATI" "GENERATED FILES")"
-    local _lbl_found;  _lbl_found="$(L "TROVATE" "FOUND")"
-    local _lbl_none;   _lbl_none="$(L  "NESSUNA" "NONE")"
-    local _lbl_skip;   _lbl_skip="$(L  "SALTATO" "SKIPPED")"
-    printf "  ${BOLD}%-4s %-32s %-12s %s${RESET}\n" "$_hdr_mod" "$_hdr_name" "$_hdr_evid" "$_hdr_file"
-    echo "  ─────────────────────────────────────────────────────────────────────────────────────────"
-    for row in "${SUMMARY_TABLE[@]}"; do
-        IFS='|' read -r mnum mname msy mpath <<< "$row"
-        if [[ "$msy" == "SI" ]]; then
-            local rel_path="${mpath#$REPORT_BASE_DIR/}"
-            printf "  ${CYAN}%02d${RESET}   ${BOLD}%-32s${RESET} ${GREEN}%-12s${RESET} ${DIM}%s${RESET}\n" "$mnum" "$mname" "$_lbl_found" "$rel_path"
-        elif [[ "$msy" == "SKIP" ]]; then
-            printf "  ${CYAN}%02d${RESET}   %-32s ${YELLOW}%-12s${RESET} ${DIM}%s${RESET}\n" "$mnum" "$mname" "$_lbl_skip" "$mpath"
-        else
-            printf "  ${CYAN}%02d${RESET}   %-32s ${DIM}%-12s${RESET} ${DIM}-${RESET}\n" "$mnum" "$mname" "$_lbl_none"
-        fi
-    done
-    echo ""
-    ok "$(L "Report salvati integralmente in:" "All reports saved in:") ${BOLD}$REPORT_BASE_DIR"
-    generate_full_dashboard
 }
+
 active_registry_name() {
     case "$OS_TYPE" in
-        linux) echo "MODULES_LINUX" ;;
-        macos) echo "MODULES_MACOS" ;;
-        *)     echo "" ;;
+        windows) echo "MODULES_WIN" ;;
+        linux)   echo "MODULES_LINUX" ;;
+        macos)   echo "MODULES_MACOS" ;;
+        *)       echo "" ;;
     esac
 }
 
@@ -336,7 +256,8 @@ render_menu_from_registry() {
     for _entry in "${_REG[@]}"; do
         IFS='|' read -r _f _name _color _desc <<< "$_entry"
         local _C="${!_color:-$RESET}"
-        printf "  ${_C}[%2d]${RESET} %-26s ${DIM}%s${RESET}\n" "$_i" "$_name" "$_desc"
+        printf "  ${_C}[%2d]${RESET} %-28s ${DIM}%s${RESET}\n" \
+            "$_i" "$(reg_text "$_name")" "$(reg_text "$_desc")"
         _i=$((_i + 1))
     done
     echo ""
@@ -385,10 +306,21 @@ run_all_from_registry() {
     BATCH_MODE=true
     SUMMARY_TABLE=()
     echo ""
-    local _total=${#_REG[@]} _i=1 _entry _f _name _rest
+    local _total=${#_REG[@]} _i=1 _entry _f _name _color _desc _guard
     for _entry in "${_REG[@]}"; do
-        IFS='|' read -r _f _name _rest <<< "$_entry"
-        run_batch_module "$_i" "$_f" "$_name" "$_total"
+        IFS='|' read -r _f _name _color _desc _guard <<< "$_entry"
+        local _label; _label=$(reg_text "$_name")
+        # Guardia facoltativa: se fallisce il modulo viene saltato con motivo.
+        if [[ -n "${_guard:-}" ]] && declare -F "$_guard" > /dev/null; then
+            local _reason
+            if ! _reason=$("$_guard"); then
+                echo -e "  ${DIM}[i] [$_i/$_total] ${_label} — $(L "saltato" "skipped") (${_reason})${RESET}"
+                SUMMARY_TABLE+=("$_i|$_label|SKIP|$_reason")
+                _i=$((_i + 1))
+                continue
+            fi
+        fi
+        run_batch_module "$_i" "$_f" "$_label" "$_total"
         _i=$((_i + 1))
     done
     BATCH_MODE=false
@@ -416,107 +348,6 @@ run_all_from_registry() {
     generate_full_dashboard
 }
 
-print_menu() {
-    local _MENU_TITLE _SELECT_MODULE _NOT_SET _WRITABLE _READONLY _NOT_CREATED _PARENT_RO
-    local _REPORT_DIR_LABEL _WIN_ROOT_LABEL _DEBUG_LABEL _RUN_ALL _QUIT _CHOICE_LABEL
-    local _REPORTS_LABEL
-    _MENU_TITLE="$(L "SELEZIONA UN MODULO" "SELECT A MODULE    ")"
-    _SELECT_MODULE="$(L "Seleziona" "Select")"
-    _NOT_SET="$(L "non impostata" "not set")"
-    _WRITABLE="$(L "scrivibile" "writable")"
-    _READONLY="$(L "SOLA LETTURA" "READ ONLY")"
-    _NOT_CREATED="$(L "OK (non ancora creata)" "OK (not yet created)")"
-    _PARENT_RO="$(L "PARENT NON SCRIVIBILE" "PARENT NOT WRITABLE")"
-    _REPORT_DIR_LABEL="$(L "Imposta dir report" "Set report dir")"
-    _WIN_ROOT_LABEL="$(L "Imposta root Windows" "Set Windows root    ")"
-    _DEBUG_LABEL="$(L "Debug mount attivi " "Debug active mounts")"
-    _DIAG="$(L "Diagnostica volumi montati" "Diagnose mounted volumes")"
-    _RUN_ALL="$(L "Esegui TUTTI i moduli" "Run ALL modules")"
-    _QUIT="$(L "Esci" "Quit")"
-    _CHOICE_LABEL="$(L "Scelta" "Choice")"
-    _REPORTS_LABEL="$(L "Report generati" "Generated reports")"
-
-    echo -e "  ${CYAN}${BOLD}╔══════════════════════════════════════════════════╗${RESET}"
-    echo -e "  ${CYAN}${BOLD}║           F I U T O  —  ${_MENU_TITLE}      ║ ${RESET}"
-    echo -e "  ${CYAN}${BOLD}╚══════════════════════════════════════════════════╝${RESET}"
-    echo ""
-    if [[ -n "$REPORT_BASE_DIR" ]]; then
-        local _RW_LABEL _RW_COLOR
-        if [[ -d "$REPORT_BASE_DIR" ]]; then
-            if [[ -w "$REPORT_BASE_DIR" ]]; then
-                _RW_LABEL="$_WRITABLE"; _RW_COLOR="$GREEN"
-            else
-                _RW_LABEL="$_READONLY"; _RW_COLOR="$RED"
-            fi
-        else
-            local _RD_PARENT; _RD_PARENT=$(dirname "$REPORT_BASE_DIR")
-            if [[ -w "$_RD_PARENT" ]]; then
-                _RW_LABEL="$_NOT_CREATED"; _RW_COLOR="$GREEN"
-            else
-                _RW_LABEL="$_PARENT_RO"; _RW_COLOR="$RED"
-            fi
-        fi
-        echo -e "  ${WHITE}[P]${RESET}  ${BOLD}Report dir:${RESET} ${DIM}${REPORT_BASE_DIR}${RESET}  ${_RW_COLOR}[${_RW_LABEL}]${RESET}"
-    else
-        local _CONF_MSG="$(L "non impostata — premi [P] per configurare" "not set — press [P] to configure")"
-        echo -e "  ${WHITE}[P]${RESET}  ${BOLD}Report dir:${RESET} ${RED}${_CONF_MSG}${RESET}"
-    fi
-    echo -e "  ${WHITE}[R]${RESET}  ${BOLD}${_WIN_ROOT_LABEL}${RESET}          ${DIM}${WIN_ROOT:-($_NOT_SET)}${RESET}"
-    echo -e "  ${YELLOW}[D]${RESET}  ${BOLD}${_DEBUG_LABEL}${RESET}           ${DIM}${_DIAG}${RESET}"
-    echo ""
-    echo -e "  ${MAGENTA}[1]${RESET}  PowerShell History            ${DIM}PSReadLine *_history.txt${RESET}"
-    echo -e "  ${MAGENTA}[2]${RESET}  Notepad TabState              ${DIM}$(L "Tab rimasti aperti (.bin)" "Open tabs (.bin)")${RESET}"
-    echo -e "  ${RED}[3]${RESET}  IFEO Hijacking                ${DIM}Image File Execution Options${RESET}"
-    echo -e "  ${BLUE}[4]${RESET}  BAM                           ${DIM}Background Activity Moderator${RESET}"
-    echo -e "  ${ORANGE}[5]${RESET}  Run Keys & $(L "Persistenza" "Persistence")        ${DIM}$(L "Autorun nel registro" "Autorun in registry")${RESET}"
-    echo -e "  ${GREEN}[6]${RESET}  Prefetch                      ${DIM}$(L "Eseguibili tracciati" "Tracked executables") (*.pf)${RESET}"
-    echo -e "  ${YELLOW}[7]${RESET}  Scheduled Tasks               ${DIM}$(L "Task pianificati (XML)" "Scheduled tasks (XML)")${RESET}"
-    echo -e "  ${BLUE}[8]${RESET}  USB Devices                   ${DIM}$(L "Dispositivi rimovibili (USBSTOR)" "Removable devices (USBSTOR)")${RESET}"
-    echo -e "  ${GREEN}[9]${RESET}  LNK & JumpList                ${DIM}$(L "File recenti e target path" "Recent files and target path")${RESET}"
-    echo -e "  ${CYAN}[10]${RESET} RDP Cache                     ${DIM}Terminal Server Client Cache${RESET}"
-  echo -e "  ${RED}[11]${RESET} Services                      ${DIM}$(L "Servizi Windows (SYSTEM hive)" "Windows Services (SYSTEM hive)")${RESET}"
-  echo -e "  ${RED}[12]${RESET} Event Log                     ${DIM}Security/System/PS/RDP (.evtx)${RESET}"
-  echo -e "  ${YELLOW}[13]${RESET} Amcache + Shimcache           ${DIM}$(L "Timeline esecuzione binari" "Binary execution timeline")${RESET}"
-  echo -e "  ${GREEN}[14]${RESET} Recycle Bin                   ${DIM}$(L "File eliminati" "Deleted files") (\$Recycle.Bin)${RESET}"
-  echo -e "  ${RED}[15]${RESET} WMI Subscriptions             ${DIM}$(L "Persistenza invisibile" "Fileless persistence") (T1546.003)${RESET}"
-  echo -e "  ${BLUE}[16]${RESET} SRUM                          ${DIM}$(L "Uso risorse per applicazione" "Resource usage per application")${RESET}"
-  echo -e "  ${CYAN}[17]${RESET} Browser History               ${DIM}Chrome / Edge / Firefox${RESET}"
-  echo -e "  ${MAGENTA}[18]${RESET} UserAssist / RunMRU           ${DIM}$(L "Attività interattiva utente" "Interactive user activity")${RESET}"
-  echo -e "  ${CYAN}[19]${RESET} ShellBags                     ${DIM}$(L "Navigazione cartelle (anche cancellate)" "Folder navigation (including deleted)")${RESET}"
-  echo -e "  ${RED}[20]${RESET} SAM — $(L "Hash Locali " "Local Hashes")            ${DIM}$(L "Hash NTLM account (impacket)" "NTLM account hashes (impacket)")${RESET}"
-  echo -e "  ${YELLOW}[21]${RESET} MFT Timeline                  ${DIM}Master File Table + timestomping${RESET}"
-  echo -e "  ${GREEN}[22]${RESET} OpenSave / LastVisited MRU    ${DIM}$(L "File aperti/salvati via dialogo" "Files opened/saved via dialog")${RESET}"
-  echo -e "  ${CYAN}[23]${RESET} USN Journal                   ${DIM}\$UsnJrnl:\$J — $(L "change log NTFS" "NTFS change log")${RESET}"
-  echo -e "  ${RED}[24]${RESET} NTDS.dit                      ${DIM}Active Directory hash (DC offline)${RESET}"
-  echo -e "  ${BLUE}[25]${RESET} Hibernation / Pagefile        ${DIM}hiberfil.sys · pagefile.sys strings${RESET}"
-  echo -e "  ${RED}[26]${RESET} WER Files (Error Reports)     ${DIM}ReportArchive · ReportQueue (.wer)${RESET}"
-  echo -e "  ${MAGENTA}[27]${RESET} Credential Manager            ${DIM}DPAPI blob offline${RESET}"
-  echo -e "  ${CYAN}[28]${RESET} WLAN & VPN Profiles           ${DIM}WiFi · NetworkList · VPN${RESET}"
-  echo -e "  ${GREEN}[29]${RESET} AppX / UWP Packages           ${DIM}$(L "App Store + sideload sospetti" "App Store + suspicious sideloads")${RESET}"
-  echo -e "  ${CYAN}[30]${RESET} Browser Downloads & Logins    ${DIM}Download + Login Data (DPAPI)${RESET}"
-  echo -e "  ${YELLOW}[31]${RESET} Clipboard History             ${DIM}$(L "Cronologia appunti Win10+" "Clipboard history Win10+")${RESET}"
-  echo -e "  ${GREEN}[32]${RESET} Office MRU                    ${DIM}$(L "File recenti Word/Excel/PowerPoint" "Recent Word/Excel/PowerPoint files")${RESET}"
-  echo -e "  ${RED}[33]${RESET} Defender Quarantine           ${DIM}$(L "File in quarantena + threatname" "Quarantined files + threatname")${RESET}"
-  echo -e "  ${MAGENTA}[34]${RESET} PS ScriptBlock Logging        ${DIM}Event ID 4104 — PS Operational.evtx${RESET}"
-  echo -e "  ${GREEN}[35]${RESET} JumpLists                     ${DIM}AutomaticDestinations · CustomDestinations${RESET}"
-  echo -e "  ${CYAN}[36]${RESET} Network Artifacts             ${DIM}$(L "Profili rete · Interfacce TCP/IP (registry)" "Network profiles · TCP/IP interfaces (registry)")${RESET}"
-  echo -e "  ${YELLOW}[37]${RESET} Master Timeline               ${DIM}$(L "Aggregazione cross-moduli con filtri" "Cross-module aggregation with filters")${RESET}"
-  echo -e "  ${RED}[38]${RESET} PAD Offline AD Analysis       ${DIM}$(L "NTDS.dit offline — utenti privilegiati, ACL, GPO" "NTDS.dit offline — privileged users, ACL, GPO")${RESET}"
-  echo -e "  ${MAGENTA}[39]${RESET} AI Chat History               ${DIM}Claude · ChatGPT · Copilot · Cursor · Gemini · Codex${RESET}"
-    echo ""
-    echo -e "  ${WHITE}${BOLD}[0]${RESET}  ${BOLD}${_RUN_ALL}${RESET}"
-    echo ""
-    if [[ ${#GENERATED_REPORTS[@]} -gt 0 ]]; then
-        echo -e "  ${DIM}── ${_REPORTS_LABEL} (${#GENERATED_REPORTS[@]}) ──────────────────────────${RESET}"
-        for _R in "${GENERATED_REPORTS[@]}"; do
-            echo -e "  ${CYAN}↳${RESET} ${DIM}${_R}${RESET}"
-        done
-        echo ""
-    fi
-    echo -e "  ${RED}[Q]  ${_QUIT}${RESET}"
-    echo ""
-    echo -ne "  ${YELLOW}${_CHOICE_LABEL}:${RESET} "
-}
 
 # ================================================================
 #  HELPER FUNCTIONS PER MODALITÀ NON INTERATTIVA
@@ -538,47 +369,3 @@ expand_module_list() {
     printf '%s\n' "${result[@]}" | sort -n -u
 }
 
-run_module_by_number() {
-    case "$1" in
-        1)  module_ps_history ;;
-        2)  module_notepad_tabstate ;;
-        3)  module_ifeo ;;
-        4)  module_bam ;;
-        5)  module_run_keys ;;
-        6)  module_prefetch ;;
-        7)  module_scheduled_tasks ;;
-        8)  module_usb ;;
-        9)  module_lnk ;;
-        10) module_rdp_cache ;;
-        11) module_services ;;
-        12) module_evtx ;;
-        13) module_amcache ;;
-        14) module_recycle_bin ;;
-        15) module_wmi ;;
-        16) module_srum ;;
-        17) module_browser ;;
-        18) module_userassist ;;
-        19) module_shellbags ;;
-        20) module_sam ;;
-        21) module_mft ;;
-        22) module_opensave ;;
-        23) module_usn ;;
-        24) module_ntds ;;
-        25) module_hiberfil ;;
-        26) module_wer_files ;;
-        27) module_credential_manager ;;
-        28) module_wlan ;;
-        29) module_appx ;;
-        30) module_browser_extra ;;
-        31) module_clipboard ;;
-        32) module_office_mru ;;
-        33) module_defender_quarantine ;;
-        34) module_ps_scriptblock ;;
-        35) module_jumplists ;;
-        36) module_network_artifacts ;;
-        37) module_master_timeline ;;
-        38) module_pad_offline ;;
-        39) module_ai_chat ;;
-        *)  err "$(L "Modulo sconosciuto:" "Unknown module:") $1" ;;
-    esac
-}

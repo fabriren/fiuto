@@ -4,7 +4,7 @@ Documento di lavoro per portare FIUTO da 2.1 a 3.0. È pensato per essere
 ripreso a distanza di tempo, anche da un'altra sessione o da un'altra persona:
 ogni fase dichiara **cosa fare**, **dove**, **come verificarlo** e **perché**.
 
-Stato aggiornato al: **2026-07-29** (versione 2.1, Fase 1 in corso).
+Stato aggiornato al: **2026-07-30** (versione 2.1, Fase 1 completata).
 
 ---
 
@@ -40,7 +40,7 @@ Stato aggiornato al: **2026-07-29** (versione 2.1, Fase 1 in corso).
 | macOS: FSEvents, Spotlight | ✅ |
 | Linux: auditd, Container (Docker/Podman) | ✅ |
 | Fase 1 — split `src/` + `build.sh` (file singolo generato) | ✅ |
-| Fase 1 — registro moduli data-driven anche per Windows | ⬜ |
+| Fase 1 — registro moduli data-driven anche per Windows | ✅ |
 
 Bug corretti in v2.1, da non reintrodurre:
 
@@ -118,32 +118,47 @@ Nota per chi rifà un'operazione simile: un parser riga-per-riga non basta,
 perché gli heredoc contengono CSS e Python con `}` a colonna 0 e le funzioni
 one-liner (`nome() { ...; }`) non hanno mai una graffa di chiusura a colonna 0.
 
-### Da fare (2/2) — registro moduli per Windows
+### Fatto (2/2) — registro moduli unificato
 
-Oggi Linux e macOS usano `MODULES_LINUX`/`MODULES_MACOS` data-driven, mentre
-Windows ha `run_module_by_number` con un `case` di 39 rami **e** un menu
-stampato a mano in `print_menu`. È la principale fonte di disallineamento fra
-menu, dispatcher e README.
+Windows usa ora `MODULES_WIN`, come Linux e macOS. Rimossi tre dispatcher:
+`print_menu` (menu stampato a mano), `run_module_by_number` e un **secondo**
+`case` da 39 rami inline in `main()` per `--module`, che nessuno aveva
+notato: i due erano ancora identici, ma erano duplicazione in attesa di
+divergere. Netto: −204 righe.
 
-1. Aggiungere `MODULES_WIN` in `src/lib/12-registries.sh` con lo stesso
-   formato `funzione|Nome|COLORE|descrizione`.
-2. Far derivare menu, dispatcher e `--all` dal registro, riusando
-   `render_menu_from_registry` / `dispatch_from_registry` /
-   `run_all_from_registry` già esistenti.
-3. Rimuovere `print_menu` e `run_module_by_number`.
-4. Aggiornare `active_registry_name` perché ritorni `MODULES_WIN` per windows.
+Il formato del registro è stato esteso in modo retrocompatibile:
 
-Attenzione: la numerazione attuale del menu Windows **non** segue l'ordine di
-definizione delle funzioni (es. il modulo 2 è `module_notepad_tabstate`, il 3 è
-`module_ifeo`). Il registro deve riprodurre l'ordine del menu, non quello del
-sorgente, o si rompono i `--module N` documentati e gli script degli utenti.
+```
+"funzione|Nome|COLORE|descrizione[|guardia]"
+```
 
-### Verifica
+- **Bilinguismo**: `Nome` e `descrizione` accettano la forma
+  `italiano§english`; senza separatore lo stesso testo vale per entrambe le
+  lingue. Serviva per non perdere le etichette bilingui che il menu Windows
+  aveva e che i registri Linux/macOS non supportavano. `reg_text` fa la
+  selezione. Nota: `~` non è utilizzabile come separatore, una descrizione
+  Linux inizia con `~/.local/share/Trash`.
+- **Guardia** facoltativa: funzione che ritorna 0 se il modulo va eseguito,
+  oppure stampa il motivo e ritorna non-zero per farlo saltare in batch.
+  Serviva a preservare l'unico comportamento speciale del batch Windows: il
+  modulo 38 (PAD Offline) va saltato se il volume non è un Domain Controller
+  (`_guard_pad_offline`).
 
-- Estendere il test strutturale "ogni numero del menu Windows invoca una
-  funzione esistente" al nuovo registro.
-- Nuovo test: la numerazione nei registri coincide con le tabelle del README
-  (il disallineamento si è già verificato in passato).
+Attenzione per il futuro: le descrizioni contengono `$Recycle.Bin` e
+`$UsnJrnl:$J`. Dentro le virgolette doppie delle voci di registro il dollaro
+**va escapato** (`\$`), altrimenti bash espande una variabile inesistente e
+la descrizione si svuota. C'è un test che lo presidia.
+
+La numerazione è stata verificata identica a quella precedente confrontando
+l'ordine del registro con entrambi i vecchi dispatcher: `--module N` e
+`--modules 1,4,6-8` invocano esattamente le stesse funzioni di prima.
+
+### Verifica in essere
+
+I test strutturali coprono ora tutti e tre i registri: funzioni esistenti,
+campi obbligatori, colori definiti, guardie esistenti, nomi univoci, dollari
+letterali preservati, assenza dei dispatcher rimossi, `reg_text` nelle due
+lingue, e coerenza fra numero di moduli e tabelle del README.
 
 ---
 

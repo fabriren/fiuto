@@ -112,62 +112,13 @@ main() {
         print_banner
         [[ -z "$WIN_ROOT" ]] && { err "$(t specify_root_all)"; exit 1; }
         [[ -n "$ARG_IOC" ]] && load_ioc_file "$ARG_IOC"
-        if [[ "$OS_TYPE" == "windows" ]]; then
-            run_all_modules
-        else
-            run_all_from_registry "$(active_registry_name)"
-        fi
+        run_all_from_registry "$(active_registry_name)"
         exit 0
     fi
     if [[ -n "$ARG_MODULE" ]]; then
         [[ -z "$WIN_ROOT" ]] && { err "$(t specify_root_module)"; exit 1; }
         [[ -n "$ARG_IOC" ]] && load_ioc_file "$ARG_IOC"
-        if [[ "$OS_TYPE" != "windows" ]]; then
-            dispatch_from_registry "$(active_registry_name)" "$ARG_MODULE"
-            exit 0
-        fi
-        case "$ARG_MODULE" in
-            1)  module_ps_history ;;
-            2)  module_notepad_tabstate ;;
-            3)  module_ifeo ;;
-            4)  module_bam ;;
-            5)  module_run_keys ;;
-            6)  module_prefetch ;;
-            7)  module_scheduled_tasks ;;
-            8)  module_usb ;;
-            9)  module_lnk ;;
-            10) module_rdp_cache ;;
-            11) module_services ;;
-            12) module_evtx ;;
-            13) module_amcache ;;
-            14) module_recycle_bin ;;
-            15) module_wmi ;;
-            16) module_srum ;;
-            17) module_browser ;;
-            18) module_userassist ;;
-            19) module_shellbags ;;
-            20) module_sam ;;
-            21) module_mft ;;
-            22) module_opensave ;;
-            23) module_usn ;;
-            24) module_ntds ;;
-            25) module_hiberfil ;;
-            26) module_wer_files ;;
-            27) module_credential_manager ;;
-            28) module_wlan ;;
-            29) module_appx ;;
-            30) module_browser_extra ;;
-            31) module_clipboard ;;
-            32) module_office_mru ;;
-            33) module_defender_quarantine ;;
-            34) module_ps_scriptblock ;;
-            35) module_jumplists ;;
-            36) module_network_artifacts ;;
-            37) module_master_timeline ;;
-            38) module_pad_offline ;;
-            39) module_ai_chat ;;
-            *)  err "$(L "Modulo sconosciuto:" "Unknown module:") $ARG_MODULE" ;;
-        esac
+        dispatch_from_registry "$(active_registry_name)" "$ARG_MODULE"
         exit 0
     fi
     if [[ -n "$ARG_MODULES" ]]; then
@@ -177,11 +128,7 @@ main() {
         mapfile -t MOD_NUMS < <(expand_module_list "$ARG_MODULES")
         local _rn; _rn=$(active_registry_name)
         for N in "${MOD_NUMS[@]}"; do
-            if [[ "$OS_TYPE" == "windows" ]]; then
-                run_module_by_number "$N"
-            else
-                dispatch_from_registry "$_rn" "$N"
-            fi
+            dispatch_from_registry "$_rn" "$N"
         done
         exit 0
     fi
@@ -231,7 +178,13 @@ main() {
         if [[ -n "$_RN" ]]; then
             render_menu_from_registry "$_RN"
         else
-            print_menu
+            warn "$(L "Nessun volume valido selezionato. Usa [R] per impostarlo." "No valid volume selected. Use [R] to set it.")"
+            echo ""
+            echo -e "  ${WHITE}[R]${RESET}  $(L "Imposta root da analizzare" "Set analysis root")"
+            echo -e "  ${YELLOW}[D]${RESET}  $(L "Debug mount attivi" "Debug active mounts")"
+            echo -e "  ${RED}[Q]${RESET}  $(L "Esci" "Quit")"
+            echo ""
+            echo -ne "  ${YELLOW}$(L "Scelta" "Choice"):${RESET} "
         fi
         read -r CHOICE
         echo ""
@@ -240,11 +193,7 @@ main() {
             P)  setup_report_dir || true; sleep 1 ;;
             R)  set_win_root; sleep 1 ;;
             D)  debug_mounts ;;
-            0)  if [[ "$OS_TYPE" == "windows" ]]; then
-                    run_all_modules
-                else
-                    run_all_from_registry "$(active_registry_name)"
-                fi
+            0)  run_all_from_registry "$(active_registry_name)"
                 return_to_menu ;;
             Q)  echo ""
                 if [[ ${#GENERATED_REPORTS[@]} -gt 0 ]]; then
@@ -272,15 +221,11 @@ main() {
                 fi
                 echo -e "  ${DIM}$(L "Uscita." "Exiting.")${RESET}"; echo ""; exit 0 ;;
             *)  if [[ "$CHOICE" =~ ^[0-9]+$ ]]; then
-                    if [[ "$OS_TYPE" == "windows" ]]; then
-                        run_module_by_number "$CHOICE"; return_to_menu
+                    local _rn; _rn=$(active_registry_name)
+                    if [[ -n "$_rn" ]]; then
+                        dispatch_from_registry "$_rn" "$CHOICE"; return_to_menu
                     else
-                        local _rn; _rn=$(active_registry_name)
-                        if [[ -n "$_rn" ]]; then
-                            dispatch_from_registry "$_rn" "$CHOICE"; return_to_menu
-                        else
-                            warn "$(L "Nessun volume valido selezionato. Usa [R]." "No valid volume selected. Use [R].")"; sleep 1
-                        fi
+                        warn "$(L "Nessun volume valido selezionato. Usa [R]." "No valid volume selected. Use [R].")"; sleep 1
                     fi
                 else
                     warn "$(L "Scelta non valida:" "Invalid choice:") '$CHOICE'"; sleep 1
