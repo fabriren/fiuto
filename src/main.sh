@@ -50,6 +50,12 @@ main() {
                     echo -e "    ./fiuto.sh /mnt/windows --all --no-hash  # manifesto senza SHA256 (piu' veloce)"
                     echo -e "    ./fiuto.sh /mnt/windows --all --since 2026-03-01 --until 2026-03-08  # solo la finestra"
                     echo -e "    ./fiuto.sh /mnt/windows --all --since -7d     # ultimi 7 giorni"
+                    echo -e "    ./fiuto.sh /mnt/disk --all --yara /regole/     # applica regole YARA"
+                    echo -e "    ./fiuto.sh /mnt/disk --all --yara r.yar --yara-scan /mnt/disk/Users  # ambito esplicito"
+                    echo ""
+                    echo -e "  ${DIM}--yara non scansiona l'intero volume: si limita alle posizioni"
+                    echo -e "    scrivibili senza privilegi e le ELENCA nel report. Usa --yara-scan"
+                    echo -e "    per indicare un ambito diverso.${RESET}"
                     echo ""
                     echo -e "  ${DIM}--since/--until confrontano le date come compaiono nell'artefatto,"
                     echo -e "    senza riportarle a un fuso comune: gli artefatti dello stesso volume"
@@ -76,6 +82,12 @@ main() {
                     echo -e "    ./fiuto.sh /mnt/windows --all --no-hash  # manifest without SHA256 (faster)"
                     echo -e "    ./fiuto.sh /mnt/windows --all --since 2026-03-01 --until 2026-03-08  # window only"
                     echo -e "    ./fiuto.sh /mnt/windows --all --since -7d     # last 7 days"
+                    echo -e "    ./fiuto.sh /mnt/disk --all --yara /rules/     # apply YARA rules"
+                    echo -e "    ./fiuto.sh /mnt/disk --all --yara r.yar --yara-scan /mnt/disk/Users  # explicit scope"
+                    echo ""
+                    echo -e "  ${DIM}--yara does not scan the whole volume: it covers the locations"
+                    echo -e "    writable without privileges and LISTS them in the report. Use"
+                    echo -e "    --yara-scan to point it somewhere else.${RESET}"
                     echo ""
                     echo -e "  ${DIM}--since/--until compare dates as they appear in the artefact, without"
                     echo -e "    normalising them to a common zone: artefacts on the same volume mix"
@@ -120,6 +132,9 @@ main() {
             --no-custody)  CUSTODY=false ;;
             --no-hash)     CUSTODY_HASH=false ;;
             --hash-limit)  CUSTODY_HASH_LIMIT_MB="${2:-1024}"; shift ;;
+            --yara)        YARA_RULES="${2:-}"; shift ;;
+            --yara-scan)   YARA_SCAN_PATH="${2:-}"; shift ;;
+            --yara-max-mb) YARA_MAX_MB="${2:-64}"; shift ;;
             --since|--until)
                 # Un limite scritto male non deve passare in silenzio: filtrerebbe
                 # tutto o niente, e in entrambi i casi il report sarebbe falso.

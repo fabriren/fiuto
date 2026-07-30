@@ -49,6 +49,10 @@ LOG_FILE=""                  # percorso log sessione (impostato all'avvio)
 declare -a IOC_LIST=()       # lista IoC da file esterno (--ioc)
 HIVE_REPLAY=true             # replay dei transaction log del registro (--no-log-replay per disattivarlo)
 EXPORT_JSONL=false           # export JSONL schema Timesketch accanto a ogni report (--jsonl)
+YARA_RULES=""                # file o directory di regole YARA (--yara)
+YARA_SCAN_PATH=""            # ambito alternativo da scansionare (--yara-scan)
+YARA_MAX_MB=64               # tetto per file: oltre, il file viene dichiarato saltato
+YARA_MAX_FILES=200000        # tetto complessivo: oltre, la scansione si dichiara parziale
 # Lo stato del replay (cache, esiti, avvisi gia' emessi) vive su disco in
 # ${TMPDIR:-/tmp}/fiuto_hives_$$ e non in variabili: recover_hive gira quasi
 # sempre dentro una command substitution, quindi in subshell.

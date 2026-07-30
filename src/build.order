@@ -105,6 +105,7 @@ src/modules/macos/19-unified-logs.sh
 src/modules/xplat/01-master-timeline.sh
 src/modules/xplat/02-sqlite-recovery.sh
 src/modules/xplat/03-esp-bootkit.sh
+src/modules/xplat/04-yara.sh
 src/lib/13-pylib-leveldb.sh
 src/lib/14-pylib-sqlite.sh
 src/lib/17-pylib-timeline.sh

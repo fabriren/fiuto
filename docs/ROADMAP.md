@@ -34,7 +34,7 @@ Stato aggiornato al: **2026-07-30** (versione 2.2, Fasi 1-5 complete, Fase 6 ini
 | Area | Stato |
 |---|---|
 | CI (bash -n, ShellCheck, bats, parser Python su 3.9 + 3.12) | ✅ |
-| Suite di test — 127 test bats | ✅ |
+| Suite di test — 139 test bats | ✅ |
 | Replay transaction log registro (`.LOG1`/`.LOG2`) | ✅ |
 | Export JSONL / schema Timesketch (`--jsonl`) | ✅ |
 | macOS: FSEvents, Spotlight | ✅ |
@@ -49,6 +49,7 @@ Stato aggiornato al: **2026-07-30** (versione 2.2, Fasi 1-5 complete, Fase 6 ini
 | Fase 6.1 — chain of custody (`evidence_manifest.json`) | ✅ |
 | Fase 6.2 — finestra temporale `--since`/`--until` + fuso del volume | ✅ |
 | Fase 6.3 — executive summary, scoring e correlazione cross-modulo | ✅ |
+| Fase 6.4 — scansione YARA (`--yara`), ambito dichiarato | ✅ |
 | Libreria Python condivisa timeline (`src/lib/17-pylib-timeline.sh`) | ✅ |
 | Flag `defer` nel registro (numerazione stabile) | ✅ |
 | Libreria Python condivisa LevelDB/Snappy (`src/lib/13-pylib-leveldb.sh`) | ✅ |
@@ -330,9 +331,30 @@ Ordinati per rapporto valore/costo.
    anche senza `--jsonl`, quindi è stata spostata in `pylib_timeline`
    (`src/lib/17-pylib-timeline.sh`). L'export ne è ora un consumatore: i 12
    test JSONL esistenti hanno presidiato il cambio.
-4. **Detection engine Sigma/YARA.** `--sigma <dir>` sugli EVTX (approccio
-   Chainsaw/Hayabusa), `--yara <rules>` su file estratti, quarantena, ESP.
-   Trasforma FIUTO da collector a triage.
+4. **Detection engine Sigma/YARA.** `--yara` ✅ **fatto (6.4)**,
+   `src/modules/xplat/04-yara.sh`. `--sigma <dir>` sugli EVTX (approccio
+   Chainsaw/Hayabusa) resta da fare.
+
+   **Sull'ambito, che è il punto vero.** Un volume da un terabyte non si
+   scansiona file per file, quindi il modulo copre un insieme limitato di
+   posizioni (quelle scrivibili senza privilegi) e le **elenca nel report** con
+   i conteggi, insieme ai file saltati e al perché. Senza quella contabilità un
+   "nessun match" verrebbe letto come "il disco è pulito", che è esattamente il
+   tipo di conclusione che il tool non deve indurre. Chi tocca questo modulo non
+   tolga il cartiglio dell'ambito: c'è un test che lo pretende.
+
+   Nessun ripiego se `yara-python` manca: una scansione YARA senza YARA non è
+   una scansione, e dichiararlo è meglio di un report vuoto che sembra pulito.
+   I symlink non vengono seguiti — su un volume montato porterebbero fuori
+   dall'evidenza fino al file system della workstation.
+
+   Per Sigma: il formato è vasto e un supporto parziale spacciato per completo
+   sarebbe peggio di nessun supporto. Vale la stessa regola tenuta finora
+   (unified logs, Spotlight, carving SQLite): implementare un sottoinsieme
+   documentato — selezioni con `contains`/`startswith`/`endswith`/`re`,
+   condizioni `selection and not filter` e `1 of selection*` — e dichiarare
+   nel report quali regole sono state **scartate perché non supportate**,
+   invece di ignorarle in silenzio.
 5. **Parallelizzazione di `--all`.** Oggi strettamente sequenziale. Pool di job
    sui moduli indipendenti; unico vincolo la master timeline, che è già un
    aggregatore finale.

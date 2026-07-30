@@ -229,7 +229,7 @@ fiuto_reports/
 
 ---
 
-## 📊 The 52 Windows analysis modules
+## 📊 The 53 Windows analysis modules
 
 | #  | Module Name                   | Windows Artifact                    | Usage                                                           |
 | -- | ----------------------------- | ----------------------------------- | --------------------------------------------------------------- |
@@ -285,10 +285,11 @@ fiuto_reports/
 | 50 | Windows Search Index          | Windows.edb (ESE)                   | Paths and content excerpts of **deleted** files                 |
 | 51 | SQLite Recovery *(cross-OS)*  | freelist, unallocated space         | Content of **deleted** records still on disk                    |
 | 52 | EFI System Partition *(cross-OS)* | ESP                             | Bootkits: code running **before** the OS and any EDR            |
+| 53 | YARA *(cross-OS)*                 | YAR                             | External rules applied to a declared, bounded scope (`--yara`)  |
 
 ---
 
-## 🐧 The 23 Linux analysis modules
+## 🐧 The 24 Linux analysis modules
 
 | #  | Module Name         | Linux Artifact                                                     | Usage                                                           |
 | -- | ------------------- | ------------------------------------------------------------------ | --------------------------------------------------------------- |
@@ -315,10 +316,11 @@ fiuto_reports/
 | 21 | SUID & Capabilities | filesystem scan                                                    | Privilege escalation surface, unexpected SUID                   |
 | 22 | SQLite Recovery *(cross-OS)* | freelist, unallocated space                               | Content of **deleted** records still on disk                    |
 | 23 | EFI System Partition *(cross-OS)* | ESP                                                  | Bootkits: code running **before** the OS                        |
+| 24 | YARA *(cross-OS)*                 | YAR                                                  | External rules, declared scope (`--yara`)                       |
 
 ---
 
-## 🍎 The 21 macOS analysis modules
+## 🍎 The 22 macOS analysis modules
 
 | #  | Module Name            | macOS Artifact                                                 | Usage                                                         |
 | -- | ---------------------- | -------------------------------------------------------------- | ------------------------------------------------------------- |
@@ -343,6 +345,7 @@ fiuto_reports/
 | 19 | Unified Logs           | `*.tracev3`                                                  | LZ4 chunk decompression + string extraction (**partial**)     |
 | 20 | SQLite Recovery *(cross-OS)* | freelist, unallocated space                            | Content of **deleted** records still on disk                  |
 | 21 | EFI System Partition *(cross-OS)* | ESP                                               | Bootkits: code running **before** the OS                      |
+| 22 | YARA *(cross-OS)*                 | YAR                                               | External rules, declared scope (`--yara`)                     |
 
 ---
 
@@ -425,6 +428,37 @@ touching them.
 Files above the size limit (1 GB by default — `pagefile.sys`, `$MFT`,
 `Windows.edb`) are still listed, with the reason the hash is missing rather
 than silently omitting it.
+
+### YARA (`--yara`)
+
+YARA is how the industry ships signatures: a threat-intel feed, a vendor IR
+team or a national CERT hands you `.yar` files. FIUTO applies them.
+
+```bash
+./fiuto.sh /mnt/disk --all --yara /rules/               # a file or a directory
+./fiuto.sh /mnt/disk --module 24 --yara r.yar --yara-scan /mnt/disk/Users
+./fiuto.sh /mnt/disk --all --yara /rules/ --yara-max-mb 256
+```
+
+Requires `yara-python`. There is no fallback if it is missing — a YARA scan
+without YARA is not a scan, and the module says so instead of pretending.
+
+**The delicate part is scope.** Walking a terabyte volume file by file is not
+practical on a forensic workstation, so the module covers a bounded set of
+locations: the ones writable without privileges, where code that no package
+manager installed nearly always ends up (`Temp`, `AppData`, `ProgramData`,
+`/tmp`, `/dev/shm`, `~`, `/var/www`, LaunchAgents, the ESP…). `--yara-scan`
+replaces that set with a path of your choosing.
+
+The report then **lists exactly what was scanned**, per location and with file
+counts, plus what was skipped and why: files over the per-file cap, unreadable
+files, and whether the overall file cap was hit — in which case the scan is
+labelled PARTIAL. Symlinks are never followed: on a mounted volume they would
+lead out of the evidence and into the analysis workstation's own file system.
+Without that accounting, "no match" would read as "the disk is clean"; with it,
+it reads as what it is.
+
+A rule file that does not compile is reported and skipped; the others still run.
 
 ### Executive summary
 
@@ -604,7 +638,7 @@ python3 tests/lint_embedded_python.py fiuto.sh   # compile the embedded parsers
 ```
 
 CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs on every push:
-bash syntax, ShellCheck, the bats suite, and compilation of the ~94 Python
+bash syntax, ShellCheck, the bats suite, and compilation of the ~96 Python
 parsers embedded as heredocs on both Python 3.9 and 3.12.
 
 That last job is not decoration: `bash -n` treats heredocs as opaque text, so a
@@ -849,7 +883,7 @@ fiuto_reports/
 
 ---
 
-## 📊 I 52 Moduli di Analisi Windows
+## 📊 I 53 Moduli di Analisi Windows
 
 | #  | Nome Modulo                   | Artefatto Windows                   | Utilizzo                                                              |
 | -- | ----------------------------- | ----------------------------------- | --------------------------------------------------------------------- |
@@ -905,10 +939,11 @@ fiuto_reports/
 | 50 | Windows Search Index          | Windows.edb (ESE)                   | Percorsi ed estratti di contenuto di file **cancellati**              |
 | 51 | SQLite Recovery *(cross-OS)*  | freelist, spazio non allocato       | Contenuto di record **cancellati** ancora sul disco                   |
 | 52 | EFI System Partition *(cross-OS)* | ESP                             | Bootkit: codice eseguito **prima** del sistema e di ogni EDR          |
+| 53 | YARA *(cross-OS)*                 | YAR                             | Regole esterne su un ambito limitato e dichiarato (`--yara`)          |
 
 ---
 
-## 🐧 I 23 Moduli di Analisi Linux
+## 🐧 I 24 Moduli di Analisi Linux
 
 | #  | Nome Modulo         | Artefatto Linux                                                    | Utilizzo                                                        |
 | -- | ------------------- | ------------------------------------------------------------------ | --------------------------------------------------------------- |
@@ -935,10 +970,11 @@ fiuto_reports/
 | 21 | SUID & Capabilities | scansione filesystem                                               | Superficie di privilege escalation, SUID inattesi               |
 | 22 | SQLite Recovery *(cross-OS)* | freelist, spazio non allocato                             | Contenuto di record **cancellati** ancora sul disco             |
 | 23 | EFI System Partition *(cross-OS)* | ESP                                                  | Bootkit: codice eseguito **prima** del sistema                  |
+| 24 | YARA *(cross-OS)*                 | YAR                                                  | Regole esterne, ambito dichiarato (`--yara`)                    |
 
 ---
 
-## 🍎 I 21 Moduli di Analisi macOS
+## 🍎 I 22 Moduli di Analisi macOS
 
 | #  | Nome Modulo            | Artefatto macOS                                                   | Utilizzo                                                        |
 | -- | ---------------------- | ----------------------------------------------------------------- | --------------------------------------------------------------- |
@@ -963,6 +999,7 @@ fiuto_reports/
 | 19 | Unified Logs           | `*.tracev3`                                                     | Decompressione chunk LZ4 + estrazione stringhe (**parziale**)   |
 | 20 | SQLite Recovery *(cross-OS)* | freelist, spazio non allocato                             | Contenuto di record **cancellati** ancora sul disco             |
 | 21 | EFI System Partition *(cross-OS)* | ESP                                                  | Bootkit: codice eseguito **prima** del sistema                  |
+| 22 | YARA *(cross-OS)*                 | YAR                                                  | Regole esterne, ambito dichiarato (`--yara`)                    |
 
 ---
 
@@ -1045,6 +1082,39 @@ futuro sono coperti senza doverli toccare.
 I file oltre la soglia (1 GB di default — `pagefile.sys`, `$MFT`,
 `Windows.edb`) restano elencati, con il motivo per cui manca l'hash invece di
 ometterlo in silenzio.
+
+### YARA — regole esterne (`--yara`)
+
+YARA è il formato con cui l'industria distribuisce le firme: un feed di threat
+intelligence, l'IR di un vendor o il CERT nazionale mandano file `.yar`. FIUTO
+li applica.
+
+```bash
+./fiuto.sh /mnt/disk --all --yara /regole/              # un file o una directory
+./fiuto.sh /mnt/disk --module 24 --yara r.yar --yara-scan /mnt/disk/Users
+./fiuto.sh /mnt/disk --all --yara /regole/ --yara-max-mb 256
+```
+
+Richiede `yara-python`. Se manca non c'è alcun ripiego — una scansione YARA
+senza YARA non è una scansione, e il modulo lo dice invece di fingere.
+
+**Il punto delicato è l'ambito.** Scansionare un volume da un terabyte file per
+file non è praticabile su una workstation forense, quindi il modulo copre un
+insieme limitato di posizioni: quelle scrivibili senza privilegi, dove il codice
+che nessun gestore di pacchetti ha installato finisce quasi sempre (`Temp`,
+`AppData`, `ProgramData`, `/tmp`, `/dev/shm`, `~`, `/var/www`, i LaunchAgents,
+la ESP…). Con `--yara-scan` quell'insieme viene sostituito da un percorso
+indicato da te.
+
+Il report **elenca esattamente cosa è stato scansionato**, posizione per
+posizione e con i conteggi, più cosa è stato saltato e perché: i file oltre il
+tetto per file, quelli illeggibili, e se il tetto complessivo è stato raggiunto
+— nel qual caso la scansione è marcata PARZIALE. I symlink non vengono mai
+seguiti: su un volume montato porterebbero fuori dall'evidenza, fino al file
+system della workstation di analisi. Senza questa contabilità un "nessun match"
+si leggerebbe come "il disco è pulito"; con essa si legge per quello che è.
+
+Un file di regole che non compila viene segnalato e saltato; gli altri girano.
 
 ### Executive summary (riepilogo di sessione)
 
@@ -1229,7 +1299,7 @@ python3 tests/lint_embedded_python.py fiuto.sh   # compila i parser incorporati
 ```
 
 La CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) gira a ogni push:
-sintassi bash, ShellCheck, suite bats e compilazione dei ~94 parser Python
+sintassi bash, ShellCheck, suite bats e compilazione dei ~96 parser Python
 incorporati come heredoc, sia su Python 3.9 sia su 3.12.
 
 Quest'ultimo job non è un ornamento: `bash -n` tratta gli heredoc come testo
