@@ -11515,6 +11515,503 @@ PYEOF
 }
 
 # ================================================================
+#  MODULO 45 — Cloud Sync (OneDrive / Dropbox / Google Drive / Box)
+#
+#  L'esfiltrazione moderna raramente passa da una chiavetta: passa da una
+#  cartella sincronizzata. Un file trascinato in OneDrive esce dal perimetro
+#  senza generare traffico riconoscibile come esfiltrazione e senza toccare
+#  nessuno degli artefatti USB.
+#
+#  Il modulo ricostruisce quali provider erano configurati, con quali account,
+#  e — dove il formato lo consente — l'elenco dei file sincronizzati.
+#
+#  Nota sui formati: il database di Google Drive e' SQLite e si legge per
+#  intero. I log .odl di OneDrive sono binari con stringhe offuscate: qui se ne
+#  estraggono solo i nomi di file leggibili, e il report lo dichiara.
+# ================================================================
+module_cloud_sync() {
+    section_header "Cloud Sync — $(L "Provider e file sincronizzati" "Providers and synced files")" "$BLUE"
+    check_win_root || return 1
+
+    local BODY="" NPROV=0 NFILES=0 NACC=0
+    local ACCROWS="" FILEROWS=""
+    local HOME_DIR
+
+    while IFS= read -r HOME_DIR; do
+        local U; U=$(basename "$HOME_DIR")
+        local LOCAL ROAM
+        LOCAL=$(ci_find_dir "$HOME_DIR" "AppData/Local")
+        ROAM=$(ci_find_dir "$HOME_DIR" "AppData/Roaming")
+
+        # ---------- OneDrive ----------
+        local OD; OD=$(ci_find_dir "${LOCAL:-$HOME_DIR}" "Microsoft/OneDrive")
+        if [[ -n "$OD" ]]; then
+            NPROV=$((NPROV + 1))
+            # settings/<Personal|Business1>/*.ini contiene account e cartella locale
+            local INI
+            while IFS= read -r INI; do
+                [[ -s "$INI" ]] || continue
+                local EMAIL FOLDER
+                EMAIL=$(grep -aoE '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}' "$INI" 2>/dev/null | head -1)
+                FOLDER=$(grep -aoE '[A-Z]:\\[^"|]{3,120}' "$INI" 2>/dev/null | head -1)
+                [[ -z "$EMAIL$FOLDER" ]] && continue
+                NACC=$((NACC + 1))
+                ACCROWS+="OneDrive	${U}	${EMAIL:-?}	${FOLDER:-?}	$(basename "$INI")
+"
+            done < <(find "$OD" -maxdepth 3 -type f \( -iname '*.ini' -o -iname 'global.ini' \) 2>/dev/null)
+
+            # Log .odl: estrazione euristica dei nomi di file
+            local ODLDIR; ODLDIR=$(ci_find_dir "$OD" "logs")
+            if [[ -n "$ODLDIR" ]]; then
+                local NODL; NODL=$(find "$ODLDIR" -type f \( -iname '*.odl' -o -iname '*.odlgz' -o -iname '*.aodl' \) 2>/dev/null | wc -l)
+                if [[ "$NODL" -gt 0 ]]; then
+                    info "OneDrive ($U) — ${BOLD}${NODL}${RESET} $(L "file di log" "log files")"
+                    local NAMES
+                    NAMES=$(find "$ODLDIR" -type f \( -iname '*.odl' -o -iname '*.aodl' \) -print0 2>/dev/null \
+                            | xargs -0 strings -n 6 2>/dev/null \
+                            | grep -aoE '[A-Za-z0-9 _().+-]{3,80}\.(docx?|xlsx?|pptx?|pdf|zip|7z|rar|txt|csv|jpg|jpeg|png|eml|msg|pst|ost|key|pem|sql|bak|exe|dll|ps1|vbs|js)' \
+                            | sort -u | head -3000)
+                    local N; N=$(printf '%s\n' "$NAMES" | grep -c . || true)
+                    if [[ "$N" -gt 0 ]]; then
+                        NFILES=$((NFILES + N))
+                        while IFS= read -r FN; do
+                            [[ -n "$FN" ]] && FILEROWS+="OneDrive	${U}	${FN}
+"
+                        done <<< "$NAMES"
+                    fi
+                fi
+            fi
+        fi
+
+        # ---------- Dropbox ----------
+        local DBX; DBX=$(ci_find_dir "${LOCAL:-$HOME_DIR}" "Dropbox")
+        local DBXR; DBXR=$(ci_find_dir "${ROAM:-$HOME_DIR}" "Dropbox")
+        if [[ -n "$DBX" || -n "$DBXR" ]]; then
+            NPROV=$((NPROV + 1))
+            local IJ; IJ=$(ci_find_file "${DBX:-$DBXR}" "info.json")
+            if [[ -s "$IJ" ]]; then
+                local PATHS
+                PATHS=$("$PY3" -c "
+import json,sys
+try:
+    d=json.load(open(sys.argv[1],encoding='utf-8',errors='replace'))
+    for k,v in d.items():
+        print(f\"{k}\t{v.get('path','')}\t{v.get('subscription_type','')}\")
+except Exception:
+    pass" "$IJ" 2>/dev/null)
+                while IFS=$'\t' read -r KIND P SUB; do
+                    [[ -z "$KIND" ]] && continue
+                    NACC=$((NACC + 1))
+                    ACCROWS+="Dropbox	${U}	${KIND} ${SUB}	${P}	info.json
+"
+                done <<< "$PATHS"
+            fi
+        fi
+
+        # ---------- Google Drive ----------
+        local GD; GD=$(ci_find_dir "${LOCAL:-$HOME_DIR}" "Google/DriveFS")
+        if [[ -n "$GD" ]]; then
+            NPROV=$((NPROV + 1))
+            local MDB
+            while IFS= read -r MDB; do
+                [[ -s "$MDB" ]] || continue
+                # Schema DriveFS: items(stable_id, ..., local_title, modified_date, size)
+                local ROWS
+                ROWS=$(query_sqlite "$MDB" "SELECT local_title, datetime(modified_date,'unixepoch'), file_size FROM items WHERE local_title IS NOT NULL ORDER BY modified_date DESC LIMIT 20000")
+                [[ -z "$ROWS" || "$ROWS" == ERROR* ]] && continue
+                local N; N=$(printf '%s\n' "$ROWS" | grep -c . || true)
+                NFILES=$((NFILES + N))
+                info "Google Drive ($U) — ${BOLD}${N}${RESET} $(L "elementi" "items")"
+                while IFS=$'\t' read -r T D S; do
+                    [[ -n "$T" ]] && FILEROWS+="Google Drive	${U}	${T}  (${D:-?}, ${S:-?} B)
+"
+                done <<< "$ROWS"
+            done < <(find "$GD" -maxdepth 3 -type f -name 'metadata_sqlite_db' 2>/dev/null)
+        fi
+
+        # ---------- Box / iCloud: solo presenza ----------
+        local P
+        for P in "Box/Box" "Apple/CloudDocs" "iCloudDrive"; do
+            local X; X=$(ci_find_dir "${LOCAL:-$HOME_DIR}" "$P")
+            [[ -n "$X" ]] && { NPROV=$((NPROV + 1)); ACCROWS+="${P%%/*}	${U}	-	${X}	$(L "solo presenza" "presence only")
+"; }
+        done
+    done < <(get_user_homes)
+
+    separator
+    if [[ "$NPROV" -eq 0 ]]; then
+        warn "$(L "Nessun provider di sincronizzazione cloud rilevato." "No cloud sync provider detected.")"
+        return 0
+    fi
+    ok "$(L "Provider rilevati:" "Providers detected:") ${BOLD}$NPROV"
+    info "$(L "Account/configurazioni:" "Accounts/configurations:") ${BOLD}$NACC"
+    info "$(L "Nomi di file recuperati:" "File names recovered:") ${BOLD}$NFILES"
+
+    ask_yn "Generare report HTML?" || return 0
+
+    BODY="<div class='card' style='margin-bottom:1rem'><div style='padding:1rem 1.5rem;font-size:.8rem;line-height:1.7'>"
+    BODY+="<b>$(L "Perche' conta" "Why it matters")</b><br>"
+    BODY+="$(L "Un file trascinato in una cartella sincronizzata esce dal perimetro senza toccare nessun artefatto USB e senza generare traffico riconoscibile come esfiltrazione. Questi elenchi vanno confrontati con i dati che l'organizzazione considera riservati." \
+        "A file dropped into a synced folder leaves the perimeter without touching any USB artefact and without generating traffic recognisable as exfiltration. Cross-check these lists against the data the organisation treats as confidential.")<br><br>"
+    BODY+="<b>$(L "Attendibilita' delle fonti" "Source reliability")</b><br>"
+    BODY+="$(L "Google Drive: database SQLite, elenco completo e datato. Dropbox: configurazione JSON, account e percorsi. OneDrive: i log .odl sono binari con stringhe offuscate, qui se ne estraggono solo i nomi leggibili — sono indizi, non un inventario completo, e non hanno data." \
+        "Google Drive: SQLite database, complete and dated listing. Dropbox: JSON configuration, accounts and paths. OneDrive: .odl logs are binary with obfuscated strings; only readable names are extracted here — these are leads, not a complete inventory, and carry no timestamp.")"
+    BODY+="</div></div>"
+
+    if [[ -n "$ACCROWS" ]]; then
+        BODY+="<div class='cards'>$(generic_card_html "$(L "Account e configurazioni" "Accounts and configurations")" "AppData" "$NACC" \
+            "$(_rows_to_table "$ACCROWS" "Provider" "$(L "Utente Windows" "Windows user")" "Account" "$(L "Cartella / dettaglio" "Folder / detail")" "$(L "Origine" "Source")")" "☁")</div>"
+    fi
+    if [[ -n "$FILEROWS" ]]; then
+        BODY+="<div class='cards'>$(generic_card_html "$(L "File sincronizzati" "Synced files")" "$(L "Google Drive completo · OneDrive euristico" "Google Drive complete · OneDrive heuristic")" "$NFILES" \
+            "$(_rows_to_table "$FILEROWS" "Provider" "$(L "Utente Windows" "Windows user")" "$(L "File" "File")")" "⇪")</div>"
+    fi
+
+    local STATS
+    STATS="$(stat_box "Provider" "$NPROV")"
+    STATS+="$(stat_box "Account" "$NACC" "info")"
+    STATS+="$(stat_box "$(L "File" "Files")" "$NFILES" "warn")"
+    finish_report "cloud_sync" "Cloud Sync" "CLD" "OneDrive · Dropbox · Google Drive · Box" "$STATS" "$BODY"
+}
+
+# ================================================================
+#  MODULO 46 — BITS Jobs (Background Intelligent Transfer Service)
+#
+#  BITS e' il servizio che Windows usa per scaricare aggiornamenti in
+#  background. Essendo un componente firmato e legittimo, viene usato dagli
+#  attaccanti per scaricare payload e per mantenere persistenza: un job BITS
+#  con /SetNotifyCmdLine rieseguita un comando a ogni completamento, e il
+#  traffico appare come una normale attivita' di sistema (T1197).
+#
+#  La coda dei job sta in qmgr.db (Windows 10+, formato ESE) o nei vecchi
+#  qmgr0.dat/qmgr1.dat. Qui si estraggono URL, percorsi locali e nomi dei job
+#  dalle stringhe UTF-16LE: e' l'approccio che funziona su tutti i formati e
+#  senza dipendenze, a costo di non ricostruire la struttura dei record.
+# ================================================================
+module_bits() {
+    section_header "BITS Jobs" "$ORANGE"
+    check_win_root || return 1
+
+    local -a DBS=()
+    local D F
+    D=$(ci_find_dir "$WIN_ROOT" "ProgramData/Microsoft/Network/Downloader")
+    [[ -z "$D" ]] && D=$(ci_find_dir "$WIN_ROOT" "Documents and Settings/All Users/Application Data/Microsoft/Network/Downloader")
+    if [[ -n "$D" ]]; then
+        while IFS= read -r F; do
+            [[ -n "$F" ]] && DBS+=("$F")
+        done < <(find "$D" -maxdepth 1 -type f \( -iname 'qmgr.db' -o -iname 'qmgr[01].dat' \) 2>/dev/null)
+    fi
+
+    if [[ ${#DBS[@]} -eq 0 ]]; then
+        warn "$(L "Nessuna coda BITS trovata (qmgr.db / qmgr0.dat)." "No BITS queue found (qmgr.db / qmgr0.dat).")"
+        return 0
+    fi
+    info "$(L "Code BITS trovate:" "BITS queues found:") ${BOLD}${#DBS[@]}"
+
+    local OUT; OUT=$(mktemp); register_tmp "$OUT"
+    "$PY3" - "$OUT" "${DBS[@]}" << 'PYEOF' 2>/dev/null
+import sys, re, os
+
+out_path = sys.argv[1]
+dbs = sys.argv[2:]
+
+# Le stringhe in qmgr sono UTF-16LE. Si estraggono URL, percorsi locali e
+# nomi di job, poi si classifica cosa merita attenzione.
+URL  = re.compile(r'(?:https?|ftp)://[!-~]{4,400}')
+WPATH = re.compile(r'[A-Za-z]:\\[^\x00<>|?*"]{3,250}')
+
+# Domini di aggiornamento legittimi: servono a separare il rumore dal resto,
+# non a dichiarare "sicuro" cio' che vi corrisponde.
+MS_HOSTS = ('microsoft.com', 'windowsupdate.com', 'msftncsi.com', 'msedge.net',
+            'windows.com', 'msn.com', 'live.com', 'office.net', 'office.com',
+            'azureedge.net', 'akamaized.net', 'delivery.mp.microsoft.com')
+
+# Estensioni che, scaricate via BITS, sono di per se' un segnale.
+RISKY_EXT = ('.exe', '.dll', '.ps1', '.bat', '.cmd', '.scr', '.vbs', '.js',
+             '.hta', '.jar', '.zip', '.7z', '.tmp', '.dat')
+
+rows = []
+seen = set()
+
+def add(kind, value, src, flags):
+    key = (kind, value)
+    if key in seen:
+        return
+    seen.add(key)
+    rows.append((kind, value, ';'.join(flags), src))
+
+for db in dbs:
+    src = os.path.basename(db)
+    try:
+        with open(db, 'rb') as fh:
+            raw = fh.read(512 * 1024 * 1024)
+    except Exception:
+        continue
+    # UTF-16LE e, per sicurezza, anche ASCII
+    for enc in ('utf-16-le', 'latin-1'):
+        try:
+            text = raw.decode(enc, 'ignore')
+        except Exception:
+            continue
+        for m in URL.finditer(text):
+            u = m.group(0).rstrip('\x00').strip()
+            low = u.lower()
+            flags = []
+            if not any(h in low for h in MS_HOSTS):
+                flags.append('HOST_NON_MICROSOFT')
+            if any(low.split('?')[0].endswith(e) for e in RISKY_EXT):
+                flags.append('ESTENSIONE_A_RISCHIO')
+            if low.startswith('http://'):
+                flags.append('IN_CHIARO')
+            add('URL', u[:400], src, flags)
+        for m in WPATH.finditer(text):
+            p = m.group(0).rstrip('\x00').strip()
+            low = p.lower()
+            if not any(low.endswith(e) for e in RISKY_EXT) and '\\temp\\' not in low and '\\users\\public\\' not in low:
+                continue
+            flags = []
+            if '\\temp\\' in low or '\\users\\public\\' in low or '\\programdata\\' in low:
+                flags.append('PERCORSO_SOSPETTO')
+            if any(low.endswith(e) for e in RISKY_EXT):
+                flags.append('ESTENSIONE_A_RISCHIO')
+            add('PATH', p[:250], src, flags)
+
+# Prima le voci segnalate.
+rows.sort(key=lambda r: (r[2] == '', r[0], r[1]))
+with open(out_path, 'w', encoding='utf-8') as fh:
+    for r in rows:
+        fh.write('\t'.join(x.replace('\t', ' ') for x in r) + '\n')
+PYEOF
+
+    local TOTAL=0
+    [[ -s "$OUT" ]] && TOTAL=$(wc -l < "$OUT")
+    if [[ "$TOTAL" -eq 0 ]]; then
+        warn "$(L "Nessun URL o percorso estratto dalla coda BITS." "No URL or path extracted from the BITS queue.")"
+        return 0
+    fi
+    local NFLAG NURL
+    NFLAG=$(awk -F'\t' '$3!=""' "$OUT" | wc -l)
+    NURL=$(awk -F'\t' '$1=="URL"' "$OUT" | wc -l)
+
+    ok "$(L "Voci estratte:" "Entries extracted:") ${BOLD}$TOTAL"
+    info "URL: ${BOLD}${NURL}"
+    if [[ "$NFLAG" -gt 0 ]]; then
+        warn "$(L "Voci segnalate:" "Flagged entries:") ${BOLD}$NFLAG"
+        awk -F'\t' '$3!=""{printf "      [%s] %s\n", $3, substr($2,1,100)}' "$OUT" | head -20 | while IFS= read -r LN; do
+            echo -e "      ${ORANGE}${LN}${RESET}"
+        done
+    fi
+
+    ask_yn "Generare report HTML?" || return 0
+
+    local ROWS; ROWS=$(awk -F'\t' '{print $1"\t"$2"\t"$3"\t"$4}' "$OUT" | head -20000)
+    local TABLE; TABLE=$(_rows_to_table "$ROWS" "$(L "Tipo" "Type")" "$(L "Valore" "Value")" "$(L "Segnalazioni" "Flags")" "$(L "Origine" "Source")")
+
+    local NOTE="<div class='card' style='margin-bottom:1rem'><div style='padding:1rem 1.5rem;font-size:.8rem;line-height:1.7'>"
+    NOTE+="<b>$(L "Come leggere le segnalazioni" "How to read the flags")</b><br>"
+    NOTE+="$(L "HOST_NON_MICROSOFT non significa 'malevolo': molti software legittimi usano BITS. Significa che quella voce non e' spiegabile come Windows Update e va verificata. Un job BITS verso un host non Microsoft che scarica un eseguibile in %TEMP% e' invece un indicatore forte." \
+        "HOST_NON_MICROSOFT does not mean 'malicious': plenty of legitimate software uses BITS. It means the entry is not explainable as Windows Update and needs checking. A BITS job to a non-Microsoft host downloading an executable into %TEMP% is a strong indicator instead.")<br><br>"
+    NOTE+="$(L "Da correlare con gli Event ID 3, 59, 60 del log Microsoft-Windows-Bits-Client/Operational (modulo Event Log)." \
+        "Correlate with Event IDs 3, 59, 60 in Microsoft-Windows-Bits-Client/Operational (Event Log module).")"
+    NOTE+="</div></div>"
+
+    local STATS
+    STATS="$(stat_box "$(L "Voci" "Entries")" "$TOTAL")"
+    STATS+="$(stat_box "URL" "$NURL" "info")"
+    STATS+="$(stat_box "$(L "Segnalate" "Flagged")" "$NFLAG" "$([[ "$NFLAG" -gt 0 ]] && echo warn || echo info)")"
+    finish_report "bits" "BITS Jobs" "BIT" "ProgramData/Microsoft/Network/Downloader" "$STATS" \
+        "${NOTE}<div class='cards'>$(generic_card_html "$(L "Coda BITS" "BITS queue")" "${DBS[0]}" "$TOTAL" "$TABLE" "⇩")</div>"
+}
+
+# ================================================================
+#  MODULO 47 — Thumbcache / IconCache
+#
+#  Windows conserva le miniature dei file visualizzati in Esplora risorse in
+#  database centralizzati. La miniatura SOPRAVVIVE alla cancellazione del file
+#  originale: e' spesso l'unica prova visiva residua di un documento o di
+#  un'immagine poi eliminata, e non e' toccata dalla pulizia del cestino.
+#
+#  I formati dei record cambiano fra Vista, 7, 8 e 10/11. Invece di parsare la
+#  struttura — fragile fra versioni — qui si esegue il CARVING delle immagini
+#  incorporate cercandone le firme. E' robusto su tutte le versioni; in cambio
+#  non si ottiene la corrispondenza miniatura-nome file, che nel formato non
+#  e' comunque presente in chiaro (la chiave e' un hash del percorso).
+#
+#  Le immagini estratte vengono scritte accanto al report e mostrate in
+#  galleria, cosi' l'analista le sfoglia invece di aprirle una per una.
+# ================================================================
+module_thumbcache() {
+    section_header "Thumbcache / IconCache" "$GREEN"
+    check_win_root || return 1
+
+    local -a DBS=()
+    local HOME_DIR F
+    while IFS= read -r HOME_DIR; do
+        local EXPL; EXPL=$(ci_find_dir "$HOME_DIR" "AppData/Local/Microsoft/Windows/Explorer")
+        [[ -z "$EXPL" ]] && continue
+        while IFS= read -r F; do
+            [[ -n "$F" ]] && DBS+=("$F")
+        done < <(find "$EXPL" -maxdepth 1 -type f \( -iname 'thumbcache_*.db' -o -iname 'iconcache_*.db' \) -size +1k 2>/dev/null)
+    done < <(get_user_homes)
+
+    if [[ ${#DBS[@]} -eq 0 ]]; then
+        warn "$(L "Nessun database thumbcache/iconcache trovato." "No thumbcache/iconcache database found.")"
+        return 0
+    fi
+    info "$(L "Database trovati:" "Databases found:") ${BOLD}${#DBS[@]}"
+
+    # Le immagini estratte vanno accanto al report: si prepara la cartella qui,
+    # perche' prepare_report_dir ne crea una nuova a ogni chiamata.
+    [[ -n "$REPORT_BASE_DIR" && ! -d "$REPORT_BASE_DIR" ]] && mkdir -p "$REPORT_BASE_DIR"
+    local RDIR="${REPORT_BASE_DIR}/thumbcache_$(date +%Y%m%d_%H%M%S)"
+    mkdir -p "$RDIR/images" 2>/dev/null || {
+        err "$(L "Impossibile creare la cartella del report." "Cannot create the report directory.")"
+        return 1
+    }
+
+    info "$(L "Carving delle miniature in corso..." "Carving thumbnails...")"
+    local OUT; OUT=$(mktemp); register_tmp "$OUT"
+    "$PY3" - "$OUT" "$RDIR/images" "${DBS[@]}" << 'PYEOF' 2>/dev/null
+import sys, os, struct
+
+out_path, img_dir = sys.argv[1], sys.argv[2]
+dbs = sys.argv[3:]
+
+MAX_IMAGES = 4000          # tetto: una thumbcache puo' contenerne decine di migliaia
+MIN_SIZE   = 512           # sotto questa soglia sono icone di sistema, rumore
+
+def carve(data):
+    """Genera (offset, estensione, byte) per ogni immagine incorporata."""
+    n = len(data)
+    i = 0
+    while i < n - 8:
+        # PNG
+        if data[i:i+8] == b'\x89PNG\r\n\x1a\n':
+            end = data.find(b'IEND', i)
+            if end > 0:
+                end += 8
+                yield i, 'png', data[i:end]
+                i = end
+                continue
+        # JPEG
+        if data[i:i+3] == b'\xff\xd8\xff':
+            end = data.find(b'\xff\xd9', i + 3)
+            if end > 0:
+                end += 2
+                yield i, 'jpg', data[i:end]
+                i = end
+                continue
+        # BMP: 'BM' + dimensione dichiarata nell'header
+        if data[i:i+2] == b'BM' and i + 6 <= n:
+            try:
+                size = struct.unpack_from('<I', data, i + 2)[0]
+            except Exception:
+                size = 0
+            if 100 < size < 8 * 1024 * 1024 and i + size <= n:
+                yield i, 'bmp', data[i:i+size]
+                i += size
+                continue
+        i += 1
+
+rows = []
+count = 0
+for db in dbs:
+    base = os.path.basename(db)
+    try:
+        with open(db, 'rb') as fh:
+            data = fh.read()
+    except Exception:
+        continue
+
+    # L'intestazione dichiara versione e tipo di cache (la dimensione delle
+    # miniature): utile per sapere quale cache si sta guardando.
+    version = cache_type = ''
+    if data[:4] == b'CMMM':
+        try:
+            version, cache_type = struct.unpack_from('<II', data, 4)
+        except Exception:
+            pass
+
+    for off, ext, blob in carve(data):
+        if len(blob) < MIN_SIZE:
+            continue
+        if count >= MAX_IMAGES:
+            break
+        name = f"{base.replace('.db','')}_{off:08x}.{ext}"
+        try:
+            with open(os.path.join(img_dir, name), 'wb') as out:
+                out.write(blob)
+        except Exception:
+            continue
+        count += 1
+        rows.append((base, str(version), str(cache_type), ext, str(len(blob)), name))
+
+with open(out_path, 'w', encoding='utf-8') as fh:
+    for r in rows:
+        fh.write('\t'.join(r) + '\n')
+PYEOF
+
+    local N=0
+    [[ -s "$OUT" ]] && N=$(wc -l < "$OUT")
+    if [[ "$N" -eq 0 ]]; then
+        warn "$(L "Nessuna miniatura estratta." "No thumbnail extracted.")"
+        rmdir "$RDIR/images" "$RDIR" 2>/dev/null
+        return 0
+    fi
+    ok "$(L "Miniature estratte:" "Thumbnails extracted:") ${BOLD}$N"
+    info "$(L "Salvate in:" "Saved to:") ${DIM}${RDIR}/images${RESET}"
+
+    ask_yn "Generare report HTML?" || return 0
+
+    # Galleria: le miniature sono l'informazione, non la tabella.
+    local GAL="" ROW
+    local SHOWN=0
+    while IFS=$'\t' read -r SRC VER CT EXT SZ NAME; do
+        [[ -z "$NAME" ]] && continue
+        SHOWN=$((SHOWN + 1))
+        [[ $SHOWN -gt 1500 ]] && break
+        GAL+="<figure style='margin:0;text-align:center'><img src='images/$(html_attr "$NAME")' loading='lazy' style='max-width:120px;max-height:120px;border:1px solid var(--border);border-radius:4px;background:#0d1117'><figcaption style='font-family:var(--mono);font-size:.55rem;color:var(--text-dim);word-break:break-all'>$(html_esc "${SRC}")</figcaption></figure>"
+    done < "$OUT"
+
+    local SUM; SUM=$(awk -F'\t' '{c[$1"\t"$2"\t"$3]++} END{for(k in c) print k"\t"c[k]}' "$OUT" | sort)
+    local SUMTABLE; SUMTABLE=$(_rows_to_table "$SUM" "Database" "$(L "Versione" "Version")" "$(L "Tipo cache" "Cache type")" "$(L "Miniature" "Thumbnails")")
+
+    local BODY=""
+    BODY+="<div class='card' style='margin-bottom:1rem'><div style='padding:1rem 1.5rem;font-size:.8rem;line-height:1.7'>"
+    BODY+="<b>$(L "Cosa sono e cosa non sono" "What these are and are not")</b><br>"
+    BODY+="$(L "Ogni miniatura e' la prova che un file e' stato visualizzato in Esplora risorse: sopravvive alla cancellazione dell'originale e allo svuotamento del cestino. NON e' pero' possibile risalire al nome del file: nel formato la chiave e' un hash del percorso, non il percorso stesso. La miniatura prova l'esistenza e il contenuto, non l'ubicazione." \
+        "Each thumbnail proves a file was viewed in Explorer: it survives deletion of the original and emptying the Recycle Bin. It is NOT possible to recover the file name: the format keys entries by a hash of the path, not the path itself. A thumbnail proves existence and content, not location.")<br><br>"
+    BODY+="$(L "Estrazione per carving delle firme immagine, non per parsing dei record: robusta su tutte le versioni di Windows." \
+        "Extraction is by image-signature carving, not record parsing: robust across all Windows versions.")"
+    BODY+="</div></div>"
+    BODY+="<div class='cards'>$(generic_card_html "$(L "Database analizzati" "Databases analysed")" "AppData/Local/Microsoft/Windows/Explorer" "${#DBS[@]}" "$SUMTABLE" "▦")</div>"
+    BODY+="<div class='stitle'>$(L "Galleria miniature" "Thumbnail gallery")</div>"
+    BODY+="<div class='card'><div style='padding:1rem;display:flex;flex-wrap:wrap;gap:.6rem'>${GAL}</div></div>"
+
+    local STATS
+    STATS="$(stat_box "$(L "Miniature" "Thumbnails")" "$N")"
+    STATS+="$(stat_box "Database" "${#DBS[@]}" "info")"
+    [[ "$N" -gt 1500 ]] && STATS+="$(stat_box "$(L "In galleria" "In gallery")" "1500" "info")"
+
+    # Il report va scritto nella cartella gia' creata, accanto alle immagini.
+    local REPORT_HTML="${RDIR}/report.html"
+    local SCAN; SCAN=$(date "+%d/%m/%Y %H:%M:%S")
+    {
+        html_header "Thumbcache"
+        html_page_header "THU" "Thumbcache / IconCache" "thumbcache_*.db" "$SCAN" "$WIN_ROOT"
+        printf "<div class='statsbar'>%s</div>\n" "$STATS"
+        echo "<main>"
+        pre_style_block
+        printf '%s\n' "$BODY"
+        echo "</main>"
+        html_footer "$SCAN" "$WIN_ROOT"
+    } > "$REPORT_HTML"
+    register_report "$REPORT_HTML"
+    ok "$(L "Report salvato:" "Report saved:") ${BOLD}$REPORT_HTML"
+    open_report_prompt "$REPORT_HTML"
+}
+
+# ================================================================
 #  MODULI LINUX
 # ================================================================
 
@@ -13270,6 +13767,9 @@ MODULES_WIN=(
     "module_lsa_secrets|LSA Secrets & DCC2|RED|SECURITY hive — password servizi, cache dominio§SECURITY hive — service passwords, domain cache"
     "module_vss|Volume Shadow Copies|CYAN|Snapshot precedenti del volume§Earlier volume snapshots"
     "module_pst_ost|Outlook PST / OST|YELLOW|Posta locale, allegati, item cancellati§Local mail, attachments, deleted items"
+    "module_cloud_sync|Cloud Sync|BLUE|OneDrive/Dropbox/Drive — file sincronizzati§OneDrive/Dropbox/Drive — synced files"
+    "module_bits|BITS Jobs|ORANGE|Download in background (T1197)§Background downloads (T1197)"
+    "module_thumbcache|Thumbcache|GREEN|Miniature di file cancellati§Thumbnails of deleted files"
 )
 
 MODULES_LINUX=(
@@ -13354,7 +13854,7 @@ main() {
                     echo -e "    riapplicati su una copia temporanea: senza questo passaggio le"
                     echo -e "    scritture piu' recenti dell'hive non sono visibili.${RESET}"
                     echo ""
-                    echo -e "  ${BOLD}Moduli disponibili (1-44):${RESET}"
+                    echo -e "  ${BOLD}Moduli disponibili (1-47):${RESET}"
                 else
                     echo -e "${CYAN}${BOLD}fiuto.sh${RESET} — DFIR Toolkit for offline Windows disk analysis"
                     echo ""
@@ -13372,7 +13872,7 @@ main() {
                     echo -e "    onto a temporary copy: without this step the most recent hive"
                     echo -e "    writes are not visible.${RESET}"
                     echo ""
-                    echo -e "  ${BOLD}Available modules (1-44):${RESET}"
+                    echo -e "  ${BOLD}Available modules (1-47):${RESET}"
                 fi
                 echo -e "    1  PowerShell History        2  Notepad TabState"
                 echo -e "    3  IFEO Hijacking            4  BAM"

@@ -164,7 +164,7 @@ lingue, e coerenza fra numero di moduli e tabelle del README.
 
 ## Fase 2 — Moduli Windows
 
-Un file per modulo in `src/modules/win/`. Priorità decrescente. ✅ = fatto in v2.2 (moduli 40-44).
+Un file per modulo in `src/modules/win/`. Priorità decrescente. ✅ = fatto in v2.2 (moduli 40-47). Restano: chat desktop LevelDB, WebCacheV01, Windows.edb.
 
 I nuovi moduli usano `finish_report` + `generic_card_html` + `_rows_to_table`
 invece di comporre l'HTML a mano come i 39 storici: molto meno codice e un
@@ -175,14 +175,14 @@ questa strada anche per i restanti.
 |---|---|---|---|
 | 1 | ✅ **Volume Shadow Copies** | snapshot VSS | Enumerazione + rilancio dei moduli sullo snapshot: abilita l'analisi differenziale storica. Oggi VSS è solo *citato* nei suggerimenti. |
 | 2 | ✅ **Outlook PST/OST** | `*.pst`, `*.ost` | `libpff`/`pypff`. Zero copertura email oggi. Header, allegati, item cancellati. |
-| 3 | **Cloud sync / esfiltrazione** | OneDrive `*.odl` + `SyncEngineDatabase.db`, Dropbox, Google Drive | Vettore di esfiltrazione moderno, oggi invisibile. |
-| 4 | **Chat desktop** | Teams/Slack/Discord LevelDB | **Riusa il decompressore Snappy già scritto per il modulo 39**: costo marginale basso, resa alta. |
+| 3 | ✅ **Cloud sync / esfiltrazione** | OneDrive `*.odl` + `SyncEngineDatabase.db`, Dropbox, Google Drive | Vettore di esfiltrazione moderno, oggi invisibile. |
+| 4 | **Chat desktop** | Teams/Slack/Discord LevelDB | **Riusa il decompressore Snappy già scritto per il modulo 39**, che pero' vive dentro l'heredoc Python di `module_ai_chat`: va prima estratto in un helper condiviso (es. `src/lib/13-leveldb.py.sh`). Fare il refactor contestualmente, non prima. |
 | 5 | ✅ **LSA Secrets / DCC2** | hive `SECURITY` | Il modulo 20 copre solo SAM: mancano cached domain credentials e password dei service account. |
 | 6 | **WebCacheV01.dat** | ESE Edge/IE | History/cookie/download non coperti dal modulo 17 (solo SQLite). |
-| 7 | **Thumbcache / Thumbs.db** | `thumbcache_*.db` | Prova visiva di file **cancellati**. |
+| 7 | ✅ **Thumbcache / Thumbs.db** | `thumbcache_*.db` | Prova visiva di file **cancellati**. |
 | 8 | ✅ **PowerShell transcripts** | `PowerShell_transcript.*.txt` | Il modulo 1 copre solo PSReadLine; i transcript hanno l'output completo. |
 | 9 | ✅ **SetupAPI dev log** | `setupapi.dev.log` | Timestamp di *first install* USB, complementa il modulo 9. |
-| 10 | **BITS jobs** | `qmgr.db` | Download/persistenza LOLBin (T1197). |
+| 10 | ✅ **BITS jobs** | `qmgr.db` | Download/persistenza LOLBin (T1197). |
 | 11 | **Windows Search index** | `Windows.edb` | Contenuto indicizzato di file poi cancellati. |
 
 ---

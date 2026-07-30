@@ -55,6 +55,9 @@ src/modules/win/41-ps-transcripts.sh
 src/modules/win/42-lsa-secrets.sh
 src/modules/win/43-vss.sh
 src/modules/win/44-pst-ost.sh
+src/modules/win/45-cloud-sync.sh
+src/modules/win/46-bits.sh
+src/modules/win/47-thumbcache.sh
 src/modules/linux/01-syslog.sh
 src/modules/linux/02-journal.sh
 src/modules/linux/03-logins.sh

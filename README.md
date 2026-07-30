@@ -183,7 +183,7 @@ The script uses internal bash helpers for:
 ./fiuto.sh /mnt/disk
 ```
 
-The script detects the volume's OS and presents a numbered menu with the relevant modules (44 for Windows, 16 for Linux, 13 for macOS). Select the module number or type `--all` to run them all.
+The script detects the volume's OS and presents a numbered menu with the relevant modules (47 for Windows, 16 for Linux, 13 for macOS). Select the module number or type `--all` to run them all.
 
 ### Automated Batch Analysis
 
@@ -216,7 +216,7 @@ fiuto_reports/
 
 ---
 
-## 📊 The 44 Windows analysis modules
+## 📊 The 47 Windows analysis modules
 
 | #  | Module Name                   | Windows Artifact                    | Usage                                                           |
 | -- | ----------------------------- | ----------------------------------- | --------------------------------------------------------------- |
@@ -264,6 +264,9 @@ fiuto_reports/
 | 42 | LSA Secrets & DCC2            | Registry SECURITY                   | Service-account passwords, cached domain credentials            |
 | 43 | Volume Shadow Copies          | System Volume Information           | Earlier volume snapshots, differential analysis                 |
 | 44 | Outlook PST / OST             | *.pst, *.ost (libpff)               | Local mail, attachments, deleted items                          |
+| 45 | Cloud Sync                    | OneDrive, Dropbox, Google Drive     | Synced files — the modern exfiltration path                     |
+| 46 | BITS Jobs                     | qmgr.db                             | Background downloads used as LOLBin (T1197)                     |
+| 47 | Thumbcache                    | thumbcache_*.db                     | Thumbnails of **deleted** files, carved                         |
 
 ---
 
@@ -677,7 +680,7 @@ Lo script utilizza internamente helper bash per:
 ./fiuto.sh /mnt/disk
 ```
 
-Lo script rileva l'OS del volume e presenta un menu numerato con i moduli pertinenti (44 per Windows, 16 per Linux, 13 per macOS). Seleziona il numero del modulo o digita `--all` per eseguirli tutti.
+Lo script rileva l'OS del volume e presenta un menu numerato con i moduli pertinenti (47 per Windows, 16 per Linux, 13 per macOS). Seleziona il numero del modulo o digita `--all` per eseguirli tutti.
 
 ### Analisi Batch Automatica
 
@@ -710,7 +713,7 @@ fiuto_reports/
 
 ---
 
-## 📊 I 44 Moduli di Analisi Windows
+## 📊 I 47 Moduli di Analisi Windows
 
 | #  | Nome Modulo                   | Artefatto Windows                   | Utilizzo                                                              |
 | -- | ----------------------------- | ----------------------------------- | --------------------------------------------------------------------- |
@@ -758,6 +761,9 @@ fiuto_reports/
 | 42 | LSA Secrets & DCC2            | Registry SECURITY                   | Password account di servizio, credenziali di dominio in cache         |
 | 43 | Volume Shadow Copies          | System Volume Information           | Snapshot precedenti del volume, analisi differenziale                 |
 | 44 | Outlook PST / OST             | *.pst, *.ost (libpff)               | Posta locale, allegati, item cancellati                               |
+| 45 | Cloud Sync                    | OneDrive, Dropbox, Google Drive     | File sincronizzati — la via di esfiltrazione moderna                  |
+| 46 | BITS Jobs                     | qmgr.db                             | Download in background usati come LOLBin (T1197)                      |
+| 47 | Thumbcache                    | thumbcache_*.db                     | Miniature di file **cancellati**, estratte per carving                |
 
 ---
 
@@ -1023,7 +1029,7 @@ FIUTO è uno strumento per velocizzare le analisi forensi digitale legittimo, da
 
 **Date:** 2026-07-30 | **Version:** 2.2
 
-**Five new Windows modules.** **SetupAPI Device Log** — the only source dating a USB device's *first* connection (the USBSTOR registry keeps the last one). **PowerShell Transcript** — full sessions including command output, invisible to PSReadLine (module 1) when commands come from scripts, `-EncodedCommand` or remoting. **LSA Secrets & DCC2** — cleartext service-account passwords and cached domain credentials from the SECURITY hive, complementing SAM (module 20). **Volume Shadow Copies** — inventory and differential-analysis workflow; their *absence* is reported as an indicator, since deleting them is a standard ransomware step. **Outlook PST/OST** — first local-mail coverage, with risky-attachment and IoC flagging.
+**Eight new Windows modules.** **SetupAPI Device Log** — the only source dating a USB device's *first* connection (the USBSTOR registry keeps the last one). **PowerShell Transcript** — full sessions including command output, invisible to PSReadLine (module 1) when commands come from scripts, `-EncodedCommand` or remoting. **LSA Secrets & DCC2** — cleartext service-account passwords and cached domain credentials from the SECURITY hive, complementing SAM (module 20). **Volume Shadow Copies** — inventory and differential-analysis workflow; their *absence* is reported as an indicator, since deleting them is a standard ransomware step. **Outlook PST/OST** — first local-mail coverage, with risky-attachment and IoC flagging. **Cloud Sync** — OneDrive/Dropbox/Google Drive accounts and synced files: the modern exfiltration path, which leaves no USB artefact. **BITS Jobs** — background downloads abused as a LOLBin (T1197), flagging non-Microsoft hosts, cleartext HTTP and risky targets. **Thumbcache** — thumbnails of deleted files, recovered by signature carving and shown as a gallery beside the report.
 
 **Internals.** Module dispatch is now data-driven for Windows too: three parallel dispatchers were removed (a hand-written menu and two separate 39-branch `case` statements). Registry entries support bilingual labels and optional guards. Module numbering is unchanged — `--module N` keeps invoking the same modules.
 
