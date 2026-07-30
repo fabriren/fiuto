@@ -127,20 +127,30 @@ teardown() {
 
 # ---------------------------------------------------------------- IoC
 
+# Gli indicatori vanno caricati dal file: dalla 2.3 check_ioc usa la regex
+# tipizzata costruita da load_ioc_file, non piu' l'elenco grezzo IOC_LIST.
+_load_ioc() {
+    IOC_LIST=(); IOC_TYPES=(); IOC_REGEX=""
+    local f; f=$(mktemp)
+    printf '%s\n' "$@" > "$f"
+    load_ioc_file "$f" > /dev/null
+    rm -f "$f"
+}
+
 @test "check_ioc matcha in modo case-insensitive" {
-    IOC_LIST=("evil.exe" "1.2.3.4")
+    _load_ioc "evil.exe" "1.2.3.4"
     run check_ioc "C:\\Temp\\EVIL.EXE"
     [ "$status" -eq 0 ]
 }
 
 @test "check_ioc non matcha testo estraneo" {
-    IOC_LIST=("evil.exe")
+    _load_ioc "evil.exe"
     run check_ioc "C:\\Windows\\explorer.exe"
     [ "$status" -ne 0 ]
 }
 
 @test "check_ioc con lista vuota non matcha" {
-    IOC_LIST=()
+    IOC_LIST=(); IOC_TYPES=(); IOC_REGEX=""
     run check_ioc "qualsiasi cosa"
     [ "$status" -ne 0 ]
 }

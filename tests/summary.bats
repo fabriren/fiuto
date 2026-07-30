@@ -17,7 +17,7 @@ setup() {
     WIN_ROOT="/mnt/disk"; OS_TYPE="windows"; HOST_NAME="WS-01"
     BATCH_MODE=true              # niente prompt "apri il report?"
     GENERATED_REPORTS=()
-    IOC_LIST=()
+    IOC_LIST=(); IOC_TYPES=(); IOC_REGEX=""
     TIME_SINCE=""; TIME_UNTIL=""
 }
 
@@ -103,7 +103,10 @@ EOF
 }
 
 @test "gli IoC caricati producono un riscontro ad alta severità" {
-    IOC_LIST=("evil.example")
+    # Si passa dal caricatore vero: il riepilogo usa la regex compilata dal
+    # motore IoC, non l'elenco grezzo dei valori.
+    printf 'evil.example\n' > "$FIXTURE/ioc.txt"
+    load_ioc_file "$FIXTURE/ioc.txt" > /dev/null
     _report webcache_20260301_100000 <<'EOF'
 <html><body><table>
 <tr><td>2026-03-05 10:00:00</td><td>http://evil.example/payload</td></tr>
@@ -116,7 +119,7 @@ EOF
 }
 
 @test "i riscontri sono ordinati per severità decrescente" {
-    IOC_LIST=()
+    IOC_LIST=(); IOC_TYPES=(); IOC_REGEX=""
     _report usb_20260301_100000 <<'EOF'
 <html><body><table><tr><td>2026-03-05 10:05:00</td><td>Kingston</td></tr></table></body></html>
 EOF
@@ -197,7 +200,8 @@ EOF
 }
 
 @test "il punteggio non supera 100" {
-    IOC_LIST=("evil.example")
+    printf 'evil.example\n' > "$FIXTURE/ioc.txt"
+    load_ioc_file "$FIXTURE/ioc.txt" > /dev/null
     local i
     for i in 1 2 3 4 5 6 7 8; do
         _report "ifeo_2026030${i}_100000" <<'EOF'

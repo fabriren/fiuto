@@ -103,8 +103,11 @@ generate_executive_summary() {
     finding_rules_tsv > "$RULES"
     local SCEN; SCEN=$(mktemp); register_tmp "$SCEN"
     correlation_scenarios_tsv > "$SCEN"
+    # Si passa la regex compilata dal motore IoC, non l'elenco dei valori: i
+    # confini per tipo devono essere gli stessi di check_ioc, e due
+    # implementazioni degli stessi confini divergono al primo aggiustamento.
     local IOCF; IOCF=$(mktemp); register_tmp "$IOCF"
-    printf '%s\n' "${IOC_LIST[@]:-}" > "$IOCF"
+    printf '%s' "${IOC_REGEX:-}" > "$IOCF"
 
     local JSON="${REPORT_BASE_DIR}/findings.json"
     local BODY; BODY=$(mktemp); register_tmp "$BODY"
@@ -137,7 +140,11 @@ MAX_EXAMPLES = 6          # esempi mostrati per finding
 MAX_EXAMPLE_LEN = 300
 
 reports = [p.strip() for p in open(list_path, encoding='utf-8') if p.strip()]
-iocs = [l.strip().lower() for l in open(ioc_path, encoding='utf-8', errors='replace') if l.strip()]
+try:
+    _ioc_src = open(ioc_path, encoding='utf-8', errors='replace').read().strip()
+    ioc_rx = re.compile(_ioc_src, re.I) if _ioc_src else None
+except re.error:
+    ioc_rx = None
 
 rules = []
 for line in open(rules_path, encoding='utf-8'):
@@ -200,8 +207,8 @@ for path in reports:
         })
 
     # 2) IoC caricati con --ioc
-    if iocs:
-        hits = [d for d in data if any(i in d.lower() for i in iocs)]
+    if ioc_rx is not None:
+        hits = [d for d in data if ioc_rx.search(d)]
         if hits:
             findings.append({
                 'severity': 'ALTA',

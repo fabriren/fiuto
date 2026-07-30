@@ -34,7 +34,7 @@ Stato aggiornato al: **2026-07-30** (versione 2.2, Fasi 1-5 complete, Fase 6 ini
 | Area | Stato |
 |---|---|
 | CI (bash -n, ShellCheck, bats, parser Python su 3.9 + 3.12) | ✅ |
-| Suite di test — 170 test bats | ✅ |
+| Suite di test — 188 test bats | ✅ |
 | Replay transaction log registro (`.LOG1`/`.LOG2`) | ✅ |
 | Export JSONL / schema Timesketch (`--jsonl`) | ✅ |
 | macOS: FSEvents, Spotlight | ✅ |
@@ -52,6 +52,7 @@ Stato aggiornato al: **2026-07-30** (versione 2.2, Fasi 1-5 complete, Fase 6 ini
 | Fase 6.4 — scansione YARA (`--yara`), ambito dichiarato | ✅ |
 | Fase 6.5 — motore Sigma sugli EVTX (`--sigma`), sottoinsieme dichiarato | ✅ |
 | Fase 6.6 — esecuzione parallela (`--jobs N`) con esito invariante | ✅ |
+| Fase 6.7 — motore IoC tipizzato, defanging, import STIX/MISP | ✅ |
 | Libreria Python condivisa Sigma (`src/lib/19-pylib-sigma.sh`) | ✅ |
 | Libreria Python condivisa timeline (`src/lib/17-pylib-timeline.sh`) | ✅ |
 | Flag `defer` nel registro (numerazione stabile) | ✅ |
@@ -403,8 +404,36 @@ Ordinati per rapporto valore/costo.
 
    ESC per saltare un modulo non è disponibile in parallelo — richiede il
    controllo esclusivo del terminale — e viene dichiarato all'avvio.
-6. **IoC engine.** Oggi è match di sottostringa case-insensitive. Tipizzare
-   (IP/dominio/hash/regex), import STIX/MISP, defanging in output.
+6. ~~**IoC engine.**~~ ✅ **Fatto (6.7)** — `src/lib/04-ioc.sh` riscritta.
+
+   Il match a sottostringa sbagliava in due direzioni: falsi positivi
+   (`10.0.0.5` dentro `110.0.0.55`) e falsi negativi (gli IoC arrivano defanged
+   e cercati alla lettera non trovano nulla — che si manifesta come "disco
+   pulito"). Ora gli indicatori sono tipizzati al caricamento, l'input defanged
+   viene normalizzato e ogni tipo ha i suoi confini.
+
+   `check_ioc` resta **pura bash, senza fork**: viene chiamata riga per riga su
+   report da decine di migliaia di righe, e un processo per riga renderebbe i
+   moduli inutilizzabili. Il costo è una singola ERE compilata al caricamento —
+   la stessa che viene passata all'executive summary, così i confini non
+   possono divergere fra due implementazioni.
+
+   `IOC_LIST` continua a contenere i valori normalizzati: i moduli che fanno il
+   proprio match in Python non sono stati toccati e guadagnano comunque il
+   defanging.
+
+   Due decisioni da non ribaltare distrattamente:
+   - un JSON valido ma di schema sconosciuto viene **rifiutato**, non letto come
+     lista piatta: caricare le graffe come indicatore letterale le farebbe
+     corrispondere ovunque;
+   - `payload.dll` è sintatticamente un dominio. Un elenco di estensioni decide
+     i casi ambigui e il prefisso `file:` li forza; il conteggio per tipo
+     stampato al caricamento esiste per far accorgere di una classificazione
+     sbagliata prima che si traduca in match mancati.
+
+   Resta da fare il **defanging dell'output**: `defang_value` esiste ed è
+   testata, ma non è ancora applicata ai valori mostrati nei report. Va fatta
+   insieme a `--redact` (punto 7), che tocca gli stessi punti di rendering.
 7. **`--redact`.** I report contengono hash NTLM, PSK Wi-Fi, token: serve una
    modalità per condividerli senza i segreti.
 8. **Mapping MITRE ATT&CK.** Le tecniche sono già sui riscontri (Fase 6.3): resta l'export del layer Navigator.

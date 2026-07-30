@@ -430,6 +430,40 @@ Files above the size limit (1 GB by default — `pagefile.sys`, `$MFT`,
 `Windows.edb`) are still listed, with the reason the hash is missing rather
 than silently omitting it.
 
+### IoC engine (`--ioc`)
+
+```bash
+./fiuto.sh /mnt/disk --all --ioc indicators.txt     # flat list
+./fiuto.sh /mnt/disk --all --ioc bundle.json        # STIX 2.x or MISP export
+```
+
+Indicators are **typed on load** and matched with the boundaries their type
+deserves. Plain substring matching, which is what FIUTO did until 2.2, was wrong
+in two opposite directions:
+
+- **false positives** — `10.0.0.5` matches inside `110.0.0.55`, `evil.com`
+  matches inside `notevil.com.au`. In a report with a hundred thousand rows that
+  is not annoying noise: it is noise that hides the real hits;
+- **false negatives** — indicators almost always arrive defanged (`hxxp://`,
+  `1[.]2[.]3[.]4`, `evil[.]com`), because that is how they are written in a mail
+  or an advisory. Searched literally they match nothing, and the analyst
+  concludes the disk is clean.
+
+Both are handled: defanged input is normalised, and each type gets its own
+boundaries. A domain matches its subdomains (`mail.evil.com` for `evil.com`) but
+not a longer suffix (`evil.com.other.net`). Hashes are case-insensitive tokens.
+A value between slashes (`/inv[o0]ke/`) is a regular expression.
+
+Types are inferred from the value; `type:value` overrides the guess where the
+guess cannot win (`file:payload.com` — a filename or a domain?). The count per
+type is printed on load, which is what makes a misread file obvious: forty
+`literal` where forty hashes were expected is a format problem, and without that
+line it would only surface as an absence of matches.
+
+`--ioc` also reads STIX 2.x bundles and MISP exports, nested MISP objects
+included. A JSON file that is neither is **refused**, not read line by line:
+loading braces as a literal indicator would make it match everywhere.
+
 ### Parallel execution (`--jobs`)
 
 ```bash
@@ -1151,6 +1185,41 @@ futuro sono coperti senza doverli toccare.
 I file oltre la soglia (1 GB di default — `pagefile.sys`, `$MFT`,
 `Windows.edb`) restano elencati, con il motivo per cui manca l'hash invece di
 ometterlo in silenzio.
+
+### Motore IoC (`--ioc`)
+
+```bash
+./fiuto.sh /mnt/disk --all --ioc indicatori.txt     # lista piatta
+./fiuto.sh /mnt/disk --all --ioc bundle.json        # STIX 2.x o export MISP
+```
+
+Gli indicatori vengono **tipizzati al caricamento** e confrontati con i confini
+che il loro tipo merita. Il match a sottostringa, che è quello che FIUTO faceva
+fino alla 2.2, sbagliava in due direzioni opposte:
+
+- **falsi positivi** — `10.0.0.5` corrisponde dentro `110.0.0.55`, `evil.com`
+  dentro `notevil.com.au`. In un report da centomila righe non è rumore
+  fastidioso: è rumore che nasconde i match veri;
+- **falsi negativi** — gli indicatori arrivano quasi sempre defanged
+  (`hxxp://`, `1[.]2[.]3[.]4`, `evil[.]com`), perché è così che si scrivono in
+  una mail o in un bollettino. Cercati alla lettera non corrispondono a niente,
+  e l'analista conclude che il disco è pulito.
+
+Sono coperti entrambi: l'input defanged viene normalizzato e ogni tipo ha i suoi
+confini. Un dominio corrisponde nei propri sottodomini (`mail.evil.com` per
+`evil.com`) ma non in un suffisso più lungo (`evil.com.altro.net`). Gli hash
+sono token case-insensitive. Un valore fra slash (`/inv[o0]ke/`) è una regex.
+
+Il tipo si deduce dal valore; `tipo:valore` forza la mano dove l'euristica non
+può vincere (`file:payload.com` — nome di file o dominio?). Il conteggio per
+tipo viene stampato al caricamento, ed è ciò che rende evidente un file letto
+male: quaranta `literal` al posto di quaranta hash sono un errore di formato, e
+senza quella riga lo si scoprirebbe solo dall'assenza di match.
+
+`--ioc` legge anche bundle STIX 2.x ed export MISP, oggetti annidati compresi.
+Un JSON che non è né l'uno né l'altro viene **rifiutato**, non letto riga per
+riga: caricare le graffe come indicatore letterale lo farebbe corrispondere
+ovunque.
 
 ### Esecuzione parallela (`--jobs`)
 
