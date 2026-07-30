@@ -54,6 +54,7 @@ main() {
                     echo -e "    ./fiuto.sh /mnt/disk --all --yara r.yar --yara-scan /mnt/disk/Users  # ambito esplicito"
                     echo -e "    ./fiuto.sh /mnt/windows --all --sigma /sigma/rules/  # regole Sigma sugli EVTX"
                     echo -e "    ./fiuto.sh /mnt/disk --all --jobs 4            # 4 moduli in parallelo"
+                    echo -e "    ./fiuto.sh /mnt/disk --all --redact            # copia condivisibile senza segreti"
                     echo ""
                     echo -e "  ${DIM}--yara non scansiona l'intero volume: si limita alle posizioni"
                     echo -e "    scrivibili senza privilegi e le ELENCA nel report. Usa --yara-scan"
@@ -88,6 +89,7 @@ main() {
                     echo -e "    ./fiuto.sh /mnt/disk --all --yara r.yar --yara-scan /mnt/disk/Users  # explicit scope"
                     echo -e "    ./fiuto.sh /mnt/windows --all --sigma /sigma/rules/  # Sigma rules over EVTX"
                     echo -e "    ./fiuto.sh /mnt/disk --all --jobs 4            # 4 modules in parallel"
+                    echo -e "    ./fiuto.sh /mnt/disk --all --redact            # shareable copy without secrets"
                     echo ""
                     echo -e "  ${DIM}--yara does not scan the whole volume: it covers the locations"
                     echo -e "    writable without privileges and LISTS them in the report. Use"
@@ -140,6 +142,8 @@ main() {
             --yara-scan)   YARA_SCAN_PATH="${2:-}"; shift ;;
             --yara-max-mb) YARA_MAX_MB="${2:-64}"; shift ;;
             --sigma)       SIGMA_RULES="${2:-}"; shift ;;
+            --redact)      REDACT=true ;;
+            --defang)      REDACT=true; REDACT_DEFANG=true ;;
             --jobs)
                 if [[ "${2:-}" =~ ^[1-9][0-9]*$ ]]; then
                     JOBS="$2"

@@ -19,6 +19,7 @@ setup() {
     GENERATED_REPORTS=()
     SUMMARY_TABLE=()
     JOBS=1
+    REDACT=false; REDACT_DEFANG=false; EXPORT_JSONL=false
 }
 
 teardown() {
@@ -155,4 +156,26 @@ _queue() {
     run env FIUTO_LIB_ONLY= bash "$REPO_ROOT/fiuto.sh" /tmp --jobs abc --all <<< "1"
     [ "$status" -ne 0 ]
     [[ "$output" == *"--jobs"* ]]
+}
+
+# --------------------------------------------- effetti collaterali batch ----
+
+@test "in batch sequenziale gli effetti collaterali del report avvengono" {
+    # Regressione: l'esecuzione batch ridefinisce register_report per far
+    # risalire i percorsi dal figlio, e per un intero rilascio quella
+    # ridefinizione ha silenziosamente saltato export JSONL e --redact.
+    # `--all --jsonl` non produceva alcun JSONL, senza un errore.
+    _mk_module alfa 01
+    REDACT=true; REDACT_DEFANG=false; EXPORT_JSONL=false; CUSTODY=false
+    run_batch_module 1 mod_alfa Alfa 1
+    [ -f "$REPORT_BASE_DIR"/alfa_*/report.redacted.html ]
+}
+
+@test "nel pool parallelo gli effetti collaterali avvengono per ogni modulo" {
+    _mk_module alfa 01; _mk_module beta 02
+    REDACT=true; REDACT_DEFANG=false; EXPORT_JSONL=false; CUSTODY=false
+    JOBS=2
+    run_batch_pool 2 "1|mod_alfa|Alfa|" "2|mod_beta|Beta|"
+    [ -f "$REPORT_BASE_DIR"/alfa_*/report.redacted.html ]
+    [ -f "$REPORT_BASE_DIR"/beta_*/report.redacted.html ]
 }

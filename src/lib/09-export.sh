@@ -87,8 +87,16 @@ PYEOF
     fi
 
     # Timeline unica di sessione: e' il file da caricare in Timesketch.
+    # Con --jobs l'append arriva da piu' processi e le righe superano PIPE_BUF:
+    # senza lock si intreccerebbero, producendo JSON non parsabile proprio nel
+    # file destinato a essere caricato in un altro strumento.
     local COMBINED="${REPORT_BASE_DIR}/fiuto_timeline.jsonl"
-    cat "$OUT" >> "$COMBINED" 2>/dev/null || true
+    if command -v flock > /dev/null 2>&1; then
+        flock "$COMBINED.lock" -c "cat '$OUT' >> '$COMBINED'" 2>/dev/null || \
+            cat "$OUT" >> "$COMBINED" 2>/dev/null || true
+    else
+        cat "$OUT" >> "$COMBINED" 2>/dev/null || true
+    fi
     ok "$(L "Export JSONL:" "JSONL export:") ${BOLD}${N}$(L " eventi" " events")${RESET} → $(basename "$OUT")"
     log_msg "[JSONL] $OUT — $N eventi"
 }

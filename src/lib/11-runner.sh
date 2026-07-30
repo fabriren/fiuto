@@ -17,8 +17,13 @@ run_batch_module() {
     local _REP_TMP; _REP_TMP=$(mktemp)
 
     (
-        # Override locale: scrive il path nel file temp invece dell'array
-        register_report() { [[ -n "${1:-}" && -f "$1" ]] && echo "$1" >> "$_REP_TMP"; }
+        # Override locale: scrive il path nel file temp invece dell'array.
+        # Gli effetti collaterali vanno richiamati a mano, o si perdono.
+        register_report() {
+            [[ -n "${1:-}" && -f "$1" ]] || return 0
+            echo "$1" >> "$_REP_TMP"
+            _report_side_effects "$1"
+        }
         $mod_func >/dev/null 2>&1
     ) &
     local MOD_PID=$!
@@ -112,7 +117,11 @@ run_batch_pool() {
     for _item in "${_par[@]}"; do
         IFS='|' read -r _i _f _label _flags <<< "$_item"
         (
-            register_report() { [[ -n "${1:-}" && -f "$1" ]] && echo "$1" >> "${_POOLDIR}/${_i}.rep"; }
+            register_report() {
+                [[ -n "${1:-}" && -f "$1" ]] || return 0
+                echo "$1" >> "${_POOLDIR}/${_i}.rep"
+                _report_side_effects "$1"
+            }
             "$_f" > /dev/null 2>&1
         ) &
         _running=$((_running + 1))
@@ -469,6 +478,7 @@ run_all_from_registry() {
     # report esistenti, e il riepilogo e' il primo che va aperto.
     generate_executive_summary
     generate_full_dashboard
+    redact_summary
 }
 
 

@@ -34,7 +34,7 @@ Stato aggiornato al: **2026-07-30** (versione 2.2, Fasi 1-5 complete, Fase 6 ini
 | Area | Stato |
 |---|---|
 | CI (bash -n, ShellCheck, bats, parser Python su 3.9 + 3.12) | ✅ |
-| Suite di test — 188 test bats | ✅ |
+| Suite di test — 207 test bats | ✅ |
 | Replay transaction log registro (`.LOG1`/`.LOG2`) | ✅ |
 | Export JSONL / schema Timesketch (`--jsonl`) | ✅ |
 | macOS: FSEvents, Spotlight | ✅ |
@@ -53,6 +53,7 @@ Stato aggiornato al: **2026-07-30** (versione 2.2, Fasi 1-5 complete, Fase 6 ini
 | Fase 6.5 — motore Sigma sugli EVTX (`--sigma`), sottoinsieme dichiarato | ✅ |
 | Fase 6.6 — esecuzione parallela (`--jobs N`) con esito invariante | ✅ |
 | Fase 6.7 — motore IoC tipizzato, defanging, import STIX/MISP | ✅ |
+| Fase 6.8 — `--redact` / `--defang`, copie condivisibili | ✅ |
 | Libreria Python condivisa Sigma (`src/lib/19-pylib-sigma.sh`) | ✅ |
 | Libreria Python condivisa timeline (`src/lib/17-pylib-timeline.sh`) | ✅ |
 | Flag `defer` nel registro (numerazione stabile) | ✅ |
@@ -434,8 +435,33 @@ Ordinati per rapporto valore/costo.
    Resta da fare il **defanging dell'output**: `defang_value` esiste ed è
    testata, ma non è ancora applicata ai valori mostrati nei report. Va fatta
    insieme a `--redact` (punto 7), che tocca gli stessi punti di rendering.
-7. **`--redact`.** I report contengono hash NTLM, PSK Wi-Fi, token: serve una
-   modalità per condividerli senza i segreti.
+7. ~~**`--redact`.**~~ ✅ **Fatto (6.8)** — `src/lib/20-redact.sh`.
+   `--redact` produce un `report.redacted.html` accanto a ogni report;
+   `--defang` rende inerti anche URL e IP nella sola copia.
+
+   Due scelte da non ribaltare:
+   - **l'originale non si tocca.** Oscurare sul posto distruggerebbe evidenza
+     per una necessità di comunicazione: un baratto che non spetta al tool.
+   - **si oscura per contesto, non per forma.** Un SHA-256 e un hash NTLM sono
+     entrambe stringhe esadecimali; il primo è integrità di un reperto, il
+     secondo una credenziale. Le regole guardano l'etichetta accanto al valore,
+     e c'è un test che pretende che gli SHA-256 sopravvivano.
+
+   Il defanging dell'output, rimasto in sospeso dalla 6.7, è chiuso qui:
+   `defang_value` per i valori singoli, `--defang` per la copia condivisibile.
+
+   **Difetto preesistente trovato agganciando la modalità.** L'esecuzione batch
+   ridefinisce `register_report` nel processo figlio per far risalire i percorsi
+   (gli array bash non risalgono), e quella ridefinizione saltava gli effetti
+   collaterali: **`--all --jsonl` non produceva alcun JSONL**, senza un errore
+   né un avviso, da quando la funzione esiste. Gli effetti stanno ora in
+   `_report_side_effects`, richiamata da tutte e tre le versioni di
+   `register_report`, con due test di regressione. Lezione per il futuro: ogni
+   volta che si aggiunge un effetto a `register_report`, va aggiunto lì.
+
+   Aggiunto anche un `flock` sull'append alla timeline unica: con `--jobs` le
+   righe JSON superano PIPE_BUF e si intreccerebbero, producendo JSON non
+   parsabile proprio nel file destinato a un altro strumento.
 8. **Mapping MITRE ATT&CK.** Le tecniche sono già sui riscontri (Fase 6.3): resta l'export del layer Navigator.
 9. **Immagini senza mount manuale.** `ewfmount` per E01, `losetup` per raw/dd,
    volumi cifrati (BitLocker/`dislocker`, LUKS, FileVault).

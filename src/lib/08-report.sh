@@ -17,10 +17,26 @@ prepare_report_dir() {
 # dopo aver scritto il proprio HTML, quindi l'export copre automaticamente
 # tutti i moduli — inclusi quelli Windows, che generano l'HTML per conto
 # proprio senza passare da finish_report.
+# Effetti collaterali di un report appena scritto: export JSONL e copia
+# oscurata. Stanno in una funzione a se' perche' l'esecuzione batch
+# RIDEFINISCE register_report nel processo figlio — gli array bash non
+# risalgono — e quella ridefinizione deve poterli richiamare.
+#
+# Non e' un dettaglio di stile: finche' gli effetti sono stati scritti dentro
+# register_report, `--all --jsonl` non produceva alcun JSONL. Nessun errore,
+# nessun avviso, semplicemente i file non c'erano.
+_report_side_effects() {
+    [[ "$EXPORT_JSONL" == "true" ]] && export_report_jsonl "$1"
+    # La copia oscurata nasce qui e non dentro finish_report: i moduli Windows
+    # scrivono l'HTML per conto proprio e passano solo di qua.
+    [[ "$REDACT" == "true" ]] && redact_report "$1"
+    return 0
+}
+
 register_report() {
     [[ -n "${1:-}" && -f "$1" ]] || return 0
     GENERATED_REPORTS+=("$1")
-    [[ "$EXPORT_JSONL" == "true" ]] && export_report_jsonl "$1"
+    _report_side_effects "$1"
     return 0
 }
 

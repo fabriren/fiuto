@@ -430,6 +430,34 @@ Files above the size limit (1 GB by default — `pagefile.sys`, `$MFT`,
 `Windows.edb`) are still listed, with the reason the hash is missing rather
 than silently omitting it.
 
+### Redacted copies (`--redact`, `--defang`)
+
+Reports hold material that belongs in the office and nowhere else: NTLM hashes
+from SAM and NTDS, Wi-Fi PSKs, OAuth tokens, private keys, LSA secrets. As long
+as the only options are "send the whole report or send nothing", that material
+ends up in a client email or a ticket attachment.
+
+```bash
+./fiuto.sh /mnt/disk --all --redact     # report.redacted.html beside each report
+./fiuto.sh /mnt/disk --all --defang     # also renders URLs and IPs inert
+```
+
+**The original is never touched.** A `report.redacted.html` appears next to it.
+Redacting in place would destroy evidence for a communication need — a trade the
+tool has no business making on your behalf. The custody manifest lists both,
+with distinct roles.
+
+**Redaction is by context, not by shape.** A SHA-256 and an NTLM hash are both
+hex strings: the first is a exhibit's integrity fingerprint and removing it would
+break the chain of custody in the very file you are about to share; the second is
+a credential. What tells them apart is the label beside them, so the rules look at
+the field, not at the value. Labels stay — knowing *that* there was a password is
+part of the analysis — and only values go.
+
+Every copy declares in its header that it is not the original, and lists how
+many occurrences each rule removed. A file that looks like a report but is not
+quite one, without saying so, is worse than no file.
+
 ### IoC engine (`--ioc`)
 
 ```bash
@@ -1185,6 +1213,35 @@ futuro sono coperti senza doverli toccare.
 I file oltre la soglia (1 GB di default — `pagefile.sys`, `$MFT`,
 `Windows.edb`) restano elencati, con il motivo per cui manca l'hash invece di
 ometterlo in silenzio.
+
+### Copie oscurate (`--redact`, `--defang`)
+
+I report contengono materiale che deve restare nello studio: hash NTLM da SAM e
+NTDS, PSK Wi-Fi, token OAuth, chiavi private, segreti LSA. Finché l'unica scelta
+è "mandare il report intero o non mandarlo", quel materiale finisce in una mail
+a un cliente o nell'allegato di un ticket.
+
+```bash
+./fiuto.sh /mnt/disk --all --redact     # report.redacted.html accanto a ogni report
+./fiuto.sh /mnt/disk --all --defang     # rende inerti anche URL e IP
+```
+
+**L'originale non viene mai toccato.** Accanto nasce un `report.redacted.html`.
+Oscurare sul posto distruggerebbe evidenza per una necessità di comunicazione:
+un baratto che non spetta al tool fare al posto tuo. Il manifesto di custodia
+elenca entrambi, con ruoli distinti.
+
+**Si oscura per contesto, non per forma.** Un SHA-256 e un hash NTLM sono
+entrambe stringhe esadecimali: il primo è l'impronta di integrità di un reperto
+e rimuoverlo spezzerebbe la catena di custodia proprio nel file che stai per
+condividere, il secondo è una credenziale. A distinguerli è l'etichetta accanto,
+quindi le regole guardano il campo e non il valore. Le etichette restano —
+sapere *che* c'era una password è un dato dell'analisi — e spariscono solo i
+valori.
+
+Ogni copia dichiara in testa di non essere l'originale, ed elenca quante
+occorrenze ha rimosso ciascuna regola. Un file che sembra un report ma non lo è
+del tutto, senza dirlo, è peggio di nessun file.
 
 ### Motore IoC (`--ioc`)
 
