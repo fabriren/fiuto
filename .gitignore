@@ -27,6 +27,11 @@
 !/requirements.txt
 !/docker-entrypoint.sh
 
+# Build macOS: script di build e artefatto generato. Come fiuto.sh, il file
+# generato e' versionato perche' su un Mac si scarica e si usa cosi' com'e'.
+!/buildMac.sh
+!/fiuto-macos.sh
+
 # Sorgenti divisi per OS e script di build.
 # fiuto.sh alla radice e' il prodotto della concatenazione (vedi build.sh):
 # resta versionato perche' il tool si distribuisce come file singolo.

@@ -58,9 +58,16 @@ done < "$ORDER_FILE"
 
 # Ogni sorgente elencato dev'essere davvero usato: un file dimenticato
 # fuori da build.order sparirebbe dal prodotto finale senza errori.
+#
+# I sorgenti della build macOS sono esclusi dal controllo: appartengono a
+# src/build.order.macos e in questa build non devono comparire. L'esclusione e'
+# per percorso esatto e non per pattern generico, cosi' un file nuovo sotto
+# src/compat/ continua a far scattare il guardiano invece di scivolare via.
+MACOS_ONLY='src/macos-header.sh
+src/compat/macos.sh'
 ORPHANS="$(comm -23 \
     <(cd "$REPO_DIR" && find src -name '*.sh' | sort) \
-    <(grep -v '^\s*\(#\|$\)' "$ORDER_FILE" | sort))"
+    <(printf '%s\n' "$MACOS_ONLY" | cat - <(grep -v '^\s*\(#\|$\)' "$ORDER_FILE") | sort))"
 if [[ -n "$ORPHANS" ]]; then
     echo "build.sh: sorgenti non elencati in src/build.order:" >&2
     echo "$ORPHANS" >&2

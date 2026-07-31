@@ -35,7 +35,7 @@ Stato aggiornato al: **2026-07-31** (versione 2.3, **tutte le fasi complete**).
 | Area | Stato |
 |---|---|
 | CI (bash -n, ShellCheck, bats, parser Python su 3.9 + 3.12) | ✅ |
-| Suite di test — 235 test bats | ✅ |
+| Suite di test — 258 test bats | ✅ |
 | Replay transaction log registro (`.LOG1`/`.LOG2`) | ✅ |
 | Export JSONL / schema Timesketch (`--jsonl`) | ✅ |
 | macOS: FSEvents, Spotlight | ✅ |
@@ -57,6 +57,7 @@ Stato aggiornato al: **2026-07-31** (versione 2.3, **tutte le fasi complete**).
 | Fase 6.8 — `--redact` / `--defang`, copie condivisibili | ✅ |
 | Fase 6.9 — immagini E01/raw e volumi cifrati (`--image`) | ✅ |
 | Fase 7 — immagine Docker con tutte le dipendenze + CI su GHCR | ✅ |
+| Build macOS (`buildMac.sh` + `src/compat/macos.sh`) | ✅ |
 | Libreria Python condivisa Sigma (`src/lib/19-pylib-sigma.sh`) | ✅ |
 | Libreria Python condivisa timeline (`src/lib/17-pylib-timeline.sh`) | ✅ |
 | Flag `defer` nel registro (numerazione stabile) | ✅ |
@@ -548,6 +549,39 @@ scrivibile e senza `--user` l'entrypoint emette entrambi gli avvisi.
 - Nessuno dei binari libyal per VSS (`vshadowinfo`) è pacchettizzato in Debian:
   il modulo 43 continua a dichiarare il comando invece di eseguirlo, immagine o
   no. Va compilato da sorgente se si vuole chiudere quel caso.
+
+---
+
+## Build macOS
+
+`./buildMac.sh` produce `fiuto-macos.sh`, che gira SU un Mac come workstation
+di analisi. **Non è un fork**: concatena gli stessi sorgenti della build Linux
+più `src/compat/macos.sh`, lo strato che traduce gli strumenti GNU verso
+l'userland BSD ridefinendoli come funzioni bash. Duplicare l'albero avrebbe
+significato correggere ogni bug due volte.
+
+Il compat sta in **fondo** all'ordine di build, non in testa: in bash i nomi di
+funzione si risolvono alla chiamata, quindi metterlo alla fine basta perché le
+ridefinizioni valgano ovunque — e metterlo in testa non basterebbe, perché
+`_find_user_cwd`, `image_open` e `_find_windows_mounts` verrebbero
+sovrascritte dai file di libreria che le definiscono.
+
+La trappola da conoscere prima di toccare quel file: nella traduzione di `stat`
+l'ordine conta. GNU `%s` (dimensione) diventa BSD `%z`, ma GNU `%z` (ctime)
+diventa BSD `%Sc`. Tradurre `%s` per primo lo riconvertirebbe, e la chiamata
+restituirebbe **una data dove il codice si aspetta dei byte, senza errore**.
+C'è un test che inchioda l'ordine, con un userland BSD simulato.
+
+**Non verificata su un Mac reale.** Da qui si è verificato che le due build
+restano allineate, che le traduzioni producono i comandi BSD attesi e che la
+suite passa. Il primo avvio sulla macchina di destinazione resta il collaudo.
+Cose da controllare lì per prime: `hdiutil attach` sulle immagini reali, il
+percorso di `brew` su Intel (`/usr/local/bin/bash` invece di
+`/opt/homebrew/bin/bash`), e i moduli che invocano `sqlite3` e `plutil`.
+
+Non supportato su macOS, per assenza degli strumenti: LUKS e BitLocker
+(`cryptsetup`, `dislocker`). Il volume viene riconosciuto e dichiarato, non
+montato male.
 
 ---
 

@@ -25,10 +25,37 @@ setup() {
     [ "$status" -eq 0 ]
 }
 
-@test "ogni sorgente in src/ e' elencato in build.order" {
-    orfani="$(comm -23 <(find src -name '*.sh' | sort) <(grep -v '^\s*\(#\|$\)' src/build.order | sort))"
+@test "ogni sorgente in src/ e' elencato in almeno un build.order" {
+    # Da quando esiste la build macOS gli ordini sono due: un sorgente puo'
+    # appartenere all'uno, all'altro o a entrambi, ma non a nessuno dei due —
+    # in quel caso sparirebbe da ogni prodotto finale senza errori.
+    orfani="$(comm -23 <(find src -name '*.sh' | sort) \
+        <(cat src/build.order src/build.order.macos | grep -v '^\s*\(#\|$\)' | sort -u))"
     [ -z "$orfani" ] || {
-        echo "sorgenti non elencati: $orfani"
+        echo "sorgenti non elencati in nessun build.order: $orfani"
+        false
+    }
+}
+
+@test "i sorgenti solo-macOS non entrano nella build Linux" {
+    # macos-header.sh sostituisce header.sh e compat/macos.sh ridefinisce
+    # funzioni Linux: finirebbero per rompere la build Linux, non solo
+    # appesantirla.
+    fail=0
+    for f in src/macos-header.sh src/compat/macos.sh; do
+        grep -qxF "$f" src/build.order && { echo "$f non deve stare in build.order"; fail=1; }
+        grep -qxF "$f" src/build.order.macos || { echo "$f manca da build.order.macos"; fail=1; }
+    done
+    [ "$fail" -eq 0 ]
+}
+
+@test "i sorgenti condivisi sono gli stessi nelle due build" {
+    # Se un modulo entrasse in una sola delle due, su una piattaforma
+    # semplicemente non esisterebbe, e nessuno se ne accorgerebbe.
+    solo_linux="$(comm -23 <(grep -v '^\s*\(#\|$\)' src/build.order | sort) \
+                           <(grep -v '^\s*\(#\|$\)' src/build.order.macos | sort))"
+    [ "$solo_linux" = "src/header.sh" ] || {
+        echo "presenti solo nella build Linux: $solo_linux"
         false
     }
 }

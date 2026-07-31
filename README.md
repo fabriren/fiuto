@@ -938,6 +938,8 @@ src/
   modules/linux/          20 module files
   modules/macos/          18 module files
   modules/xplat/          4 modules shared by all three systems
+  compat/macos.sh         GNU -> BSD translations, macOS build only
+  macos-header.sh         header with the Homebrew bash shebang
   main.sh                 main() and entry point
 ```
 
@@ -966,6 +968,55 @@ module cannot be silently left out of the distributed script.
 The generated file **is committed**, because being a single file is a real
 property of the tool, not a build artefact. CI's `./build.sh --check` job makes
 sure the two forms can never diverge unnoticed.
+
+### The macOS build
+
+`fiuto.sh` targets a Linux host. To run FIUTO **on a Mac** as the analysis
+workstation, use the macOS build:
+
+```bash
+./buildMac.sh               # produces fiuto-macos.sh
+./buildMac.sh --check       # verify it matches the sources
+```
+
+Or just download `fiuto-macos.sh`, it is committed like `fiuto.sh` is.
+
+**It is not a fork.** It concatenates exactly the same sources as the Linux
+build, with two differences: a header whose shebang points at Homebrew's bash,
+and `src/compat/macos.sh` appended before `main.sh`. Tests assert that the two
+build orders differ by nothing else, so a new module cannot exist on one
+platform only.
+
+The compat layer redefines the GNU tools as bash functions that translate to
+the BSD userland. A shell function takes precedence over an executable, so the
+52 call sites of `stat -c` and the rest stay untouched. The subtle one is
+`stat`: GNU `%s` (size) maps to BSD `%z`, while GNU `%z` (ctime) maps to BSD
+`%Sc`, so translating `%s` first would convert it twice and return a **date
+where the code expects a byte count**, with no error. `%z` is therefore
+translated before `%s`, and a test pins that order.
+
+Requirements on the Mac:
+
+```bash
+brew install bash            # macOS still ships bash 3.2 from 2007
+brew install coreutils       # optional: provides gtimeout
+brew install sleuthkit libewf   # only for --image
+pip3 install -r requirements.txt
+```
+
+The build refuses to start on bash 3.2 with the command to fix it, rather than
+failing with a syntax error halfway through a module.
+
+**What changes on macOS.** Image mounting goes through `hdiutil` instead of
+`losetup`, and `image_cleanup` detaches accordingly. Volume discovery reads
+`mount(8)` and `/Volumes` instead of `/proc/mounts`. LUKS and BitLocker are not
+available (no `cryptsetup`/`dislocker`): the volume is still recognised and
+declared, as everywhere else in FIUTO, rather than mounted wrong.
+
+> Verified: both builds stay aligned with their sources, the BSD translations
+> were checked against a simulated BSD userland, and the whole suite passes.
+> The macOS build has **not** been executed on a real Mac from here, so treat
+> the first run on the target machine as the real acceptance test.
 
 ### Adding a module
 
@@ -1955,6 +2006,8 @@ src/
   modules/linux/          20 file di modulo
   modules/macos/          18 file di modulo
   modules/xplat/          4 moduli condivisi dai tre sistemi
+  compat/macos.sh         traduzioni GNU -> BSD, solo build macOS
+  macos-header.sh         intestazione con lo shebang del bash Homebrew
   main.sh                 main() ed entry point
 ```
 
@@ -1986,6 +2039,58 @@ Il file generato **è versionato**, perché essere un file singolo è una
 proprietà reale del tool e non un artefatto di build. Il job
 `./build.sh --check` della CI garantisce che le due forme non possano divergere
 in silenzio.
+
+### La build macOS
+
+`fiuto.sh` presuppone un host Linux. Per far girare FIUTO **su un Mac** usato
+come workstation di analisi c'è la build macOS:
+
+```bash
+./buildMac.sh               # produce fiuto-macos.sh
+./buildMac.sh --check       # verifica che sia allineata ai sorgenti
+```
+
+Oppure si scarica direttamente `fiuto-macos.sh`, che è versionato come lo è
+`fiuto.sh`.
+
+**Non è un fork.** Concatena esattamente gli stessi sorgenti della build Linux,
+con due differenze: un'intestazione il cui shebang punta al bash di Homebrew, e
+`src/compat/macos.sh` aggiunto prima di `main.sh`. I test verificano che i due
+ordini di build non differiscano in nient'altro, così un modulo nuovo non può
+esistere su una sola piattaforma.
+
+Lo strato di compatibilità ridefinisce gli strumenti GNU come funzioni bash che
+traducono verso l'userland BSD. Una funzione ha la precedenza sull'eseguibile,
+quindi i 52 punti di chiamata di `stat -c` e tutto il resto restano intatti. Il
+caso insidioso è proprio `stat`: GNU `%s` (dimensione) diventa BSD `%z`, mentre
+GNU `%z` (ctime) diventa BSD `%Sc`, quindi tradurre `%s` per primo lo
+convertirebbe due volte restituendo **una data dove il codice si aspetta dei
+byte**, senza alcun errore. `%z` si traduce perciò prima di `%s`, e un test
+inchioda quell'ordine.
+
+Requisiti sul Mac:
+
+```bash
+brew install bash            # macOS spedisce ancora la 3.2 del 2007
+brew install coreutils       # facoltativo: fornisce gtimeout
+brew install sleuthkit libewf   # solo per --image
+pip3 install -r requirements.txt
+```
+
+La build si rifiuta di partire su bash 3.2 indicando il comando per rimediare,
+invece di fallire con un errore di sintassi a metà di un modulo.
+
+**Cosa cambia su macOS.** Il montaggio delle immagini passa da `hdiutil` invece
+che da `losetup`, e `image_cleanup` fa il detach di conseguenza. Il rilevamento
+dei volumi legge `mount(8)` e `/Volumes` invece di `/proc/mounts`. LUKS e
+BitLocker non sono disponibili (niente `cryptsetup`/`dislocker`): il volume
+viene comunque riconosciuto e dichiarato, come ovunque in FIUTO, invece di
+essere montato male.
+
+> Verificato: entrambe le build restano allineate ai sorgenti, le traduzioni
+> BSD sono state controllate contro un userland BSD simulato, e l'intera suite
+> passa. La build macOS **non** è stata eseguita su un Mac vero da qui: il
+> primo avvio sulla macchina di destinazione è il collaudo vero.
 
 ### Aggiungere un modulo
 
