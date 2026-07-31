@@ -1,0 +1,9 @@
+# Nel contesto di build entra solo cio' che serve all'immagine: il file
+# generato, i sorgenti da cui si verifica, e l'entrypoint.
+.git
+.github
+docs
+tests
+*.md
+vol_fiuto_*
+fiuto_reports_*

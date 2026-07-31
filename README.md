@@ -148,6 +148,56 @@ The script uses internal bash helpers for:
 
 ---
 
+## 🐳 Docker (recommended)
+
+The biggest source of friction with FIUTO is not the tool: it is regipy,
+python-evtx, libesedb, libpff, yara-python and PyYAML. While they are missing,
+the modules that use them degrade — they say so, but they degrade — and "no
+match" becomes ambiguous. The image removes that ambiguity.
+
+```bash
+docker run --rm -it \
+  -v /mnt/disk:/evidence:ro \
+  -v "$PWD/report":/report \
+  --user "$(id -u):$(id -g)" \
+  ghcr.io/fabriren/fiuto /evidence --all
+```
+
+Two flags are not decoration:
+
+- **`:ro` on the evidence.** FIUTO never writes to the volume, but a writable
+  mount means some other process in the container could, and "could the exhibit
+  have been modified?" has only one acceptable answer. The entrypoint checks and
+  warns if you forget.
+- **`--user`.** Without it the container runs as root and the reports land on
+  your host owned by root: you cannot archive them without sudo, and the custody
+  manifest records an operator who is not the person who ran the analysis. The
+  entrypoint warns about this too.
+
+Neither warning is blocking — someone who knows what they are doing must be able
+to proceed — but neither stays implicit.
+
+```bash
+docker run --rm ghcr.io/fabriren/fiuto --deps
+```
+
+prints which parsers the image actually contains, so a report can state what the
+analysis was performed with. CI fails the build if any of them is missing:
+an image that builds but lacks libesedb would degrade silently exactly where the
+image promises the opposite.
+
+Dependency versions are **pinned** in `requirements.txt`. A parser that changes
+between two builds produces different reports from the same disk, and that
+difference has to be explainable. Images are published **only from `v*` tags**:
+a `latest` that moves on every push would make an analysis run last week
+irreproducible.
+
+Building it yourself:
+
+```bash
+docker build -t fiuto .
+```
+
 ## 📦 Installation
 
 1. **Clone the repository**
@@ -768,7 +818,7 @@ python3 tests/lint_embedded_python.py fiuto.sh   # compile the embedded parsers
 ```
 
 CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs on every push:
-bash syntax, ShellCheck, the bats suite, and compilation of the ~99 Python
+bash syntax, ShellCheck, the bats suite, the Docker image, and compilation of the ~99 Python
 parsers embedded as heredocs on both Python 3.9 and 3.12.
 
 That last job is not decoration: `bash -n` treats heredocs as opaque text, so a
@@ -931,6 +981,56 @@ Lo script utilizza internamente helper bash per:
 - Estrazione di metadati da formati proprietari
 
 ---
+
+## 🐳 Docker (consigliato)
+
+L'attrito maggiore con FIUTO non è il tool: sono regipy, python-evtx, libesedb,
+libpff, yara-python e PyYAML. Finché mancano, i moduli che le usano si degradano
+— lo dichiarano, ma si degradano — e "nessun match" diventa ambiguo. L'immagine
+toglie quell'ambiguità.
+
+```bash
+docker run --rm -it \
+  -v /mnt/disk:/evidence:ro \
+  -v "$PWD/report":/report \
+  --user "$(id -u):$(id -g)" \
+  ghcr.io/fabriren/fiuto /evidence --all
+```
+
+Le due opzioni non sono decorative:
+
+- **`:ro` sull'evidenza.** FIUTO non scrive mai sul volume, ma un mount
+  scrivibile significa che qualche altro processo del container potrebbe, e
+  "il reperto poteva essere modificato?" ha una sola risposta accettabile.
+  L'entrypoint controlla e avvisa se te ne dimentichi.
+- **`--user`.** Senza, il container gira da root e i report finiscono sull'host
+  di proprietà di root: non li archivi senza sudo, e il manifesto di custodia
+  registra un operatore che non è chi ha eseguito l'analisi. Anche di questo
+  l'entrypoint avvisa.
+
+Nessuno dei due avvisi è bloccante — chi sa cosa sta facendo deve poter
+procedere — ma nessuno dei due resta implicito.
+
+```bash
+docker run --rm ghcr.io/fabriren/fiuto --deps
+```
+
+stampa quali parser l'immagine contiene davvero, così una relazione può
+dichiarare con cosa è stata fatta l'analisi. La CI fa fallire la build se ne
+manca uno: un'immagine che si costruisce ma senza libesedb degraderebbe in
+silenzio proprio dove l'immagine promette il contrario.
+
+Le versioni delle dipendenze sono **fissate** in `requirements.txt`. Un parser
+che cambia fra due build produce report diversi sullo stesso disco, e quella
+differenza va spiegata. Le immagini si pubblicano **solo dai tag `v*`**: un
+`latest` che si sposta a ogni push renderebbe irriproducibile un'analisi fatta
+la settimana prima.
+
+Per costruirla da sé:
+
+```bash
+docker build -t fiuto .
+```
 
 ## 📦 Installazione
 
@@ -1561,7 +1661,7 @@ python3 tests/lint_embedded_python.py fiuto.sh   # compila i parser incorporati
 ```
 
 La CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) gira a ogni push:
-sintassi bash, ShellCheck, suite bats e compilazione dei ~99 parser Python
+sintassi bash, ShellCheck, suite bats, immagine Docker e compilazione dei ~99 parser Python
 incorporati come heredoc, sia su Python 3.9 sia su 3.12.
 
 Quest'ultimo job non è un ornamento: `bash -n` tratta gli heredoc come testo

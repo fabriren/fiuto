@@ -19,6 +19,14 @@
 # Documentazione di progetto (piano di implementazione).
 !/docs/
 
+# Immagine Docker: Dockerfile, dipendenze fissate ed entrypoint.
+# La whitelist e' comoda ma silenziosa: un file nuovo alla radice non compare
+# nemmeno fra i non tracciati. Aggiungendo file alla radice, aggiungerli qui.
+!/Dockerfile
+!/.dockerignore
+!/requirements.txt
+!/docker-entrypoint.sh
+
 # Sorgenti divisi per OS e script di build.
 # fiuto.sh alla radice e' il prodotto della concatenazione (vedi build.sh):
 # resta versionato perche' il tool si distribuisce come file singolo.

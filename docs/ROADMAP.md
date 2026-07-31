@@ -4,7 +4,7 @@ Documento di lavoro per portare FIUTO da 2.1 a 3.0. È pensato per essere
 ripreso a distanza di tempo, anche da un'altra sessione o da un'altra persona:
 ogni fase dichiara **cosa fare**, **dove**, **come verificarlo** e **perché**.
 
-Stato aggiornato al: **2026-07-30** (versione 2.2, Fasi 1-5 complete, Fase 6 iniziata).
+Stato aggiornato al: **2026-07-31** (versione 2.2, Fasi 1-5 e 7 complete, Fase 6 quasi).
 
 ---
 
@@ -34,7 +34,7 @@ Stato aggiornato al: **2026-07-30** (versione 2.2, Fasi 1-5 complete, Fase 6 ini
 | Area | Stato |
 |---|---|
 | CI (bash -n, ShellCheck, bats, parser Python su 3.9 + 3.12) | ✅ |
-| Suite di test — 207 test bats | ✅ |
+| Suite di test — 216 test bats | ✅ |
 | Replay transaction log registro (`.LOG1`/`.LOG2`) | ✅ |
 | Export JSONL / schema Timesketch (`--jsonl`) | ✅ |
 | macOS: FSEvents, Spotlight | ✅ |
@@ -54,6 +54,7 @@ Stato aggiornato al: **2026-07-30** (versione 2.2, Fasi 1-5 complete, Fase 6 ini
 | Fase 6.6 — esecuzione parallela (`--jobs N`) con esito invariante | ✅ |
 | Fase 6.7 — motore IoC tipizzato, defanging, import STIX/MISP | ✅ |
 | Fase 6.8 — `--redact` / `--defang`, copie condivisibili | ✅ |
+| Fase 7 — immagine Docker con tutte le dipendenze + CI su GHCR | ✅ |
 | Libreria Python condivisa Sigma (`src/lib/19-pylib-sigma.sh`) | ✅ |
 | Libreria Python condivisa timeline (`src/lib/17-pylib-timeline.sh`) | ✅ |
 | Flag `defer` nel registro (numerazione stabile) | ✅ |
@@ -324,7 +325,7 @@ Ordinati per rapporto valore/costo.
    **Correlazione:** cluster temporali di 30 minuti su tutti gli eventi, con
    scenari in `correlation_scenarios_tsv`. Sono ipotesi, e il report le
    presenta come tali. Ogni riscontro porta la sua tecnica MITRE: il punto 8
-   copre gia' il punto 8; l'export del layer Navigator e' escluso per decisione.
+   copre gia' il mapping ATT&CK: ogni riscontro porta la sua tecnica.
 
    **Punteggio:** somma dei pesi (40/15/5/1) limitata a 100, con formula
    stampata nel report. Ordina la coda di lavoro, non misura la
@@ -462,21 +463,57 @@ Ordinati per rapporto valore/costo.
    Aggiunto anche un `flock` sull'append alla timeline unica: con `--jobs` le
    righe JSON superano PIPE_BUF e si intreccerebbero, producendo JSON non
    parsabile proprio nel file destinato a un altro strumento.
-8. **Mapping MITRE ATT&CK.** Le tecniche sono già sui riscontri (Fase 6.3).
-   L'export del layer Navigator è **escluso per decisione** (2026-07-30): era
-   stato implementato e poi rimosso. **Non reimplementarlo** senza che la
-   richiesta arrivi di nuovo esplicitamente.
-9. **Immagini senza mount manuale.** `ewfmount` per E01, `losetup` per raw/dd,
+8. **Immagini senza mount manuale.** `ewfmount` per E01, `losetup` per raw/dd,
    volumi cifrati (BitLocker/`dislocker`, LUKS, FileVault).
 
 ---
 
-## Fase 7 — Distribuzione
+## Fase 7 — Distribuzione ✅ **fatta**
 
-- **Immagine Docker** con tutte le dipendenze (regipy, impacket, libesedb,
-  mft, snappy, libpff). L'attrito maggiore per chi usa FIUTO è l'installazione
-  delle dipendenze: un'immagine ufficiale lo azzera.
-- Pubblicazione su GHCR dalla CI, tag allineato alla versione.
+`Dockerfile`, `requirements.txt`, `docker-entrypoint.sh`, job `docker` in CI.
+Immagine di 328 MB su `python:3.12-slim-bookworm` con tutte e nove le librerie
+che FIUTO cerca a runtime, più i binari (`file`, `strings`, `sqlite3`,
+`ntfscat`, `ewfmount`, `flock`, `fls`, `icat`).
+
+**Perché era la voce giusta da fare.** L'attrito vero non è il tool: sono
+regipy, python-evtx, libesedb, libpff, yara-python, PyYAML. Finché mancano, i
+moduli che le usano si degradano — dichiarandolo, ma degradandosi — e "nessun
+match" diventa ambiguo. L'immagine è l'unico modo per garantire che quella
+frase significhi davvero quello.
+
+### Decisioni
+
+- **Versioni fissate** in `requirements.txt`. Un parser che cambia fra due
+  build produce report diversi sullo stesso disco, e in perizia la differenza
+  va spiegata. Il pin si aggiorna deliberatamente, non per inerzia. C'è un test
+  che rifiuta una riga senza `==`.
+- **`build.sh --check` gira dentro il Dockerfile**, non solo in CI: un'immagine
+  costruita a mano da un albero sporco conterrebbe altrimenti un `fiuto.sh`
+  diverso dai suoi sorgenti.
+- **`--deps`** stampa l'inventario dei parser presenti. Serve a poter
+  dichiarare, in una relazione, con cosa è stata fatta l'analisi — e la CI lo
+  usa per fallire se una libreria manca: un'immagine che si costruisce ma senza
+  libesedb degraderebbe in silenzio proprio dove promette il contrario.
+- **L'entrypoint verifica le due condizioni che rendono valida l'analisi** e
+  che è facilissimo sbagliare scrivendo un `docker run` a mano: evidenza in
+  `:ro` e `--user`. Nessuna delle due è bloccante — chi sa cosa fa deve poter
+  procedere — ma nessuna resta implicita.
+- **Pubblicazione solo dai tag `v*`.** Un `latest` che cambia a ogni push
+  renderebbe irriproducibile un'analisi fatta la settimana prima.
+
+### Verifica fatta
+
+Build riuscito, `--deps` con nove librerie su nove, esecuzione `--all` su un
+volume Linux reale montato `:ro`: report prodotti, di proprietà dell'utente
+invocante grazie a `--user`, volume di evidenza non modificato. Con il mount
+scrivibile e senza `--user` l'entrypoint emette entrambi gli avvisi.
+
+### Resta da fare
+
+- `docker buildx` multi-arch (arm64) — utile su Apple Silicon, non provato.
+- Nessuno dei binari libyal per VSS (`vshadowinfo`) è pacchettizzato in Debian:
+  il modulo 43 continua a dichiarare il comando invece di eseguirlo, immagine o
+  no. Va compilato da sorgente se si vuole chiudere quel caso.
 
 ---
 

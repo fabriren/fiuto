@@ -1,0 +1,18 @@
+# Dipendenze Python di FIUTO, con versione fissata.
+#
+# Il pin non e' pignoleria: un parser che cambia fra due build produce report
+# diversi sullo stesso disco, e in ambito peritale la differenza va spiegata.
+# Si aggiorna deliberatamente, non per inerzia.
+#
+# Le righe marcate "degrada" sono quelle senza le quali FIUTO continua a
+# funzionare dichiarando cosa non puo' fare; le altre disattivano moduli interi.
+
+regipy==5.0.0             # hive di registro + replay dei transaction log
+python-evtx==0.8.0        # log eventi .evtx (modulo 12 e motore Sigma)
+libesedb-python==20240420 # ESE: WebCacheV01, Windows.edb, SRUM   (degrada su stringhe)
+libpff-python==20231205   # PST/OST                               (degrada su stringhe)
+yara-python==4.5.4        # regole YARA                           (senza, il modulo si ferma)
+PyYAML==6.0.2             # regole Sigma                          (senza, il modulo si ferma)
+impacket==0.12.0          # SAM/NTDS, segreti LSA
+mft==0.7.0                               # $MFT                                  (degrada)
+python-snappy==0.7.3      # LevelDB delle app Electron            (degrada: c'e' il fallback puro Python)

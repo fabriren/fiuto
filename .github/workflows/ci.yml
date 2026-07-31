@@ -87,3 +87,61 @@ jobs:
           python-version: ${{ matrix.python }}
       - name: Compila ogni heredoc Python
         run: python3 tests/lint_embedded_python.py fiuto.sh
+
+  docker:
+    # L'attrito maggiore per chi usa FIUTO sono le dipendenze: l'immagine le
+    # azzera, ma solo se resta costruibile. Il job la costruisce a ogni push e
+    # verifica che i parser ci siano davvero — un'immagine che si costruisce
+    # ma in cui manca libesedb degraderebbe in silenzio proprio dove FIUTO
+    # promette il contrario.
+    name: Immagine Docker
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: fiuto:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Le dipendenze dichiarate sono tutte presenti
+        run: |
+          docker run --rm fiuto:ci --deps | tee /tmp/deps.txt
+          if grep -q MANCANTE /tmp/deps.txt; then
+            echo "::error::l'immagine non contiene tutte le dipendenze dichiarate"
+            exit 1
+          fi
+      - name: Il tool parte e mostra l'aiuto
+        run: docker run --rm fiuto:ci --help | grep -q "fiuto.sh"
+      - name: L'entrypoint avvisa se l'evidenza e' scrivibile
+        run: |
+          mkdir -p /tmp/ev && : > /tmp/ev/x
+          docker run --rm -v /tmp/ev:/evidence fiuto:ci --help 2>&1 \
+            | grep -qi "SCRITTURA" || { echo "::error::avviso mancante"; exit 1; }
+
+      # Pubblicazione solo dai tag: un'immagine "latest" che cambia a ogni push
+      # su un branch renderebbe irriproducibile un'analisi fatta la settimana
+      # prima, che e' esattamente cio' che in perizia non deve succedere.
+      - name: Login su GHCR
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Push su GHCR
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+            ghcr.io/${{ github.repository }}:latest
+          cache-from: type=gha
