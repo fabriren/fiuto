@@ -17,7 +17,7 @@ PYEOF
 
 # --- macOS 2 — User Accounts (dslocal) ---
 module_macos_accounts() {
-    section_header "macOS — User Accounts" "$RED"
+    section_header "macOS - User Accounts" "$RED"
     check_target_root || return 1
     local UDIR
     UDIR=$(ci_find_dir "$WIN_ROOT" "var/db/dslocal/nodes/Default/users")

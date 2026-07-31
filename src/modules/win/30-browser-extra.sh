@@ -87,7 +87,7 @@ PYEOF
                     if [[ -n "$DL_OUT" ]]; then
                         echo "$DL_OUT" >> "$TMP_DL_ROWS"
                         TOTAL_DL=$((TOTAL_DL + $(echo "$DL_OUT" | wc -l)))
-                        ok "$USERNAME / $BLABEL — $(L "download trovati" "downloads found")"
+                        ok "$USERNAME / $BLABEL - $(L "download trovati" "downloads found")"
                     fi
                 done
             else
@@ -134,7 +134,7 @@ PYEOF
                 if [[ -n "$DL_OUT" ]]; then
                     echo "$DL_OUT" >> "$TMP_DL_ROWS"
                     TOTAL_DL=$((TOTAL_DL + $(echo "$DL_OUT" | wc -l)))
-                    ok "$USERNAME / $BLABEL — $(L "download trovati" "downloads found")"
+                    ok "$USERNAME / $BLABEL - $(L "download trovati" "downloads found")"
                 fi
             fi
         done
@@ -177,7 +177,7 @@ PYEOF
             if [[ -n "$LG_OUT" ]]; then
                 echo "$LG_OUT" >> "$TMP_LG_ROWS"
                 TOTAL_LG=$((TOTAL_LG + $(echo "$LG_OUT" | wc -l)))
-                ok "$USERNAME / $BLABEL — $(L "credenziali salvate trovate" "saved credentials found")"
+                ok "$USERNAME / $BLABEL - $(L "credenziali salvate trovate" "saved credentials found")"
             fi
         done
     done < <(get_user_homes)
@@ -200,12 +200,12 @@ PYEOF
           <div class='stat info'><div class='label'>Login salvati</div><div class='value'>${TOTAL_LG}</div></div>
         </div><main>
         <style>.fld{word-break:break-all;overflow-wrap:anywhere;white-space:pre-wrap}</style>
-        <div class='stitle'>$(L "Download — Timestamp · Utente/Browser · URL · Destinazione" "Downloads — Timestamp · User/Browser · URL · Destination")</div>
+        <div class='stitle'>$(L "Download - Timestamp · Utente/Browser · URL · Destinazione" "Downloads - Timestamp · User/Browser · URL · Destination")</div>
         <div class='card'><table>
           <thead><tr><th style='width:12%'>Timestamp</th><th style='width:14%'>$(L "Utente/Browser" "User/Browser")</th><th>URL</th><th style='width:20%'>$(L "Destinazione" "Destination")</th></tr></thead>
           <tbody>${DL_ROWS:-<tr><td colspan='4' class='dim' style='padding:1rem'>Nessun download trovato</td></tr>}</tbody>
         </table></div>
-        <div class='stitle' style='margin-top:2rem'>$(L "Login Data — Credenziali salvate (password cifrate DPAPI)" "Login Data — Saved credentials (DPAPI-encrypted passwords)")</div>
+        <div class='stitle' style='margin-top:2rem'>$(L "Login Data - Credenziali salvate (password cifrate DPAPI)" "Login Data - Saved credentials (DPAPI-encrypted passwords)")</div>
         <div class='card'><table>
           <thead><tr><th style='width:12%'>Timestamp</th><th style='width:14%'>$(L "Utente/Browser" "User/Browser")</th><th>URL</th><th style='width:15%'>Username</th><th style='width:10%'>Password</th></tr></thead>
           <tbody>${LG_ROWS:-<tr><td colspan='5' class='dim' style='padding:1rem'>Nessuna credenziale trovata</td></tr>}</tbody>

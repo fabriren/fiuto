@@ -1,14 +1,14 @@
 
 # --- LINUX 8 — Persistence ---
 module_linux_persistence() {
-    section_header "Linux — Persistence" "$ORANGE"
+    section_header "Linux - Persistence" "$ORANGE"
     check_target_root || return 1
     local KW="curl|wget|/tmp/|/dev/shm|base64|nc |ncat|python -c|bash -i|/dev/tcp|chmod|reverse|\\.onion|http"
     local BODY="" FOUND=0
     _persist_add() { # label, path(file o dir), glob
         local LABEL="$1" P="$2"
         if [[ -f "$P" && -s "$P" ]]; then
-            FOUND=$((FOUND + 1)); ok "$LABEL — $(basename "$P")"
+            FOUND=$((FOUND + 1)); ok "$LABEL - $(basename "$P")"
             BODY+=$(file_card_html "$P" "$KW" "⟳")
         elif [[ -d "$P" ]]; then
             while IFS= read -r F; do

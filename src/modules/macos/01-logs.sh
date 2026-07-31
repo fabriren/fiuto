@@ -1,7 +1,7 @@
 
 # --- macOS 1 — System Logs ---
 module_macos_logs() {
-    section_header "macOS — System Logs" "$GREEN"
+    section_header "macOS - System Logs" "$GREEN"
     check_target_root || return 1
     local KW="fail|error|denied|invalid|sudo|root|unauthorized|jailbreak|malware"
     local BODY="" FOUND=0
@@ -17,7 +17,7 @@ module_macos_logs() {
         local ASL; ASL=$(ci_find_dir "$LOGDIR" "asl")
         if [[ -n "$ASL" ]]; then
             local ACOUNT; ACOUNT=$(find "$ASL" -maxdepth 1 -type f 2>/dev/null | wc -l)
-            [[ "$ACOUNT" -gt 0 ]] && { FOUND=$((FOUND + 1)); ok "asl ($ACOUNT file)"; BODY+="<div class='card'><div class='card-header'><div class='uicon'>≣</div><div><div class='uname'>ASL logs</div><div class='upath'>$ASL</div></div><div class='badge'>$ACOUNT file</div></div><div style='padding:1rem 1.5rem'><p class='dim mono' style='font-size:.72rem'>$(L "Formato binario ASL — analisi approfondita fuori scope offline." "Binary ASL format — deep parsing out of offline scope.")</p></div></div>"; }
+            [[ "$ACOUNT" -gt 0 ]] && { FOUND=$((FOUND + 1)); ok "asl ($ACOUNT file)"; BODY+="<div class='card'><div class='card-header'><div class='uicon'>≣</div><div><div class='uname'>ASL logs</div><div class='upath'>$ASL</div></div><div class='badge'>$ACOUNT file</div></div><div style='padding:1rem 1.5rem'><p class='dim mono' style='font-size:.72rem'>$(L "Formato binario ASL - analisi approfondita fuori scope offline." "Binary ASL format - deep parsing out of offline scope.")</p></div></div>"; }
         fi
     fi
     # Nota: unified logs .tracev3 esplicitamente fuori scope

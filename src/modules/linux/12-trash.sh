@@ -1,7 +1,7 @@
 
 # --- LINUX 12 — Trash & Recent ---
 module_linux_trash() {
-    section_header "Linux — Trash & Recent" "$GREEN"
+    section_header "Linux - Trash & Recent" "$GREEN"
     check_target_root || return 1
     local BODY="" TOTAL=0 USERS=0
     while IFS= read -r HOME_DIR; do
@@ -20,7 +20,7 @@ module_linux_trash() {
             done < <(find "$TINFO" -maxdepth 1 -name "*.trashinfo" 2>/dev/null)
             if [[ $TN -gt 0 ]]; then
                 UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + TN))
-                ok "$UNAME — ${BOLD}$TN $(L "file cestinati" "trashed files")"
+                ok "$UNAME - ${BOLD}$TN $(L "file cestinati" "trashed files")"
                 CARDS+=$(generic_card_html "Trash" "$TINFO" "$TN file" "<table><tr><th>$(L "Cancellato il" "Deleted on")</th><th>$(L "Percorso originale" "Original path")</th></tr>$TTAB</table>" "♺")
             fi
         fi

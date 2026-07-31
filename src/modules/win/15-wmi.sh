@@ -3,7 +3,7 @@
 #  MODULO 15 — WMI Subscriptions (persistenza invisibile)
 # ================================================================
 module_wmi() {
-    section_header "$(L "WMI Subscriptions — Persistenza Invisibile" "WMI Subscriptions — Fileless Persistence")" "$RED"
+    section_header "$(L "WMI Subscriptions - Persistenza Invisibile" "WMI Subscriptions - Fileless Persistence")" "$RED"
     check_win_root || return 1
 
 
@@ -25,7 +25,7 @@ module_wmi() {
         OBJECTS_FILE=$(find "$WMI_DIR" -iname "OBJECTS.DATA" 2>/dev/null | head -1)
 
     if [[ -z "$OBJECTS_FILE" ]]; then
-        warn "$(L "OBJECTS.DATA non trovato — analisi tramite strings sul repository" "OBJECTS.DATA not found — analysis via strings on repository")"
+        warn "$(L "OBJECTS.DATA non trovato - analisi tramite strings sul repository" "OBJECTS.DATA not found - analysis via strings on repository")"
     fi
 
     declare -a WMI_ENTRIES=()
@@ -134,13 +134,13 @@ PYEOF
         <style>
           .fld{word-break:break-all;overflow-wrap:anywhere;white-space:pre-wrap}
         </style>
-        <div class='stitle'>$(L "WMI Event Subscriptions — Tipo · Contenuto" "WMI Event Subscriptions — Type · Content")</div>
+        <div class='stitle'>$(L "WMI Event Subscriptions - Tipo · Contenuto" "WMI Event Subscriptions - Type · Content")</div>
         <div class='card'><table>
           <thead><tr><th style='width:20%'>$(L "Tipo" "Type")</th><th>$(L "Valore / Query / Script" "Value / Query / Script")</th></tr></thead>
           <tbody>${ROWS}</tbody>
         </table></div>
         <div style='margin-top:1.5rem;padding:1rem 1.5rem;background:var(--bg3);border:1px solid var(--border);border-radius:6px;font-size:.8rem'>
-          <div style='font-family:var(--mono);color:var(--accent);margin-bottom:.5rem'>ℹ ATT&amp;CK T1546.003 — WMI Event Subscription</div>
+          <div style='font-family:var(--mono);color:var(--accent);margin-bottom:.5rem'>ℹ ATT&amp;CK T1546.003 - WMI Event Subscription</div>
           <div style='color:var(--text-mid);line-height:1.8'>
             Meccanismo di persistenza invisibile: non compare in Run keys, Task, né Services.<br>
             Classi chiave: <span class='mono'>__EventFilter</span> · <span class='mono'>CommandLineEventConsumer</span> · <span class='mono'>ActiveScriptEventConsumer</span> · <span class='mono'>__FilterToConsumerBinding</span>

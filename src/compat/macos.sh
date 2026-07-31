@@ -215,7 +215,7 @@ _macos_image_open() {
     local IMG="$IMAGE_PATH"
     [[ -f "$IMG" ]] || { err "$(L "Immagine non trovata:" "Image not found:") $IMG" >&2; return 1; }
     local TYPE; TYPE=$(image_type "$IMG")
-    info "$(L "Immagine:" "Image:") ${BOLD}$(basename "$IMG")${RESET} — $(L "formato" "format"): ${BOLD}${TYPE}" >&2
+    info "$(L "Immagine:" "Image:") ${BOLD}$(basename "$IMG")${RESET} - $(L "formato" "format"): ${BOLD}${TYPE}" >&2
 
     case "$TYPE" in
         vmdk|vhdx|qcow2)

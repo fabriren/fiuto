@@ -3,7 +3,7 @@
 #  MODULO 20 — SAM: Hash password account locali
 # ================================================================
 module_sam() {
-    section_header "$(L "SAM — Hash Account Locali" "SAM — Local Account Hashes")" "$RED"
+    section_header "$(L "SAM - Hash Account Locali" "SAM - Local Account Hashes")" "$RED"
     check_win_root || return 1
 
     local SAM_HIVE;  SAM_HIVE=$(get_hive "SAM")
@@ -159,12 +159,12 @@ PYEOF
 
     {
         html_header "SAM"
-        html_page_header "SM" "SAM — <span>Hash Account Locali</span>" \
+        html_page_header "SM" "SAM - <span>Hash Account Locali</span>" \
             "Windows\\System32\\config\\SAM" "$SCAN" "$WIN_ROOT"
         echo "<div class='statsbar'>
           <div class='stat'><div class='label'>Account</div><div class='value'>${TOTAL}</div></div>
         </div><main>
-        <div class='stitle'>Hash NTLM account locali — craccabili offline con hashcat/john</div>
+        <div class='stitle'>Hash NTLM account locali - craccabili offline con hashcat/john</div>
         <div class='card'><table>
           <thead><tr><th>Username</th><th style='width:7%'>RID</th><th style='width:27%'>LM Hash</th><th style='width:27%'>NT Hash</th><th>Note</th></tr></thead>
           <tbody>${ROWS}</tbody>

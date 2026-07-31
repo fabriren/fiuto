@@ -75,8 +75,8 @@ image_type() {
     [[ -f "$F" ]] || { echo "assente"; return 1; }
     local MAGIC; MAGIC=$(head -c 8 "$F" 2>/dev/null | od -An -tx1 | tr -d ' \n')
     case "$MAGIC" in
-        45564609*) echo "ewf" ; return ;;   # "EVF\x09" — EnCase E01
-        45564632*) echo "ewf2"; return ;;   # "EVF2"    — Ex01
+        45564609*) echo "ewf" ; return ;;   # "EVF\x09" - EnCase E01
+        45564632*) echo "ewf2"; return ;;   # "EVF2"    - Ex01
     esac
     case "$MAGIC" in
         4b444d56*) echo "vmdk" ; return ;;  # "KDMV"
@@ -182,7 +182,7 @@ image_open() {
     [[ -f "$IMG" ]] || { err "$(L "Immagine non trovata:" "Image not found:") $IMG" >&2; return 1; }
 
     local TYPE; TYPE=$(image_type "$IMG")
-    info "$(L "Immagine:" "Image:") ${BOLD}$(basename "$IMG")${RESET} — $(L "formato" "format"): ${BOLD}${TYPE}" >&2
+    info "$(L "Immagine:" "Image:") ${BOLD}$(basename "$IMG")${RESET} - $(L "formato" "format"): ${BOLD}${TYPE}" >&2
 
     case "$TYPE" in
         vmdk|vhdx|qcow2)
@@ -257,7 +257,7 @@ image_open() {
     fi
     if [[ "$CRYPTO" != "none" ]] && ! _image_key > /dev/null; then
         err "$(L "Partizione ${CRYPTO}: serve la chiave con --unlock <chiave|file>." \
-                 "Partition is ${CRYPTO}: a key is required — --unlock <key|file>.")" >&2
+                 "Partition is ${CRYPTO}: a key is required - --unlock <key|file>.")" >&2
         info "$(L "FIUTO non tenta di indovinarla." "FIUTO does not attempt to guess it.")" >&2
         return 1
     fi

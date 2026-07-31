@@ -3,7 +3,7 @@
 #  MODULO 2 — IFEO (Image File Execution Options)
 # ================================================================
 module_ifeo() {
-    section_header "IFEO — Image File Execution Options" "$RED"
+    section_header "IFEO - Image File Execution Options" "$RED"
     check_win_root || return 1
 
     if ! check_regipy; then

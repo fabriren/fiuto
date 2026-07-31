@@ -104,7 +104,7 @@ PYEOF
         [[ -n "$T_TRIGGERS" ]] && DETAILS+="<div class='drow'><span class='lbl'>TRG</span><span class='mono fld' style='color:var(--accent4)'>$(_esc "$T_TRIGGERS")</span></div>"
         [[ -n "$T_AUTHOR"   ]] && DETAILS+="<div class='drow'><span class='lbl'>AUT</span><span class='mono fld dim'>$(_esc "$T_AUTHOR")</span></div>"
         [[ -n "$T_DESC"     ]] && DETAILS+="<div class='drow'><span class='lbl'>DSC</span><span class='fld' style='font-size:.72rem;color:var(--text-mid)'>$(_esc "$T_DESC")</span></div>"
-        [[ -z "$DETAILS"    ]] && DETAILS="<span class='dim' style='font-size:.72rem'>—</span>"
+        [[ -z "$DETAILS"    ]] && DETAILS="<span class='dim' style='font-size:.72rem'>-</span>"
 
         ROWS+="<tr ${ROW_STYLE}>
           <td class='tname' style='vertical-align:top;padding-top:.5rem'>$(_esc "$TNAME")</td>
@@ -160,7 +160,7 @@ PYEOF
             padding: .5rem .8rem .5rem 1rem;
           }
         </style>
-        <div class='stitle'>Task pianificati — CMD · ARG · DIR · TRG · AUT · DSC</div>
+        <div class='stitle'>Task pianificati - CMD · ARG · DIR · TRG · AUT · DSC</div>
         <div class='card'><table>
           <thead><tr>
             <th style='width:22%;min-width:160px'>Task</th>

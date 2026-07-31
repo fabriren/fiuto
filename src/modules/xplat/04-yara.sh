@@ -301,7 +301,7 @@ if s['stopped_at_cap']:
                              'The scan stopped at the maximum file cap: it is PARTIAL.') + '</b>')
 for r in s['rule_files_rejected']:
     out.append('<br>' + L('Regole scartate: ', 'Rules rejected: ')
-               + html.escape(r['file']) + ' — ' + html.escape(r['error']))
+               + html.escape(r['file']) + ' - ' + html.escape(r['error']))
 out.append('</div></div>')
 print(''.join(out))
 PYEOF

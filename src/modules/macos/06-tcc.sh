@@ -1,7 +1,7 @@
 
 # --- macOS 6 — TCC Privacy ---
 module_macos_tcc() {
-    section_header "macOS — TCC Privacy" "$RED"
+    section_header "macOS - TCC Privacy" "$RED"
     check_target_root || return 1
     local BODY="" TOTAL=0
     _tcc_card() { # db, label
@@ -10,7 +10,7 @@ module_macos_tcc() {
         [[ -z "$ROWS" || "$ROWS" == ERROR* ]] && ROWS=$(query_sqlite "$DB" "SELECT service, client, allowed FROM access ORDER BY service")
         [[ -z "$ROWS" || "$ROWS" == ERROR* ]] && return
         local N; N=$(printf '%s\n' "$ROWS" | grep -c .); TOTAL=$((TOTAL + N))
-        ok "$LBL — ${BOLD}$N $(L "permessi" "permissions")"
+        ok "$LBL - ${BOLD}$N $(L "permessi" "permissions")"
         local TABLE; TABLE=$(_rows_to_table "$ROWS" "Service" "Client" "Auth")
         BODY+=$(generic_card_html "$LBL" "$DB" "$N" "$TABLE" "⊘")
     }

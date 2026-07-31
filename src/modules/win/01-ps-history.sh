@@ -17,12 +17,12 @@ module_ps_history() {
         local PSRL_DIR
         PSRL_DIR=$(ci_find_dir "$USER_DIR" "$PSREADLINE_REL")
         if [[ -z "$PSRL_DIR" || ! -d "$PSRL_DIR" ]]; then
-            dim_msg "$USERNAME — $(L "PSReadLine non trovata" "PSReadLine not found")"
+            dim_msg "$USERNAME - $(L "PSReadLine non trovata" "PSReadLine not found")"
             continue
         fi
         mapfile -t HIST_FILES < <(find "$PSRL_DIR" -maxdepth 1 -iname "*_history.txt" -type f 2>/dev/null)
         if [[ ${#HIST_FILES[@]} -eq 0 ]]; then
-            warn "$USERNAME — $(L "PSReadLine trovata ma nessun history" "PSReadLine found but no history")"
+            warn "$USERNAME - $(L "PSReadLine trovata ma nessun history" "PSReadLine found but no history")"
             continue
         fi
         declare -a SORT_LIST=()
@@ -34,7 +34,7 @@ module_ps_history() {
         done
         mapfile -t SORTED < <(printf '%s\n' "${SORT_LIST[@]}" | sort -t'|' -k1 -rn)
         local COUNT=${#SORTED[@]}
-        ok "$USERNAME — ${BOLD}$COUNT file history"
+        ok "$USERNAME - ${BOLD}$COUNT file history"
         local FILE_NAMES="" FILE_SIZES="" FILE_CTIMES="" FILE_MTIMES="" FILE_PATHS=""
         for ENTRY in "${SORTED[@]}"; do
             local F="${ENTRY#*|}"
@@ -49,7 +49,7 @@ module_ps_history() {
                 FCTIME=$(stat -c "%z" "$F" 2>/dev/null | cut -d'.' -f1 || echo "?")
             fi
             local LINES; LINES=$(wc -l < "$F" 2>/dev/null || echo "?")
-            echo -e "      ${DIM}• $FNAME  (${FSIZE} bytes, ${LINES} righe — creato: $FCTIME)${RESET}"
+            echo -e "      ${DIM}• $FNAME  (${FSIZE} bytes, ${LINES} righe - creato: $FCTIME)${RESET}"
             # Stampa contenuto con highlight
             local DECODED
             DECODED=$("$PY3" -c "

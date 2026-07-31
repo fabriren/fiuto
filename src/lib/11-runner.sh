@@ -50,7 +50,7 @@ run_batch_module() {
 
     if [[ $SKIPPED -eq 1 ]]; then
         printf '\r\033[K'
-        echo -e "  ${YELLOW}[⏭]${RESET} [${mod_num}/${total_mods}] $mod_name — $(L "annullato (ESC)" "cancelled (ESC)")"
+        echo -e "  ${YELLOW}[⏭]${RESET} [${mod_num}/${total_mods}] $mod_name - $(L "annullato (ESC)" "cancelled (ESC)")"
         SUMMARY_TABLE+=("$mod_num|$mod_name|SKIP|$(L "annullato" "cancelled")")
         rm -f "$_REP_TMP"
         return
@@ -63,11 +63,11 @@ run_batch_module() {
         done < "$_REP_TMP"
         local rep_path="${GENERATED_REPORTS[-1]}"
         printf '\r\033[K'
-        echo -e "  ${GREEN}[✓]${RESET} [${mod_num}/${total_mods}] $mod_name — report: ${DIM}${rep_path}${RESET}"
+        echo -e "  ${GREEN}[✓]${RESET} [${mod_num}/${total_mods}] $mod_name - report: ${DIM}${rep_path}${RESET}"
         SUMMARY_TABLE+=("$mod_num|$mod_name|SI|$rep_path")
     else
         printf '\r\033[K'
-        echo -e "  ${DIM}[i] [${mod_num}/${total_mods}] $mod_name — $(L "nessun risultato" "no results")${RESET}"
+        echo -e "  ${DIM}[i] [${mod_num}/${total_mods}] $mod_name - $(L "nessun risultato" "no results")${RESET}"
         SUMMARY_TABLE+=("$mod_num|$mod_name|NO|-")
     fi
     rm -f "$_REP_TMP"
@@ -147,10 +147,10 @@ run_batch_pool() {
                 [[ -n "$_rep" && -f "$_rep" ]] && GENERATED_REPORTS+=("$_rep")
             done < "$_rf"
             local _last; _last=$(tail -1 "$_rf")
-            echo -e "  ${GREEN}[✓]${RESET} [${_i}/${_total}] $_label — report: ${DIM}${_last}${RESET}"
+            echo -e "  ${GREEN}[✓]${RESET} [${_i}/${_total}] $_label - report: ${DIM}${_last}${RESET}"
             SUMMARY_TABLE+=("$_i|$_label|SI|$_last")
         else
-            echo -e "  ${DIM}[i] [${_i}/${_total}] $_label — $(L "nessun risultato" "no results")${RESET}"
+            echo -e "  ${DIM}[i] [${_i}/${_total}] $_label - $(L "nessun risultato" "no results")${RESET}"
             SUMMARY_TABLE+=("$_i|$_label|NO|-")
         fi
     done
@@ -177,6 +177,16 @@ generate_full_dashboard() {
     local DASH="${REPORT_BASE_DIR}/index.html"
     local TABS="" COUNT_OK=0 COUNT_TOTAL=0
 
+    # L'executive summary e' la PRIMA scheda, ed e' quella su cui la dashboard
+    # si apre: e' il documento da cui si comincia a leggere, non uno dei
+    # novanta report da cercare nella lista.
+    local SUMMARY_HTML="${REPORT_BASE_DIR}/executive_summary.html"
+    if [[ -f "$SUMMARY_HTML" ]]; then
+        TABS+="<button class='tab tab-summary' data-src='executive_summary.html'>"
+        TABS+="<span class='tn'>★</span><span class='tl'>$(html_esc "$(L "Executive Summary" "Executive Summary")")</span>"
+        TABS+="<span class='dot ok'></span></button>"
+    fi
+
     for row in "${SUMMARY_TABLE[@]}"; do
         IFS='|' read -r mnum mname msy mpath <<< "$row"
         [[ -z "$mnum" ]] && continue
@@ -189,7 +199,7 @@ generate_full_dashboard() {
             TABS+="<button class='tab' data-src='$(html_esc "$rel")'><span class='tn'>${NUM2}</span><span class='tl'>${NAME_ESC}</span><span class='dot ok'></span></button>"
         else
             local CLS="none" LBL
-            [[ "$msy" == "SKIP" ]] && { CLS="skip"; LBL="skip"; } || LBL="—"
+            [[ "$msy" == "SKIP" ]] && { CLS="skip"; LBL="skip"; } || LBL="-"
             TABS+="<button class='tab disabled' disabled title='$([ "$msy" = "SKIP" ] && echo "$(L "saltato" "skipped")" || echo "$(L "nessuna evidenza" "no findings")")'><span class='tn'>${NUM2}</span><span class='tl'>${NAME_ESC}</span><span class='dot ${CLS}'></span></button>"
         fi
     done
@@ -204,7 +214,7 @@ generate_full_dashboard() {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FIUTO — Full Report (${OSL})</title>
+<title>FIUTO - Full Report (${OSL})</title>
 <style>
   :root{ --bg:#080b0f; --bg2:#0d1117; --bg3:#131920; --bg4:#1a2332; --border:#1e2d3d;
     --accent:#58a6ff; --accent2:#ff7b72; --accent3:#3fb950; --accent4:#f0883e;
@@ -231,6 +241,8 @@ generate_full_dashboard() {
   .tab.active{color:#fff;border-color:var(--accent4);background:rgba(240,136,62,.12)}
   .tab.active .tn{color:var(--accent4)}
   .tab.disabled{opacity:.4;cursor:not-allowed}
+  .tab-summary{background:rgba(240,136,62,.14);border-color:var(--accent4);color:#fff}
+  .tab-summary .tn{color:var(--accent4)}
   .dot{width:.45rem;height:.45rem;border-radius:50%;flex-shrink:0}
   .dot.ok{background:var(--accent3)} .dot.none{background:var(--border)} .dot.skip{background:var(--accent4)}
   main{flex:1;position:relative;background:var(--bg)}
@@ -247,7 +259,7 @@ generate_full_dashboard() {
 <header>
   <div class="hicon">${NOSE_SVG}</div>
   <div class="htxt">
-    <h1>FIUTO — Full Report</h1>
+    <h1>FIUTO - Full Report</h1>
     <div class="sub">${OSL} · ${HOST_DISP} · ${SCAN}</div>
   </div>
   <div class="hstats">
@@ -269,14 +281,20 @@ generate_full_dashboard() {
   var tabs=document.querySelectorAll('.tab:not(.disabled)'),
       viewer=document.getElementById('viewer'),
       ph=document.getElementById('placeholder');
+  function show(t){
+    document.querySelectorAll('.tab').forEach(function(x){x.classList.remove('active');});
+    t.classList.add('active');
+    var src=t.getAttribute('data-src');
+    if(src){ viewer.src=src; viewer.classList.add('show'); ph.style.display='none'; }
+  }
   tabs.forEach(function(t){
-    t.addEventListener('click',function(){
-      document.querySelectorAll('.tab').forEach(function(x){x.classList.remove('active');});
-      t.classList.add('active');
-      var src=t.getAttribute('data-src');
-      if(src){ viewer.src=src; viewer.classList.add('show'); ph.style.display='none'; }
-    });
+    t.addEventListener('click',function(){ show(t); });
   });
+  /* All'apertura si mostra subito l'executive summary, se c'e': e' il
+     documento da cui si comincia. Altrimenti resta il segnaposto, che spiega
+     cosa fare, invece di aprire a caso il primo modulo dell'elenco. */
+  var first=document.querySelector('.tab-summary');
+  if(first){ show(first); }
 })();
 </script>
 </body></html>
@@ -357,7 +375,7 @@ render_menu_from_registry() {
     # "SELEZIONA UN MODULO" (19 caratteri) sforava il campo da 18 e spingeva
     # fuori il bordo destro: il riquadro non si chiudeva. Un valore scritto a
     # mano va rifatto a ogni traduzione e a ogni etichetta di OS nuova.
-    local _INNER="   F I U T O  —  ${_OSL}  —  ${_TITLE}   "
+    local _INNER="   F I U T O  -  ${_OSL}  -  ${_TITLE}   "
     local _W=$(( ${#_INNER} > 50 ? ${#_INNER} : 50 ))
     local _BAR; _BAR=$(printf '═%.0s' $(seq 1 "$_W"))
     # Il riempimento si scrive a mano invece di usare %-*s: ${#stringa} conta i
@@ -381,7 +399,7 @@ render_menu_from_registry() {
         fi
         echo -e "  ${WHITE}[P]${RESET}  ${BOLD}Report dir:${RESET} ${DIM}${REPORT_BASE_DIR}${RESET}  ${_RW_COLOR}[${_RW_LABEL}]${RESET}"
     else
-        echo -e "  ${WHITE}[P]${RESET}  ${BOLD}Report dir:${RESET} ${RED}$(L "non impostata — premi [P] per configurare" "not set — press [P] to configure")${RESET}"
+        echo -e "  ${WHITE}[P]${RESET}  ${BOLD}Report dir:${RESET} ${RED}$(L "non impostata - premi [P] per configurare" "not set - press [P] to configure")${RESET}"
     fi
     echo -e "  ${WHITE}[R]${RESET}  ${BOLD}$(L "Imposta root da analizzare" "Set analysis root")${RESET}  ${DIM}${WIN_ROOT:-($_NOT_SET)} [${_OSL}]${RESET}"
     echo -e "  ${YELLOW}[D]${RESET}  ${BOLD}$(L "Debug mount attivi" "Debug active mounts")${RESET}  ${DIM}${_DIAG}${RESET}"
@@ -474,7 +492,7 @@ run_all_from_registry() {
         if [[ -n "${_guard:-}" ]] && declare -F "$_guard" > /dev/null; then
             local _reason
             if ! _reason=$("$_guard"); then
-                echo -e "  ${DIM}[i] [$_i/$_total] ${_label} — $(L "saltato" "skipped") (${_reason})${RESET}"
+                echo -e "  ${DIM}[i] [$_i/$_total] ${_label} - $(L "saltato" "skipped") (${_reason})${RESET}"
                 SUMMARY_TABLE+=("$_i|$_label|SKIP|$_reason")
                 continue
             fi
@@ -514,7 +532,9 @@ run_all_from_registry() {
     ok "$(L "Report salvati integralmente in:" "All reports saved in:") ${BOLD}$REPORT_BASE_DIR"
     # Il riepilogo va generato PRIMA della dashboard: la dashboard elenca i
     # report esistenti, e il riepilogo e' il primo che va aperto.
-    generate_executive_summary
+    # Il riepilogo non si apre da solo: diventa la prima scheda della
+    # dashboard, ed e' quella su cui la dashboard si apre.
+    SUMMARY_NO_PROMPT=true generate_executive_summary
     generate_full_dashboard
     redact_summary
 }

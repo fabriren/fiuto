@@ -3,7 +3,7 @@
 #  MODULO 18 — UserAssist + RunMRU + TypedPaths + WordWheelQuery
 # ================================================================
 module_userassist() {
-    section_header "UserAssist / RunMRU / TypedPaths — Attività Utente" "$MAGENTA"
+    section_header "UserAssist / RunMRU / TypedPaths - Attività Utente" "$MAGENTA"
     check_win_root || return 1
 
     if ! check_regipy; then
@@ -22,7 +22,7 @@ module_userassist() {
     while IFS= read -r USER_DIR; do
         local USERNAME; USERNAME=$(basename "$USER_DIR")
         local NTUSER; NTUSER=$(get_user_hive "$USER_DIR" "NTUSER.DAT")
-        [[ -z "$NTUSER" ]] && { dim_msg "$USERNAME — NTUSER.DAT $(L "non trovato" "not found")"; continue; }
+        [[ -z "$NTUSER" ]] && { dim_msg "$USERNAME - NTUSER.DAT $(L "non trovato" "not found")"; continue; }
 
         info "Parsing NTUSER.DAT: $USERNAME"
 
@@ -245,29 +245,29 @@ PYEOF
     {
         html_header "UserAssist"
         html_page_header "UA" "UserAssist / RunMRU / <span>TypedPaths</span>" \
-            "NTUSER.DAT — Attività interattiva utente" "$SCAN" "$WIN_ROOT"
+            "NTUSER.DAT - Attività interattiva utente" "$SCAN" "$WIN_ROOT"
         echo "<div class='statsbar'>
           <div class='stat'><div class='label'>UserAssist</div><div class='value'>${TOTAL_UA}</div></div>
           <div class='stat info'><div class='label'>RunMRU</div><div class='value'>${TOTAL_RUN}</div></div>
           <div class='stat ok'><div class='label'>TypedPaths</div><div class='value'>${TOTAL_TP}</div></div>
           <div class='stat'><div class='label'>WordWheel</div><div class='value' style='color:var(--accent4)'>${TOTAL_WW}</div></div>
         </div><main>
-        <div class='stitle'>UserAssist — Programmi avviati dalla GUI (ROT13 decodificato)</div>
+        <div class='stitle'>UserAssist - Programmi avviati dalla GUI (ROT13 decodificato)</div>
         <div class='card'><table>
           <thead><tr><th style='width:12%'>$(L "Utente" "User")</th><th>$(L "Eseguibile" "Executable")</th><th style='width:6%'>$(L "Avvii" "Runs")</th><th style='width:16%'>$(L "Ultimo uso" "Last used")</th></tr></thead>
           <tbody>${UA_ROWS:-<tr><td colspan='4' class='dim' style='padding:1rem'>$(L "Nessun dato" "No data")</td></tr>}</tbody>
         </table></div>
-        <div class='stitle' style='margin-top:2rem'>RunMRU — Comandi digitati in Esegui (Win+R)</div>
+        <div class='stitle' style='margin-top:2rem'>RunMRU - Comandi digitati in Esegui (Win+R)</div>
         <div class='card'><table>
           <thead><tr><th style='width:12%'>$(L "Utente" "User")</th><th>$(L "Comando" "Command")</th></tr></thead>
           <tbody>${RUN_ROWS:-<tr><td colspan='2' class='dim' style='padding:1rem'>$(L "Nessun dato" "No data")</td></tr>}</tbody>
         </table></div>
-        <div class='stitle' style='margin-top:2rem'>TypedPaths — Percorsi digitati in Explorer</div>
+        <div class='stitle' style='margin-top:2rem'>TypedPaths - Percorsi digitati in Explorer</div>
         <div class='card'><table>
           <thead><tr><th style='width:12%'>$(L "Utente" "User")</th><th style='width:8%'>Slot</th><th>$(L "Percorso" "Path")</th></tr></thead>
           <tbody>${TP_ROWS:-<tr><td colspan='3' class='dim' style='padding:1rem'>$(L "Nessun dato" "No data")</td></tr>}</tbody>
         </table></div>
-        <div class='stitle' style='margin-top:2rem'>WordWheelQuery — Ricerche in Start Menu</div>
+        <div class='stitle' style='margin-top:2rem'>WordWheelQuery - Ricerche in Start Menu</div>
         <div class='card'><table>
           <thead><tr><th style='width:12%'>$(L "Utente" "User")</th><th>$(L "Termine cercato" "Search term")</th></tr></thead>
           <tbody>${WW_ROWS:-<tr><td colspan='2' class='dim' style='padding:1rem'>$(L "Nessun dato" "No data")</td></tr>}</tbody>

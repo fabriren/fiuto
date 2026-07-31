@@ -164,7 +164,7 @@ PYEOF
 
     if [[ "$STATUS" == "OK" && -s "$OUT" ]]; then
         _hive_replay_note "recovered" "$BASE" "${DETAIL} $(L "pagine dirty riapplicate" "dirty pages replayed")"
-        info "$(L "Transaction log applicati a" "Transaction logs applied to") ${BOLD}${BASE}${RESET} — ${DETAIL} $(L "pagine dirty" "dirty pages")" >&2
+        info "$(L "Transaction log applicati a" "Transaction logs applied to") ${BOLD}${BASE}${RESET} - ${DETAIL} $(L "pagine dirty" "dirty pages")" >&2
         log_msg "[HIVE] replay OK: $ORIG -> $OUT (${DETAIL} dirty pages)"
         _unlock; echo "$OUT"
         return
@@ -175,7 +175,7 @@ PYEOF
     : > "${OUT}.skip"
     _hive_replay_note "failed" "$BASE" "$DETAIL"
     warn "$(L "Replay dei transaction log fallito per" "Transaction log replay failed for") ${BASE}: ${DETAIL}" >&2
-    log_msg "[HIVE] replay FAILED: $ORIG — $DETAIL"
+    log_msg "[HIVE] replay FAILED: $ORIG - $DETAIL"
     _unlock; echo "$ORIG"
 }
 

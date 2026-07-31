@@ -15,7 +15,7 @@
 #  dentro il report.
 # ================================================================
 module_linux_cloud_credentials() {
-    section_header "Linux — $(L "Credenziali cloud e sviluppo" "Cloud and development credentials")" "$RED"
+    section_header "Linux - $(L "Credenziali cloud e sviluppo" "Cloud and development credentials")" "$RED"
     check_target_root || return 1
 
     local ROWS="" NFILE=0 NSECRET=0
@@ -89,9 +89,9 @@ module_linux_cloud_credentials() {
             ROWS+="${MT}	${U}	${LABEL}	${REL}	${PERM} ${WARNP}	${SZ}	${IDENT}
 "
             if [[ -n "$WARNP" ]]; then
-                warn "$U — $REL ($PERM) — $WARNP"
+                warn "$U - $REL ($PERM) - $WARNP"
             else
-                ok "$U — ${BOLD}${LABEL}${RESET} ${DIM}${REL}${RESET}"
+                ok "$U - ${BOLD}${LABEL}${RESET} ${DIM}${REL}${RESET}"
             fi
         done
     done < <(get_target_user_homes)
@@ -112,8 +112,8 @@ module_linux_cloud_credentials() {
 
     local NOTE="<div class='card' style='margin-bottom:1rem;border-color:rgba(255,123,114,.5)'><div style='padding:1rem 1.5rem;font-size:.8rem;line-height:1.7'>"
     NOTE+="<b>$(L "Cosa mostra e cosa no" "What is shown and what is not")</b><br>"
-    NOTE+="$(L "La tabella riporta identificativi non segreti — profilo, access key ID, endpoint del cluster, registry, host — perche' servono a capire a cosa quelle credenziali davano accesso. Il materiale segreto (secret key, token, password, contenuto delle chiavi private) NON viene mai stampato: e' la sua esistenza a essere il dato utile, riprodurlo qui aggiungerebbe solo un altro posto da cui puo' trapelare." \
-        "The table shows non-secret identifiers — profile, access key ID, cluster endpoint, registry, host — because they establish what those credentials granted access to. Secret material (secret keys, tokens, passwords, private key contents) is never printed: its existence is the useful fact, reproducing it here would only add one more place it can leak from.")<br><br>"
+    NOTE+="$(L "La tabella riporta identificativi non segreti - profilo, access key ID, endpoint del cluster, registry, host - perche' servono a capire a cosa quelle credenziali davano accesso. Il materiale segreto (secret key, token, password, contenuto delle chiavi private) NON viene mai stampato: e' la sua esistenza a essere il dato utile, riprodurlo qui aggiungerebbe solo un altro posto da cui puo' trapelare." \
+        "The table shows non-secret identifiers - profile, access key ID, cluster endpoint, registry, host - because they establish what those credentials granted access to. Secret material (secret keys, tokens, passwords, private key contents) is never printed: its existence is the useful fact, reproducing it here would only add one more place it can leak from.")<br><br>"
     NOTE+="<b>$(L "Priorita' di risposta" "Response priority")</b><br>"
     NOTE+="$(L "Ogni credenziale elencata va considerata compromessa e ruotata. Le chiavi SSH senza passphrase e i file con permessi larghi vanno per primi." \
         "Every credential listed must be treated as compromised and rotated. SSH keys without a passphrase and files with loose permissions come first.")"

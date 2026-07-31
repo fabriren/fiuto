@@ -130,8 +130,8 @@ total = sum(counts.values())
 banner = (
     '<div class="card" style="margin:1rem 0;border-color:#f0883e">'
     '<div style="padding:1rem 1.5rem;font-size:.82rem;line-height:1.7">'
-    '<b>' + L('COPIA OSCURATA — non e\' il report originale',
-              'REDACTED COPY — this is not the original report') + '</b><br>'
+    '<b>' + L('COPIA OSCURATA - non e\' il report originale',
+              'REDACTED COPY - this is not the original report') + '</b><br>'
     + L('Da questa copia sono stati rimossi i valori delle credenziali (hash NTLM, PSK, '
         'token, chiavi private). Il report originale, integro, sta nello stesso percorso '
         'senza il suffisso <code>.redacted</code>: e\' quello da conservare come reperto e '
@@ -170,7 +170,7 @@ PYEOF
     [[ -f "$OUT" ]] || return 0
     local D; D=$(_redact_dir) && printf '%s\t%s\n' "${N:-0}" "$OUT" >> "${D}/done" 2>/dev/null
     evidence_note "$OUT" "copia oscurata" 2>/dev/null || true
-    log_msg "[REDACT] $OUT — ${N:-0} occorrenze oscurate"
+    log_msg "[REDACT] $OUT - ${N:-0} occorrenze oscurate"
     return 0
 }
 

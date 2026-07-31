@@ -4,7 +4,7 @@
 #  MODULO 27 — Credential Manager (DPAPI blobs)
 # ================================================================
 module_credential_manager() {
-    section_header "Credential Manager — DPAPI Blobs" "$MAGENTA"
+    section_header "Credential Manager - DPAPI Blobs" "$MAGENTA"
     check_win_root || return 1
 
 
@@ -64,7 +64,7 @@ PYEOF
     separator
     info "$(L "Blob DPAPI trovati:" "DPAPI blobs found:") ${BOLD}$TOTAL"
     [[ $TOTAL -eq 0 ]] && { warn "$(L "Nessun blob DPAPI trovato." "No DPAPI blobs found.")"; return 0; }
-    warn "$(L "I blob sono cifrati con DPAPI — richiedono la master key utente per la decifratura" "Blobs are DPAPI-encrypted — require the user master key for decryption")"
+    warn "$(L "I blob sono cifrati con DPAPI - richiedono la master key utente per la decifratura" "Blobs are DPAPI-encrypted - require the user master key for decryption")"
     info "$(L "Tool utili: dpapick3, mimikatz (sekurlsa::dpapi), impacket dpapi" "Useful tools: dpapick3, mimikatz (sekurlsa::dpapi), impacket dpapi")"
     ask_yn "Generare report HTML?" || return 0
 
@@ -88,12 +88,12 @@ PYEOF
     done
     {
         html_header "Credential Manager"
-        html_page_header "CM" "Credential Manager — <span>DPAPI Blobs</span>" \
+        html_page_header "CM" "Credential Manager - <span>DPAPI Blobs</span>" \
             "AppData\\Local\\Microsoft\\Credentials" "$SCAN" "$WIN_ROOT"
         echo "<div class='statsbar'>
           <div class='stat'><div class='label'>Blob trovati</div><div class='value'>${TOTAL}</div></div>
         </div><main>
-        <div class='stitle'>$(L "Blob DPAPI — Utente · File · Path · MasterKey GUID · Dim · Timestamp" "DPAPI Blobs — User · File · Path · MasterKey GUID · Size · Timestamp")</div>
+        <div class='stitle'>$(L "Blob DPAPI - Utente · File · Path · MasterKey GUID · Dim · Timestamp" "DPAPI Blobs - User · File · Path · MasterKey GUID · Size · Timestamp")</div>
         <div class='card'><table>
           <thead><tr><th>$(L "Utente" "User")</th><th>File</th><th>Store</th><th>MK GUID</th><th>Dim.</th><th>$(L "Modificato" "Modified")</th></tr></thead>
           <tbody>${ROWS}</tbody>

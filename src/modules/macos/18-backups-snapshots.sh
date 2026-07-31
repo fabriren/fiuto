@@ -17,7 +17,7 @@
 #  `diskutil apfs listSnapshots` sul volume vivo.
 # ================================================================
 module_macos_backups() {
-    section_header "macOS — Time Machine / Snapshot" "$BLUE"
+    section_header "macOS - Time Machine / Snapshot" "$BLUE"
     check_target_root || return 1
 
     local ROWS="" NDEST=0 NTRACE=0
@@ -65,7 +65,7 @@ module_macos_backups() {
             ROWS+="Backup	$(basename "$F")	$(stat -c %y "$F" 2>/dev/null | cut -d. -f1)
 "
         done < <(find "$BK" -mindepth 2 -maxdepth 2 -type d 2>/dev/null | head -100)
-        ok "Backups.backupdb — ${BOLD}${NBK}${RESET} $(L "backup" "backups")"
+        ok "Backups.backupdb - ${BOLD}${NBK}${RESET} $(L "backup" "backups")"
     fi
 
     separator

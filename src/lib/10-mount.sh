@@ -5,7 +5,7 @@
 
 debug_mounts() {
     echo ""
-    section_header "$(L "DEBUG — Mount attivi su questo sistema" "DEBUG — Active Mounts on This System")" "$YELLOW"
+    section_header "$(L "DEBUG - Mount attivi su questo sistema" "DEBUG - Active Mounts on This System")" "$YELLOW"
     echo -e "  ${DIM}── /proc/mounts (non di sistema) ───────────────────${RESET}"
     echo ""
     local SKIP_FS='tmpfs|sysfs|proc|devtmpfs|cgroup2?|fusectl|tracefs|securityfs|pstore|bpf|hugetlbfs|mqueue|debugfs|configfs|overlay|squashfs|nsfs|efivarfs|autofs|ramfs|rpc_pipefs'
@@ -296,15 +296,15 @@ setup_report_dir() {
             _RW_OK=true
             _RW_MSG="${GREEN}[$(L "scrivibile" "writable")]${RESET}"
         else
-            _RW_MSG="${RED}[$(L "SOLA LETTURA — i report NON potranno essere salvati!" "READ ONLY — reports CANNOT be saved!")]${RESET}"
+            _RW_MSG="${RED}[$(L "SOLA LETTURA - i report NON potranno essere salvati!" "READ ONLY - reports CANNOT be saved!")]${RESET}"
         fi
     else
         local _P; _P=$(dirname "$_CHOSEN")
         if [[ -w "$_P" ]]; then
             _RW_OK=true
-            _RW_MSG="${GREEN}[$(L "verrà creata — parent scrivibile" "will be created — parent writable")]${RESET}"
+            _RW_MSG="${GREEN}[$(L "verrà creata - parent scrivibile" "will be created - parent writable")]${RESET}"
         else
-            _RW_MSG="${RED}[$(L "parent '${_P}' NON scrivibile — i report NON potranno essere salvati!" "parent '${_P}' NOT writable — reports CANNOT be saved!")]${RESET}"
+            _RW_MSG="${RED}[$(L "parent '${_P}' NON scrivibile - i report NON potranno essere salvati!" "parent '${_P}' NOT writable - reports CANNOT be saved!")]${RESET}"
         fi
     fi
     echo ""

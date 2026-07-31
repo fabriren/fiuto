@@ -4,7 +4,7 @@
 #  MODULO 13 — Amcache + Shimcache (timeline esecuzione binari)
 # ================================================================
 module_amcache() {
-    section_header "$(L "Amcache + Shimcache — Timeline Binari" "Amcache + Shimcache — Binary Timeline")" "$YELLOW"
+    section_header "$(L "Amcache + Shimcache - Timeline Binari" "Amcache + Shimcache - Binary Timeline")" "$YELLOW"
     check_win_root || return 1
 
     if ! check_regipy; then
@@ -170,7 +170,7 @@ PYEOF
         done <<< "$SHIM_DATA"
         ok "$(L "Shimcache: $SHIM_COUNT entry" "Shimcache: $SHIM_COUNT entries")"
     else
-        warn "$(L "Hive SYSTEM non trovato" "SYSTEM hive not found") — Shimcache saltato"
+        warn "$(L "Hive SYSTEM non trovato" "SYSTEM hive not found") - Shimcache saltato"
     fi
 
     separator
@@ -221,12 +221,12 @@ PYEOF
           <div class='stat'><div class='label'>Amcache entry</div><div class='value'>${AMC_COUNT}</div></div>
           <div class='stat info'><div class='label'>Shimcache entry</div><div class='value'>${SHIM_COUNT}</div></div>
         </div><main>
-        <div class='stitle'>Amcache — Eseguibili con hash SHA1</div>
+        <div class='stitle'>Amcache - Eseguibili con hash SHA1</div>
         <div class='card'><table>
           <thead><tr><th>Path</th><th>LinkDate</th><th>$(L "SHA1 (troncato)" "SHA1 (truncated)")</th><th>Publisher</th></tr></thead>
           <tbody>${AMC_ROWS:-<tr><td colspan='4' class='dim' style='padding:1rem'>$(L "Nessun dato" "No data")</td></tr>}</tbody>
         </table></div>
-        <div class='stitle' style='margin-top:2rem'>Shimcache — Eseguibili visti dal sistema</div>
+        <div class='stitle' style='margin-top:2rem'>Shimcache - Eseguibili visti dal sistema</div>
         <div class='card'><table>
           <thead><tr><th>Path</th><th>Timestamp</th></tr></thead>
           <tbody>${SHIM_ROWS:-<tr><td colspan='2' class='dim' style='padding:1rem'>$(L "Nessun dato" "No data")</td></tr>}</tbody>

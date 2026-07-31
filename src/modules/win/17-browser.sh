@@ -3,7 +3,7 @@
 #  MODULO 17 — Browser History (Chrome / Edge / Firefox)
 # ================================================================
 module_browser() {
-    section_header "Browser History — Chrome / Edge / Firefox" "$CYAN"
+    section_header "Browser History - Chrome / Edge / Firefox" "$CYAN"
     check_win_root || return 1
 
 
@@ -182,7 +182,7 @@ PYEOF
 <div class='statsbar' style='align-items:center;flex-wrap:wrap'>
   <div class='stat'><div class='label'>Visite totali</div>
     <div class='value' id='cnt-all' style='cursor:pointer' onclick="setFilter('all')" title='Mostra tutto'>0</div></div>
-  <div class='stat'><div class='label'>⚠ Sospette — clicca per filtrare</div>
+  <div class='stat'><div class='label'>⚠ Sospette - clicca per filtrare</div>
     <div class='value' id='cnt-susp' style='color:var(--accent2);cursor:pointer' onclick="setFilter('susp')" title='Filtra solo sospette'>0</div></div>
   <div style='margin-left:auto;display:flex;gap:.6rem;align-items:center'>
     <button id='btn-all'  class='fbtn fbtn-on' onclick="setFilter('all')">Tutte</button>
@@ -193,7 +193,7 @@ PYEOF
 FILTERHTML
         echo "<main>
         <style>.fld{word-break:break-all;overflow-wrap:anywhere;white-space:pre-wrap}</style>
-        <div class='stitle'>$(L "Cronologia navigazione — Timestamp · Utente/Browser · URL · Titolo · Visite" "Browsing history — Timestamp · User/Browser · URL · Title · Visits")</div>
+        <div class='stitle'>$(L "Cronologia navigazione - Timestamp · Utente/Browser · URL · Titolo · Visite" "Browsing history - Timestamp · User/Browser · URL · Title · Visits")</div>
         <div class='card'><table id='brtable'>
           <thead><tr>
             <th style='width:12%'>Timestamp</th>
@@ -300,7 +300,7 @@ with open(tmp_file, 'a', encoding='utf-8') as f:
     local P_COUNT="${COUNTS%|*}"
     local P_SUSP="${COUNTS#*|}"
 
-    ok "$USERNAME / $BLABEL — $P_COUNT visite"
+    ok "$USERNAME / $BLABEL - $P_COUNT visite"
     TOTAL=$((TOTAL + P_COUNT))
     SUSP_COUNT=$((SUSP_COUNT + P_SUSP))
 

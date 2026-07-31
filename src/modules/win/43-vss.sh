@@ -84,10 +84,10 @@ module_vss() {
         BODY+="$(L "Ogni shadow copy e' una versione precedente del volume: contiene file poi cancellati e hive di registro anteriori alla compromissione. Il vero valore e' il confronto differenziale fra due istanti." \
             "Each shadow copy is an earlier version of the volume: it holds files later deleted and registry hives predating the compromise. The real value is the differential comparison between two points in time.")<br><br>"
         BODY+="<b>$(L "Procedura consigliata" "Suggested procedure")</b><br>"
-        BODY+="<code>vshadowinfo /dev/sdX1</code> — $(L "elenca gli snapshot e le loro date" "list snapshots and their dates")<br>"
-        BODY+="<code>vshadowmount /dev/sdX1 /mnt/vss</code> — $(L "espone gli snapshot come file vssN" "expose snapshots as vssN files")<br>"
+        BODY+="<code>vshadowinfo /dev/sdX1</code> - $(L "elenca gli snapshot e le loro date" "list snapshots and their dates")<br>"
+        BODY+="<code>vshadowmount /dev/sdX1 /mnt/vss</code> - $(L "espone gli snapshot come file vssN" "expose snapshots as vssN files")<br>"
         BODY+="<code>mount -o ro,loop /mnt/vss/vss1 /mnt/snap1</code><br>"
-        BODY+="<code>./fiuto.sh /mnt/snap1 --all</code> — $(L "rilancia FIUTO sullo snapshot" "re-run FIUTO on the snapshot")<br><br>"
+        BODY+="<code>./fiuto.sh /mnt/snap1 --all</code> - $(L "rilancia FIUTO sullo snapshot" "re-run FIUTO on the snapshot")<br><br>"
         BODY+="$(L "Confrontando i report di due snapshot si isola cosa e' cambiato nella finestra di compromissione." \
             "Comparing the reports of two snapshots isolates what changed during the compromise window.")"
     fi

@@ -1,7 +1,7 @@
 
 # --- macOS 8 — Browser History ---
 module_macos_browser() {
-    section_header "macOS — Browser History" "$CYAN"
+    section_header "macOS - Browser History" "$CYAN"
     check_target_root || return 1
     local BODY="" TOTAL=0 USERS=0
     while IFS= read -r HOME_DIR; do
@@ -11,7 +11,7 @@ module_macos_browser() {
         if [[ -n "$SAF" ]]; then
             local ROWS; ROWS=$(query_sqlite "$SAF" "SELECT datetime(v.visit_time+978307200,'unixepoch'), i.url, v.title FROM history_visits v JOIN history_items i ON v.history_item=i.id ORDER BY v.visit_time DESC LIMIT 100000")
             if [[ -n "$ROWS" && "$ROWS" != ERROR* ]]; then
-                UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + 1)); ok "$U — Safari"
+                UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + 1)); ok "$U - Safari"
                 CARDS+=$(generic_card_html "Safari" "$SAF" "$(printf '%s\n' "$ROWS" | grep -c .) URL" "$(_rows_to_table "$ROWS" "$(L "Data" "Date")" "URL" "$(L "Titolo" "Title")")" "◐")
             fi
         fi
@@ -21,7 +21,7 @@ module_macos_browser() {
             while IFS= read -r HISTDB; do
                 local ROWS; ROWS=$(query_sqlite "$HISTDB" "SELECT datetime(last_visit_time/1000000-11644473600,'unixepoch'), url, title FROM urls ORDER BY last_visit_time DESC LIMIT 100000")
                 [[ -z "$ROWS" || "$ROWS" == ERROR* ]] && continue
-                UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + 1)); ok "$U — $(basename "$(dirname "$HISTDB")") (Chromium)"
+                UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + 1)); ok "$U - $(basename "$(dirname "$HISTDB")") (Chromium)"
                 CARDS+=$(_browser_table_card "$HISTDB" "$ROWS")
             done < <(find "$BASE" -maxdepth 2 -name "History" -type f 2>/dev/null)
         done
@@ -31,7 +31,7 @@ module_macos_browser() {
             while IFS= read -r PLACES; do
                 local ROWS; ROWS=$(query_sqlite "$PLACES" "SELECT datetime(last_visit_date/1000000,'unixepoch'), url, title FROM moz_places WHERE last_visit_date IS NOT NULL ORDER BY last_visit_date DESC LIMIT 100000")
                 [[ -z "$ROWS" || "$ROWS" == ERROR* ]] && continue
-                UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + 1)); ok "$U — Firefox"
+                UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + 1)); ok "$U - Firefox"
                 CARDS+=$(_browser_table_card "$PLACES" "$ROWS")
             done < <(find "$FB" -maxdepth 2 -name "places.sqlite" -type f 2>/dev/null)
         fi

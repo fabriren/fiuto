@@ -12,7 +12,7 @@
 #  cancellazione della conversazione.
 # ================================================================
 module_macos_messages() {
-    section_header "macOS — Messages" "$CYAN"
+    section_header "macOS - Messages" "$CYAN"
     check_target_root || return 1
 
     local BODY="" TOTAL=0 NATT=0 NSUSP=0
@@ -41,7 +41,7 @@ module_macos_messages() {
 
         local N; N=$(printf '%s\n' "$ROWS" | grep -c . || true)
         TOTAL=$((TOTAL + N))
-        ok "$U — ${BOLD}${N}${RESET} $(L "messaggi" "messages")"
+        ok "$U - ${BOLD}${N}${RESET} $(L "messaggi" "messages")"
 
         # Messaggi con link o riferimenti a credenziali: sono quelli che
         # spiegano un accesso iniziale o una compromissione di account.
@@ -59,7 +59,7 @@ module_macos_messages() {
             local STABLE; STABLE=$(_rows_to_table "$SUSP" \
                 "$(L "Data" "Date")" "$(L "Interlocutore" "Handle")" "$(L "Direzione" "Direction")" \
                 "$(L "Testo" "Text")" "$(L "Servizio" "Service")")
-            BODY="<div class='cards'>$(generic_card_html "$U — $(L "messaggi con link o credenziali" "messages with links or credentials")" "$DB" "$NS" "$STABLE" "⚑")</div>${BODY}"
+            BODY="<div class='cards'>$(generic_card_html "$U - $(L "messaggi con link o credenziali" "messages with links or credentials")" "$DB" "$NS" "$STABLE" "⚑")</div>${BODY}"
         fi
 
         # Allegati: restano su disco anche dopo la cancellazione della chat.

@@ -1,7 +1,7 @@
 
 # --- LINUX 5 — AI CLI History ---
 module_linux_ai_history() {
-    section_header "Linux — AI CLI History" "$MAGENTA"
+    section_header "Linux - AI CLI History" "$MAGENTA"
     check_target_root || return 1
     # path relativi alla home da scandire (file o directory)
     local REL=(.claude .config/claude .aider.chat.history.md .aider.input.history .config/aichat .ollama/history
@@ -23,7 +23,7 @@ module_linux_ai_history() {
             fi
         done
         [[ $UCOUNT -eq 0 ]] && continue
-        USERS=$((USERS + 1)); ok "$UNAME — ${BOLD}$UCOUNT file AI"
+        USERS=$((USERS + 1)); ok "$UNAME - ${BOLD}$UCOUNT file AI"
         BODY+=$(generic_card_html "$UNAME" "$HOME_DIR" "$UCOUNT file" "$CARDS" "◈")
     done < <(get_linux_user_homes)
     separator

@@ -10,7 +10,7 @@
 # delle stringhe leggibili (URL e percorsi). Il report lo dichiara apertamente e
 # rimanda a spotlight_parser per l'analisi strutturata.
 module_macos_spotlight() {
-    section_header "macOS — Spotlight" "$CYAN"
+    section_header "macOS - Spotlight" "$CYAN"
     check_target_root || return 1
 
     local -a STORES=()

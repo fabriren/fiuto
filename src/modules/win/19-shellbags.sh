@@ -3,7 +3,7 @@
 #  MODULO 19 — ShellBags (navigazione cartelle, anche cancellate)
 # ================================================================
 module_shellbags() {
-    section_header "$(L "ShellBags — Navigazione Cartelle" "ShellBags — Folder Navigation")" "$CYAN"
+    section_header "$(L "ShellBags - Navigazione Cartelle" "ShellBags - Folder Navigation")" "$CYAN"
     check_win_root || return 1
 
     if ! check_regipy; then
@@ -172,9 +172,9 @@ PYEOF
         done
 
         if $FOUND_ANY; then
-            ok "$USERNAME — $TOTAL shellbags totali"
+            ok "$USERNAME - $TOTAL shellbags totali"
         else
-            dim_msg "$USERNAME — $(L "nessuna ShellBag trovata" "no ShellBag found")"
+            dim_msg "$USERNAME - $(L "nessuna ShellBag trovata" "no ShellBag found")"
         fi
 
     done < <(get_user_homes)
@@ -213,13 +213,13 @@ PYEOF
 
     {
         html_header "ShellBags"
-        html_page_header "SB" "ShellBags — <span>Navigazione Cartelle</span>" \
+        html_page_header "SB" "ShellBags - <span>Navigazione Cartelle</span>" \
             "UsrClass.dat → BagMRU" "$SCAN" "$WIN_ROOT"
         echo "<div class='statsbar'>
           <div class='stat'><div class='label'>ShellBags</div><div class='value'>${TOTAL}</div></div>
           <div class='stat'><div class='label'>Sospette</div><div class='value' style='color:var(--accent2)'>${SUSP_COUNT}</div></div>
         </div><main>
-        <div class='stitle'>Cartelle visitate — anche se poi cancellate o smontate</div>
+        <div class='stitle'>Cartelle visitate - anche se poi cancellate o smontate</div>
         <div class='card'><table>
           <thead><tr><th style='width:12%'>$(L "Utente" "User")</th><th>$(L "Percorso ricostruito" "Reconstructed path")</th><th style='width:12%'>Hive</th></tr></thead>
           <tbody>${ROWS}</tbody>

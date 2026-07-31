@@ -1,7 +1,7 @@
 
 # --- LINUX 10 — Network Config ---
 module_linux_network() {
-    section_header "Linux — Network Config" "$CYAN"
+    section_header "Linux - Network Config" "$CYAN"
     check_target_root || return 1
     local KW="psk|password|key=|wpa|pre-shared|nameserver|DROP|ACCEPT|REJECT|-j |MASQUERADE"
     local BODY="" FOUND=0

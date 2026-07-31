@@ -41,7 +41,7 @@ _find_user_cwd() {
 }
 INVOCATION_DIR="$(_find_user_cwd)"
 unset -f _find_user_cwd
-WIN_ROOT=""          # root del volume selezionato (Windows/Linux/macOS — es. /mnt/disk)
+WIN_ROOT=""          # root del volume selezionato (Windows/Linux/macOS - es. /mnt/disk)
 OS_TYPE=""           # tipo OS del volume: windows | linux | macos | unknown
 REPORT_BASE_DIR=""   # directory base dei report HTML
 SCAN_DATE=""         # impostata all'avvio

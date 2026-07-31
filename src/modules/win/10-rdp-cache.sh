@@ -3,7 +3,7 @@
 #  MODULO 4 — Cache RDP (Terminal Server Client)
 # ================================================================
 module_rdp_cache() {
-    section_header "$(L "Cache RDP — Terminal Server Client" "RDP Cache — Terminal Server Client")" "$CYAN"
+    section_header "$(L "Cache RDP - Terminal Server Client" "RDP Cache - Terminal Server Client")" "$CYAN"
     check_win_root || return 1
 
     local RDP_REL="AppData/Local/Microsoft/Terminal Server Client/Cache"
@@ -16,7 +16,7 @@ module_rdp_cache() {
         local CACHE_DIR
         CACHE_DIR=$(ci_find_dir "$USER_DIR" "$RDP_REL")
         if [[ -z "$CACHE_DIR" || ! -d "$CACHE_DIR" ]]; then
-            dim_msg "$USERNAME — $(L "Cache RDP non trovata" "RDP cache not found")"
+            dim_msg "$USERNAME - $(L "Cache RDP non trovata" "RDP cache not found")"
             continue
         fi
         mapfile -t CACHE_FILES < <(find "$CACHE_DIR" -maxdepth 1 -type f \( -iname "*.bmc" -o -iname "*.bin" \) -printf "%T@ %p\n" 2>/dev/null | sort -rn | cut -d' ' -f2-)
@@ -25,16 +25,16 @@ module_rdp_cache() {
         fi
         local COUNT=${#CACHE_FILES[@]}
         if [[ $COUNT -eq 0 ]]; then
-            warn "$USERNAME — $(L "Directory cache trovata ma vuota" "Cache directory found but empty")"
+            warn "$USERNAME - $(L "Directory cache trovata ma vuota" "Cache directory found but empty")"
             continue
         fi
-        ok "$USERNAME — $COUNT $(L "file cache trovati in:" "cache files found in:") $CACHE_DIR"
+        ok "$USERNAME - $COUNT $(L "file cache trovati in:" "cache files found in:") $CACHE_DIR"
         local FILES_INFO=""
         for F in "${CACHE_FILES[@]}"; do
             local FNAME; FNAME=$(basename "$F")
             local FSIZE; FSIZE=$(stat -c "%s" "$F" 2>/dev/null || echo "?")
             local FMTIME; FMTIME=$(stat -c "%y" "$F" 2>/dev/null | cut -d'.' -f1 || echo "?")
-            echo -e "      ${DIM}• $FNAME  (${FSIZE} bytes — mod: $FMTIME)${RESET}"
+            echo -e "      ${DIM}• $FNAME  (${FSIZE} bytes - mod: $FMTIME)${RESET}"
             FILES_INFO="${FILES_INFO}${FNAME}:${FSIZE}:${FMTIME}|"
         done
         RES_USERS+=("$USERNAME")
@@ -80,7 +80,7 @@ except: pass
 PYEOF
 )
             if [[ -n "$RDP_SERVERS" ]]; then
-                echo -e "  ${GREEN}${BOLD}$USERNAME — $(L "Server RDP trovati:" "RDP servers found:")${RESET}"
+                echo -e "  ${GREEN}${BOLD}$USERNAME - $(L "Server RDP trovati:" "RDP servers found:")${RESET}"
                 while IFS=$'\t' read -r HOST UNAME; do
                     printf "      ${CYAN}%-40s${RESET}  ${DIM}utente: %s${RESET}\n" "$HOST" "${UNAME:--}"
                 done <<< "$RDP_SERVERS"

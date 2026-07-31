@@ -6,7 +6,7 @@
 #  legge GENERATED_REPORTS, che a quel punto contiene gli altri moduli.
 # ================================================================
 module_xplat_master_timeline() {
-    section_header "$(L "Master Timeline — Aggregazione Cross-Moduli" "Master Timeline — Cross-Module Aggregation")" "$YELLOW"
+    section_header "$(L "Master Timeline - Aggregazione Cross-Moduli" "Master Timeline - Cross-Module Aggregation")" "$YELLOW"
     check_target_root || return 1
 
     local -a SRC=()

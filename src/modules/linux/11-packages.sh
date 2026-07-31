@@ -1,7 +1,7 @@
 
 # --- LINUX 11 — Installed Packages ---
 module_linux_packages() {
-    section_header "Linux — Installed Packages" "$GREEN"
+    section_header "Linux - Installed Packages" "$GREEN"
     check_target_root || return 1
     local BODY="" FOUND=0
     # dpkg
@@ -9,7 +9,7 @@ module_linux_packages() {
     if [[ -n "$DPKG" && -s "$DPKG" ]]; then
         FOUND=$((FOUND + 1))
         local PKGS; PKGS=$(grep -c '^Package:' "$DPKG" 2>/dev/null)
-        ok "dpkg — ${BOLD}$PKGS pacchetti"
+        ok "dpkg - ${BOLD}$PKGS pacchetti"
         local TAB; TAB=$(awk '/^Package:/{p=$2} /^Version:/{v=$2} /^Status:/{s=$0} /^$/{if(p)printf "<tr><td class=mono>%s</td><td class=\"mono dim\">%s</td></tr>\n",p,v; p=v=""}' "$DPKG" | head -100000)
         BODY+=$(generic_card_html "dpkg packages" "$DPKG" "$PKGS pkg" "<table><tr><th>Package</th><th>Version</th></tr>$TAB</table>" "▦")
     fi

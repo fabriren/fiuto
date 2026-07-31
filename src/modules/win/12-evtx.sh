@@ -6,7 +6,7 @@
 #  MODULO 12 — Event Log (Security / System / PowerShell / RDP)
 # ================================================================
 module_evtx() {
-    section_header "$(L "Event Log — Analisi .evtx" "Event Log — .evtx Analysis")" "$RED"
+    section_header "$(L "Event Log - Analisi .evtx" "Event Log - .evtx Analysis")" "$RED"
     check_win_root || return 1
 
     if ! "$PY3" -c "import Evtx" 2>/dev/null; then
@@ -85,7 +85,7 @@ PYEOF
     for EVTX_NAME in "${!EVTX_MAP[@]}"; do
         local EVTX_FILE
         EVTX_FILE=$(ci_find_file "$EVTX_DIR" "$EVTX_NAME")
-        [[ -z "$EVTX_FILE" ]] && { dim_msg "$EVTX_NAME — $(L "non trovato" "not found")"; continue; }
+        [[ -z "$EVTX_FILE" ]] && { dim_msg "$EVTX_NAME - $(L "non trovato" "not found")"; continue; }
 
         local EIDS_CSV="${EVTX_MAP[$EVTX_NAME]// /,}"
         local LABEL="${EVTX_NAME%.evtx}"; LABEL="${LABEL//%4/\/}"
@@ -193,7 +193,7 @@ for ev in events:
         if sv and sv not in SKIP:
             parts.append(f"<div class='drow'><span class='lbl'>{H.escape(k)}</span>"
                          f"<span class='fld mono'>{H.escape(sv[:200])}</span></div>")
-    detail=''.join(parts[:8]) or "<span class='dim'>—</span>"
+    detail=''.join(parts[:8]) or "<span class='dim'>-</span>"
     susp=ev.get('eid','') in SUSP
     rs="style='background:rgba(255,123,114,.07);border-left:3px solid var(--accent2)'" if susp else ""
     ec="bad" if susp else "ok"
@@ -228,7 +228,7 @@ PYEOF
           .drow{display:flex;align-items:flex-start;margin-bottom:.18rem}
           .fld{word-break:break-all;overflow-wrap:anywhere;white-space:pre-wrap;flex:1}
         </style>
-        <div class='stitle'>$(L "Eventi per timestamp — EID · Timestamp · Sorgente · Dettagli" "Events by timestamp — EID · Timestamp · Source · Details")</div>
+        <div class='stitle'>$(L "Eventi per timestamp - EID · Timestamp · Sorgente · Dettagli" "Events by timestamp - EID · Timestamp · Source · Details")</div>
         <div class='card'><table>
           <thead><tr>
             <th style='width:11%'>EID</th>

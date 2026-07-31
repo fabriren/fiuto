@@ -1,7 +1,7 @@
 
 # --- macOS 7 — KnowledgeC ---
 module_macos_knowledgec() {
-    section_header "macOS — KnowledgeC" "$BLUE"
+    section_header "macOS - KnowledgeC" "$BLUE"
     check_target_root || return 1
     local BODY="" TOTAL=0
     while IFS= read -r HOME_DIR; do
@@ -11,7 +11,7 @@ module_macos_knowledgec() {
         local ROWS; ROWS=$(query_sqlite "$DB" "SELECT datetime(ZCREATIONDATE+978307200,'unixepoch'), ZSTREAMNAME, ZVALUESTRING FROM ZOBJECT WHERE ZVALUESTRING IS NOT NULL ORDER BY ZCREATIONDATE DESC LIMIT 100000")
         [[ -z "$ROWS" || "$ROWS" == ERROR* ]] && continue
         local N; N=$(printf '%s\n' "$ROWS" | grep -c .); TOTAL=$((TOTAL + N))
-        ok "$U — ${BOLD}$N $(L "eventi" "events")"
+        ok "$U - ${BOLD}$N $(L "eventi" "events")"
         local TABLE; TABLE=$(_rows_to_table "$ROWS" "$(L "Data" "Date")" "Stream" "Value")
         BODY+=$(generic_card_html "$U" "$DB" "$N" "$TABLE" "◴")
     done < <(get_macos_user_homes)

@@ -21,7 +21,7 @@
 #  di log ricostruita. Per quella serve `log show --archive` su un Mac.
 # ================================================================
 module_macos_unified_logs() {
-    section_header "macOS — Unified Logs (.tracev3)" "$MAGENTA"
+    section_header "macOS - Unified Logs (.tracev3)" "$MAGENTA"
     check_target_root || return 1
 
     local -a FILES=()
@@ -42,7 +42,7 @@ module_macos_unified_logs() {
     for F in "${FILES[@]}"; do
         TOTB=$(( TOTB + $(stat -c %s "$F" 2>/dev/null || echo 0) ))
     done
-    info "$(L "File .tracev3:" ".tracev3 files:") ${BOLD}${#FILES[@]}${RESET} — $(numfmt --to=iec "$TOTB" 2>/dev/null || echo "$TOTB B")"
+    info "$(L "File .tracev3:" ".tracev3 files:") ${BOLD}${#FILES[@]}${RESET} - $(numfmt --to=iec "$TOTB" 2>/dev/null || echo "$TOTB B")"
     info "$(L "Decompressione dei chunk in corso..." "Decompressing chunks...")"
 
     local IOCTMP; IOCTMP=$(mktemp); register_tmp "$IOCTMP"
@@ -221,12 +221,12 @@ PYEOF
 
     local NOTE="<div class='card' style='margin-bottom:1rem;border-color:rgba(255,166,87,.5)'><div style='padding:1rem 1.5rem;font-size:.8rem;line-height:1.7'>"
     NOTE+="<b>$(L "Livello di supporto: parziale, e dichiarato" "Support level: partial, and stated")</b><br>"
-    NOTE+="$(L "Questo modulo NON ricostruisce i messaggi di log. Un parser completo di .tracev3 deve interpretare il catalogo e risolvere i riferimenti alle stringhe nei file .uuidtext e nel dyld_shared_cache: e' un progetto a se'. Qui i chunk LZ4 vengono decompressi e se ne estraggono le stringhe gia' leggibili — percorsi, bundle id, URL, nomi di file." \
-        "This module does NOT reconstruct log messages. A complete .tracev3 parser must interpret the catalogue and resolve string references in .uuidtext files and the dyld_shared_cache: that is a project of its own. Here the LZ4 chunks are decompressed and the already-readable strings are extracted — paths, bundle ids, URLs, file names.")<br><br>"
+    NOTE+="$(L "Questo modulo NON ricostruisce i messaggi di log. Un parser completo di .tracev3 deve interpretare il catalogo e risolvere i riferimenti alle stringhe nei file .uuidtext e nel dyld_shared_cache: e' un progetto a se'. Qui i chunk LZ4 vengono decompressi e se ne estraggono le stringhe gia' leggibili - percorsi, bundle id, URL, nomi di file." \
+        "This module does NOT reconstruct log messages. A complete .tracev3 parser must interpret the catalogue and resolve string references in .uuidtext files and the dyld_shared_cache: that is a project of its own. Here the LZ4 chunks are decompressed and the already-readable strings are extracted - paths, bundle ids, URLs, file names.")<br><br>"
     NOTE+="$(L "Le date sono quelle di modifica del file che contiene la stringa: un limite superiore approssimato, non l'istante dell'evento." \
         "Dates are the modification times of the file containing the string: an approximate upper bound, not the moment of the event.")<br><br>"
     NOTE+="<b>$(L "Per l'analisi completa" "For full analysis")</b><br>"
-    NOTE+="<code>log show --archive /percorso/diagnostics.logarchive --info --debug</code> ($(L "richiede un Mac" "requires a Mac")) — "
+    NOTE+="<code>log show --archive /percorso/diagnostics.logarchive --info --debug</code> ($(L "richiede un Mac" "requires a Mac")) - "
     NOTE+="$(L "oppure" "or") <code>mandiant/macos-UnifiedLogs</code>."
     NOTE+="</div></div>"
 

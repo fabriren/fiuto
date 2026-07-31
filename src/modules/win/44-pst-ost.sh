@@ -39,7 +39,7 @@ module_pst_ost() {
         SZ=$(stat -c %s "$F" 2>/dev/null || echo 0)
         MT=$(stat -c %y "$F" 2>/dev/null | cut -d. -f1 || echo "?")
         TOTBYTES=$((TOTBYTES + SZ))
-        info "$(basename "$F") — ${BOLD}$(numfmt --to=iec "$SZ" 2>/dev/null || echo "$SZ")${RESET} ${DIM}${MT}${RESET}"
+        info "$(basename "$F") - ${BOLD}$(numfmt --to=iec "$SZ" 2>/dev/null || echo "$SZ")${RESET} ${DIM}${MT}${RESET}"
         INV+="${MT}	$(basename "$F")	${SZ}	${F}
 "
     done

@@ -35,7 +35,7 @@ module_search_index() {
         return 0
     fi
     local SZ; SZ=$(stat -c %s "${DBS[0]}" 2>/dev/null || echo 0)
-    info "Windows.edb — ${BOLD}$(numfmt --to=iec "$SZ" 2>/dev/null || echo "$SZ")"
+    info "Windows.edb - ${BOLD}$(numfmt --to=iec "$SZ" 2>/dev/null || echo "$SZ")"
 
     local HAVE_ESE=false
     "$PY3" -c "import pyesedb" 2>/dev/null && HAVE_ESE=true

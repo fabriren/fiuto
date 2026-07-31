@@ -1,7 +1,7 @@
 
 # --- macOS 5 — Quarantine / Downloads ---
 module_macos_quarantine() {
-    section_header "macOS — Quarantine / Downloads" "$CYAN"
+    section_header "macOS - Quarantine / Downloads" "$CYAN"
     check_target_root || return 1
     local BODY="" TOTAL=0
     while IFS= read -r HOME_DIR; do
@@ -20,7 +20,7 @@ module_macos_quarantine() {
             fi
             [[ -z "$ROWS" || "$ROWS" == ERROR* ]] && continue
             local N; N=$(printf '%s\n' "$ROWS" | grep -c .); TOTAL=$((TOTAL + N))
-            ok "$UNAME — ${BOLD}$N $(L "download tracciati" "tracked downloads")"
+            ok "$UNAME - ${BOLD}$N $(L "download tracciati" "tracked downloads")"
             local TABLE
             if [[ $HEADERS_EXTRA -eq 1 ]]; then
                 TABLE=$(_rows_to_table "$ROWS" "$(L "Data" "Date")" "Agent" "URL" "$(L "Pagina origine" "Origin page")")

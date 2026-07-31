@@ -1,7 +1,7 @@
 
 # --- LINUX 13 — Filesystem Timeline ---
 module_linux_timeline() {
-    section_header "Linux — Filesystem Timeline" "$YELLOW"
+    section_header "Linux - Filesystem Timeline" "$YELLOW"
     check_target_root || return 1
     info "$(L "Raccolta timestamp MAC nelle aree sensibili (può richiedere tempo)..." "Collecting MAC timestamps in sensitive areas (may take a while)...")"
     # aree di interesse forense

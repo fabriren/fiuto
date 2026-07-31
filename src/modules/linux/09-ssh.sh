@@ -1,7 +1,7 @@
 
 # --- LINUX 9 — SSH Artifacts ---
 module_linux_ssh() {
-    section_header "Linux — SSH Artifacts" "$YELLOW"
+    section_header "Linux - SSH Artifacts" "$YELLOW"
     check_target_root || return 1
     local KW="ssh-rsa|ssh-ed25519|ecdsa|PermitRootLogin|PasswordAuthentication|AuthorizedKeys|ForwardAgent"
     local BODY="" FOUND=0
@@ -25,7 +25,7 @@ module_linux_ssh() {
         local PRIV; PRIV=$(find "$SSHD" -maxdepth 1 -type f -name "id_*" ! -name "*.pub" 2>/dev/null | wc -l)
         [[ "$PRIV" -gt 0 ]] && CARDS+="<div class='card' style='margin-bottom:.8rem'><div class='card-header'><div class='uicon'>⚿</div><div><div class='uname'>$(L "Chiavi private" "Private keys")</div><div class='upath'>$SSHD/id_*</div></div><div class='badge warn'>$PRIV $(L "chiavi" "keys")</div></div></div>"
         [[ $UCOUNT -eq 0 && "$PRIV" -eq 0 ]] && continue
-        ok "$UNAME — ${BOLD}$UCOUNT file"
+        ok "$UNAME - ${BOLD}$UCOUNT file"
         BODY+=$(generic_card_html "$UNAME" "$SSHD" "$UCOUNT file" "$CARDS" "⚿")
     done < <(get_linux_user_homes)
     separator

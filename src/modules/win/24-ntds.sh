@@ -3,7 +3,7 @@
 #  MODULO 24 — NTDS.dit (Active Directory hashes)
 # ================================================================
 module_ntds() {
-    section_header "NTDS.dit — Active Directory Hashes" "$RED"
+    section_header "NTDS.dit - Active Directory Hashes" "$RED"
     check_win_root || return 1
 
 
@@ -17,7 +17,7 @@ module_ntds() {
         [[ -n "$_NTDS_DIR" ]] && NTDS_FILE=$(find "$_NTDS_DIR" -maxdepth 1 -iname "ntds.dit" -type f 2>/dev/null | head -1)
     fi
     if [[ -z "$NTDS_FILE" ]]; then
-        warn "$(L "ntds.dit non trovato — questo non è un Domain Controller (o la struttura NTDS/ è assente)" "ntds.dit not found — this is not a Domain Controller (or NTDS/ structure is absent)")"
+        warn "$(L "ntds.dit non trovato - questo non è un Domain Controller (o la struttura NTDS/ è assente)" "ntds.dit not found - this is not a Domain Controller (or NTDS/ structure is absent)")"
         return 0
     fi
     local SYS_HIVE; SYS_HIVE=$(get_hive "SYSTEM")
@@ -29,7 +29,7 @@ module_ntds() {
     echo ""
 
     if ! "$PY3" -c "from impacket.examples.secretsdump import NTDSHashes" 2>/dev/null; then
-        warn "$(L "impacket non trovato — installalo con:" "impacket not found — install it with:") ${PY3} -m pip install impacket"
+        warn "$(L "impacket non trovato - installalo con:" "impacket not found - install it with:") ${PY3} -m pip install impacket"
         info "$(L "Fallback: estrazione account senza hash tramite strings..." "Fallback: account extraction without hashes via strings...")"
         local ACC_STRINGS
         ACC_STRINGS=$(strings "$NTDS_FILE" 2>/dev/null | grep -E '^[A-Za-z0-9_.-]{3,20}\$?$' | sort -u | head -100 || true)
@@ -45,7 +45,7 @@ module_ntds() {
     register_tmp "$TMP_DIR"
 
     # Copia con timeout: su share SMB da DC live la copia può bloccarsi indefinitamente
-    info "$(L "Copia ntds.dit in /tmp (timeout 180s — file di rete, attendere)..." "Copying ntds.dit to /tmp (timeout 180s — network file, please wait)...")"
+    info "$(L "Copia ntds.dit in /tmp (timeout 180s - file di rete, attendere)..." "Copying ntds.dit to /tmp (timeout 180s - network file, please wait)...")"
     if ! portable_timeout 180 cp "$NTDS_FILE" "$TMP_DIR/ntds.dit" 2>/dev/null; then
         err "$(L "Timeout o errore nella copia di ntds.dit (share lenta o file bloccato da Windows)" "Timeout or error copying ntds.dit (slow share or file locked by Windows)")"
         info "$(L "Suggerimento: esegui il modulo su un'immagine montata offline oppure tramite VSS snapshot" "Hint: run the module on an offline mounted image or via VSS snapshot")"
@@ -108,7 +108,7 @@ PYEOF
             err "$(L "ntds.dit è bloccato dal servizio Active Directory (DC live, Errno 35 / EAGAIN)." "ntds.dit is locked by Active Directory service (live DC, Errno 35 / EAGAIN).")"
             info "$(L "Soluzioni: 1) ntdsutil IFM sul DC  2) impacket-secretsdump remoto  3) immagine disco offline" "Solutions: 1) ntdsutil IFM on DC  2) remote impacket-secretsdump  3) offline disk image")"
         else
-            err "$(L "Dump vuoto — ntds.dit potrebbe essere in stato dirty o corrotto." "Empty dump — ntds.dit may be dirty or corrupted.")"
+            err "$(L "Dump vuoto - ntds.dit potrebbe essere in stato dirty o corrotto." "Empty dump - ntds.dit may be dirty or corrupted.")"
             info "$(L "Prova il modulo 38 (PAD Offline) che usa analisi ESE con recovery avanzato." "Try module 38 (PAD Offline) which uses ESE analysis with advanced recovery.")"
         fi
         return 1
@@ -162,12 +162,12 @@ PYEOF
     done
     {
         html_header "NTDS.dit"
-        html_page_header "AD" "NTDS.dit — <span>Active Directory</span> Hashes" \
+        html_page_header "AD" "NTDS.dit - <span>Active Directory</span> Hashes" \
             "Windows\\NTDS\\ntds.dit" "$SCAN" "$WIN_ROOT"
         echo "<div class='statsbar'>
           <div class='stat'><div class='label'>Account</div><div class='value'>${TOTAL}</div></div>
         </div><main>
-        <div class='stitle'>Hash NTLM account AD — craccabili offline con hashcat -m 1000</div>
+        <div class='stitle'>Hash NTLM account AD - craccabili offline con hashcat -m 1000</div>
         <div class='card'><table>
           <thead><tr><th>Username</th><th style='width:8%'>RID</th><th style='width:30%'>NT Hash</th><th>Note</th></tr></thead>
           <tbody>${ROWS}</tbody>

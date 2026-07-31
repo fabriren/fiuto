@@ -42,7 +42,7 @@ _guard_sigma() {
 }
 
 module_sigma() {
-    section_header "Sigma — Event Log" "$RED"
+    section_header "Sigma - Event Log" "$RED"
     check_win_root || return 1
 
     if [[ -z "${SIGMA_RULES:-}" ]]; then
@@ -211,7 +211,7 @@ print(s["rules_loaded"], s["rules_active"], s["rules_rejected_total"],
         "$PY3" -c '
 import json, sys
 for r in json.load(open(sys.argv[1]))["rules_rejected"][:10]:
-    print("      %s — %s" % (r["rule"][:60], r["reason"]))' "$STATS" 2>/dev/null
+    print("      %s - %s" % (r["rule"][:60], r["reason"]))' "$STATS" 2>/dev/null
         return 0
     fi
 

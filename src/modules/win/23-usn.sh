@@ -3,7 +3,7 @@
 #  MODULO 23 — USN Journal ($UsnJrnl:$J)
 # ================================================================
 module_usn() {
-    section_header "$(L "USN Journal — Change Log NTFS" "USN Journal — NTFS Change Log")" "$CYAN"
+    section_header "$(L "USN Journal - Change Log NTFS" "USN Journal - NTFS Change Log")" "$CYAN"
     check_win_root || return 1
 
 
@@ -32,7 +32,7 @@ module_usn() {
                 return 0
             fi
         else
-            warn "$(L "\$UsnJrnl non accessibile — volume montato con ntfs3 (driver kernel)" "\$UsnJrnl not accessible — volume mounted with ntfs3 (kernel driver)")"
+            warn "$(L "\$UsnJrnl non accessibile - volume montato con ntfs3 (driver kernel)" "\$UsnJrnl not accessible - volume mounted with ntfs3 (kernel driver)")"
             [[ -n "$DEV" ]] && info "Prova: ntfscat -f \"$DEV\" '\$Extend/\$UsnJrnl:\$J' > /tmp/J"
             return 0
         fi
@@ -154,13 +154,13 @@ PYEOF
     local TABLE_ROWS; TABLE_ROWS=$(cat "$TMP_USN_ROWS" 2>/dev/null || echo "")
     {
         html_header "USN Journal"
-        html_page_header "UJ" "USN Journal — <span>Change Log</span> NTFS" \
+        html_page_header "UJ" "USN Journal - <span>Change Log</span> NTFS" \
             "\$Extend\\\$UsnJrnl:\$J" "$SCAN" "$WIN_ROOT"
         echo "<div class='statsbar'>
           <div class='stat'><div class='label'>Record totali</div><div class='value'>${TOTAL_LINES}</div></div>
           <div class='stat'><div class='label'>Sospetti</div><div class='value' style='color:var(--accent2)'>${SUSP_COUNT}</div></div>
         </div><main>
-        <div class='stitle'>$(L "Change Journal NTFS — Timestamp · File · Ext · Azione" "NTFS Change Journal — Timestamp · File · Ext · Action")</div>
+        <div class='stitle'>$(L "Change Journal NTFS - Timestamp · File · Ext · Azione" "NTFS Change Journal - Timestamp · File · Ext · Action")</div>
         <div class='card'><table>
           <thead><tr><th style='width:14%'>Timestamp</th><th>$(L "Nome file" "Filename")</th><th style='width:6%'>Ext</th><th>$(L "Motivo" "Reason")</th></tr></thead>
           <tbody>${TABLE_ROWS:-<tr><td colspan='4' class='dim' style='padding:1rem'>Nessun record</td></tr>}</tbody>

@@ -93,7 +93,7 @@ def _unallocated(page, is_first):
 
     Layout: header, array dei puntatori alle celle, spazio libero, contenuto
     delle celle. Cio' che sta fra la fine dell'array e l'inizio del contenuto
-    non e' in uso — ed e' li' che restano i record cancellati.
+    non e' in uso - ed e' li' che restano i record cancellati.
     """
     base = 100 if is_first else 0
     if len(page) < base + 8:

@@ -3,7 +3,7 @@
 #  MODULO 37 — Master Timeline (aggregazione cross-moduli)
 # ================================================================
 module_master_timeline() {
-    section_header "$(L "Master Timeline — Aggregazione Cross-Moduli" "Master Timeline — Cross-Module Aggregation")" "$YELLOW"
+    section_header "$(L "Master Timeline - Aggregazione Cross-Moduli" "Master Timeline - Cross-Module Aggregation")" "$YELLOW"
 
     if [[ ${#GENERATED_REPORTS[@]} -eq 0 ]]; then
         warn "$(L "Nessun report generato in questa sessione." "No reports generated in this session.")"
@@ -66,7 +66,7 @@ for rpath in sys.argv[1:]:
                 continue
             ts = ts_m.group(0).replace('T', ' ')[:19]
             text = ' '.join(strip_tags(mm.group(3)).split())[:200]
-            desc = (role + ': ' + text) if role and role != '—' else text
+            desc = (role + ': ' + text) if role and role != '-' else text
             key = (ts, mod, desc[:40])
             if key in seen:
                 continue
@@ -96,7 +96,7 @@ PYEOF
 
     {
         html_header "Master Timeline"
-        html_page_header "TL" "Master Timeline — <span>$(L "Aggregazione Cross-Moduli" "Cross-Module Aggregation")</span>" \
+        html_page_header "TL" "Master Timeline - <span>$(L "Aggregazione Cross-Moduli" "Cross-Module Aggregation")</span>" \
             "$(L "Aggregazione di" "Aggregation of") ${NR} $(L "report" "reports")" "$SCAN" "$WIN_ROOT"
         cat << STATSEOF
 <div class='statsbar'>
@@ -105,7 +105,7 @@ PYEOF
   <div class='stat ok'><div class='label'>$(L "Mostrati nel report" "Shown in report")</div><div class='value'>${SHOW_COUNT}</div></div>
 </div>
 <main>
-<div class='stitle'>$(L "Timeline cronologica (decrescente) — ordinata per data" "Chronological timeline (descending) — sorted by date")</div>
+<div class='stitle'>$(L "Timeline cronologica (decrescente) - ordinata per data" "Chronological timeline (descending) - sorted by date")</div>
 <div class='card'>
 <table>
   <thead><tr>

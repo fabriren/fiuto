@@ -12,7 +12,7 @@
 #  risposta che distinguono un tentativo fallito da uno riuscito.
 # ================================================================
 module_linux_webserver_logs() {
-    section_header "Linux — $(L "Log web server" "Web server logs")" "$ORANGE"
+    section_header "Linux - $(L "Log web server" "Web server logs")" "$ORANGE"
     check_target_root || return 1
 
     local -a LOGS=()

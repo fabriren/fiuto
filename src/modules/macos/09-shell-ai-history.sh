@@ -1,7 +1,7 @@
 
 # --- macOS 9 — Shell & AI History ---
 module_macos_shell_ai_history() {
-    section_header "macOS — Shell & AI History" "$MAGENTA"
+    section_header "macOS - Shell & AI History" "$MAGENTA"
     check_target_root || return 1
     local FILES=(.zsh_history .bash_history .sh_history .python_history .psql_history .node_repl_history
                  .claude .aider.chat.history.md .config/aichat .ollama/history)
@@ -24,7 +24,7 @@ module_macos_shell_ai_history() {
             fi
         done
         [[ $UCOUNT -eq 0 ]] && continue
-        USERS=$((USERS + 1)); ok "$U — ${BOLD}$UCOUNT file"
+        USERS=$((USERS + 1)); ok "$U - ${BOLD}$UCOUNT file"
         BODY+=$(generic_card_html "$U" "$HOME_DIR" "$UCOUNT file" "$CARDS" "◢")
     done < <(get_macos_user_homes)
     separator

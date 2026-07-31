@@ -3,7 +3,7 @@
 #  MODULO 32 — Office MRU & Recent Docs
 # ================================================================
 module_office_mru() {
-    section_header "$(L "Office MRU — File Recenti Office" "Office MRU — Recent Office Files")" "$GREEN"
+    section_header "$(L "Office MRU - File Recenti Office" "Office MRU - Recent Office Files")" "$GREEN"
     check_win_root || return 1
 
     if ! check_regipy; then
@@ -97,7 +97,7 @@ PYEOF
     done
     {
         html_header "Office MRU"
-        html_page_header "OF" "Office MRU — <span>File Recenti</span>" \
+        html_page_header "OF" "Office MRU - <span>File Recenti</span>" \
             "NTUSER.DAT → Software\\Microsoft\\Office" "$SCAN" "$WIN_ROOT"
         echo "<div class='statsbar'>
           <div class='stat'><div class='label'>File recenti</div><div class='value'>${TOTAL}</div></div>

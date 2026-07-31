@@ -1,7 +1,7 @@
 
 # --- LINUX 2 — systemd Journal ---
 module_linux_journal() {
-    section_header "Linux — systemd Journal" "$GREEN"
+    section_header "Linux - systemd Journal" "$GREEN"
     check_target_root || return 1
     local JDIR; JDIR=$(ci_find_dir "$WIN_ROOT" "var/log/journal")
     [[ -z "$JDIR" ]] && { warn "$(L "Nessun journal persistente (var/log/journal assente)." "No persistent journal (var/log/journal missing).")"; return 0; }

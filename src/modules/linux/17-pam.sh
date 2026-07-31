@@ -14,7 +14,7 @@
 #  disallineata rispetto ai vicini.
 # ================================================================
 module_linux_pam() {
-    section_header "Linux — PAM" "$RED"
+    section_header "Linux - PAM" "$RED"
     check_target_root || return 1
 
     local PAMD; PAMD=$(ci_find_dir "$WIN_ROOT" "etc/pam.d")
@@ -41,7 +41,7 @@ module_linux_pam() {
             local N; N=$(grep -cE "$KW" "$F" 2>/dev/null || echo 0)
             if [[ "$N" -gt 0 ]]; then
                 NSUSP=$((NSUSP + 1))
-                ok "$(basename "$F") — ${BOLD}${N}${RESET} $(L "righe da verificare" "lines to check")"
+                ok "$(basename "$F") - ${BOLD}${N}${RESET} $(L "righe da verificare" "lines to check")"
                 local LN
                 while IFS= read -r LN; do
                     SUSPROWS+="$(basename "$F")	${LN}

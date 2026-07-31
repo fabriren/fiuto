@@ -8,7 +8,7 @@
 # l'host — privileged, mount di / o del socket Docker, CAP_SYS_ADMIN,
 # condivisione del namespace PID/rete dell'host.
 module_linux_containers() {
-    section_header "Linux — Container (Docker / Podman)" "$BLUE"
+    section_header "Linux - Container (Docker / Podman)" "$BLUE"
     check_target_root || return 1
 
     local DOCKER PODMAN

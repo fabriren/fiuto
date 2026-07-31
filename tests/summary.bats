@@ -306,3 +306,46 @@ sys.exit(bad)'
     run generate_executive_summary
     [ ! -f "$FIXTURE/findings.json" ]
 }
+
+# -------------------------------------------------- dashboard di sessione ---
+
+@test "la dashboard mette l'executive summary come prima scheda" {
+    # Dopo --all e' il documento da cui si comincia a leggere, non uno dei
+    # novanta report da cercare nell'elenco.
+    SUMMARY_TABLE=("1|Alfa|SI|$FIXTURE/alfa/report.html")
+    mkdir -p "$FIXTURE/alfa"; : > "$FIXTURE/alfa/report.html"
+    : > "$FIXTURE/executive_summary.html"
+    generate_full_dashboard > /dev/null 2>&1
+    [ -f "$FIXTURE/index.html" ]
+    nav=$(sed -n 's/.*<nav id="tabs">\(.*\)<\/nav>.*/\1/p' "$FIXTURE/index.html")
+    [[ "$nav" == "<button class='tab tab-summary'"* ]]
+    grep -q "data-src='executive_summary.html'" "$FIXTURE/index.html"
+}
+
+@test "la dashboard si apre già posizionata sul riepilogo" {
+    SUMMARY_TABLE=("1|Alfa|SI|$FIXTURE/alfa/report.html")
+    mkdir -p "$FIXTURE/alfa"; : > "$FIXTURE/alfa/report.html"
+    : > "$FIXTURE/executive_summary.html"
+    generate_full_dashboard > /dev/null 2>&1
+    grep -q "querySelector('.tab-summary')" "$FIXTURE/index.html"
+}
+
+@test "senza riepilogo la dashboard non inventa una scheda" {
+    # Puo' mancare: --all su un volume da cui nessun modulo estrae nulla.
+    SUMMARY_TABLE=("1|Alfa|SI|$FIXTURE/alfa/report.html")
+    mkdir -p "$FIXTURE/alfa"; : > "$FIXTURE/alfa/report.html"
+    rm -f "$FIXTURE/executive_summary.html"
+    generate_full_dashboard > /dev/null 2>&1
+    # Il CSS della classe c'e' sempre; cio' che non deve esserci e' il BOTTONE.
+    # grep -q su un pattern assente esce 1 e, sotto errexit, ucciderebbe il
+    # test: si cattura l'esito invece di negarlo in linea.
+    trovato=$(grep -c "button class='tab tab-summary'" "$FIXTURE/index.html" || true)
+    [ "$trovato" -eq 0 ]
+}
+
+@test "in batch il riepilogo non chiede di aprirsi da solo" {
+    # Chiederlo vorrebbe dire due domande di fila e due finestre aperte sullo
+    # stesso contenuto, visto che poi si apre la dashboard.
+    grep -q 'SUMMARY_NO_PROMPT=true generate_executive_summary' "$REPO_ROOT/src/lib/11-runner.sh"
+    grep -q 'SUMMARY_NO_PROMPT:-false' "$REPO_ROOT/src/lib/18-summary.sh"
+}

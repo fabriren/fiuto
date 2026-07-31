@@ -3,7 +3,7 @@
 #  MODULO 26 — WER Files (Windows Error Reporting)
 # ================================================================
 module_wer_files() {
-    section_header "WER Files — Windows Error Reporting" "$MAGENTA"
+    section_header "WER Files - Windows Error Reporting" "$MAGENTA"
     check_win_root || return 1
 
     local TOTAL_FILES=0
@@ -63,7 +63,7 @@ module_wer_files() {
         local OWNER="${ENTRY#*|}"
         local FNAME; FNAME=$(basename "$(dirname "$F")")
         local FMTIME; FMTIME=$(stat -c "%y" "$F" 2>/dev/null | cut -d'.' -f1 || echo "?")
-        echo -e "      ${DIM}[$(printf "%2d" $SCAN_COUNT)] • $FNAME  (${OWNER}) — $FMTIME${RESET}"
+        echo -e "      ${DIM}[$(printf "%2d" $SCAN_COUNT)] • $FNAME  (${OWNER}) - $FMTIME${RESET}"
     done
 
     separator

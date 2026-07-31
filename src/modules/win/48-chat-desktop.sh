@@ -17,7 +17,7 @@
 #  mancano interlocutori e timestamp, e il report lo dichiara.
 # ================================================================
 module_chat_desktop() {
-    section_header "Chat Desktop — Slack / Teams / Discord" "$MAGENTA"
+    section_header "Chat Desktop - Slack / Teams / Discord" "$MAGENTA"
     check_win_root || return 1
 
     local MANIFEST; MANIFEST=$(mktemp); register_tmp "$MANIFEST"
@@ -56,7 +56,7 @@ module_chat_desktop() {
             if [[ "$N" -gt 0 ]]; then
                 NAPP=$((NAPP + 1))
                 FOUND_APPS+=("$APP ($U): $N")
-                ok "$APP — $U: ${BOLD}${N}${RESET} $(L "file LevelDB" "LevelDB files")"
+                ok "$APP - $U: ${BOLD}${N}${RESET} $(L "file LevelDB" "LevelDB files")"
             fi
         done
     done < <(get_user_homes)
@@ -137,7 +137,7 @@ PYEOF
     ok "$(L "Frammenti recuperati:" "Fragments recovered:") ${BOLD}$TOTAL"
     if [[ "$NFLAG" -gt 0 ]]; then
         warn "$(L "Frammenti segnalati (termini sensibili o IoC):" "Flagged fragments (sensitive terms or IoC):") ${BOLD}$NFLAG"
-        awk -F'\t' '$5!=""{printf "      [%s] %s — %s\n", $5, $1, substr($4,1,80)}' "$OUT" | head -15 | while IFS= read -r LN; do
+        awk -F'\t' '$5!=""{printf "      [%s] %s - %s\n", $5, $1, substr($4,1,80)}' "$OUT" | head -15 | while IFS= read -r LN; do
             echo -e "      ${MAGENTA}${LN}${RESET}"
         done
     fi

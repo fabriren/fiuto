@@ -15,7 +15,7 @@
 #  anteriore alla data dei fatti, l'assenza di rilevamenti non significa nulla.
 # ================================================================
 module_macos_xprotect() {
-    section_header "macOS — XProtect / Gatekeeper" "$RED"
+    section_header "macOS - XProtect / Gatekeeper" "$RED"
     check_target_root || return 1
 
     local BODY="" ROWS="" NFIND=0

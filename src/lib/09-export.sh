@@ -98,5 +98,5 @@ PYEOF
         cat "$OUT" >> "$COMBINED" 2>/dev/null || true
     fi
     ok "$(L "Export JSONL:" "JSONL export:") ${BOLD}${N}$(L " eventi" " events")${RESET} → $(basename "$OUT")"
-    log_msg "[JSONL] $OUT — $N eventi"
+    log_msg "[JSONL] $OUT - $N eventi"
 }

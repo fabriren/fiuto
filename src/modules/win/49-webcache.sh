@@ -17,7 +17,7 @@
 #  macchine dove nessuno usa piu' Internet Explorer.
 # ================================================================
 module_webcache() {
-    section_header "WebCacheV01 — IE / Edge Legacy / WinINET" "$CYAN"
+    section_header "WebCacheV01 - IE / Edge Legacy / WinINET" "$CYAN"
     check_win_root || return 1
 
     local -a DBS=()

@@ -13,16 +13,16 @@ module_lnk() {
         local USERNAME; USERNAME=$(basename "$USER_DIR")
         local RECENT_DIR
         RECENT_DIR=$(ci_find_dir "$USER_DIR" "AppData/Roaming/Microsoft/Windows/Recent")
-        [[ -z "$RECENT_DIR" ]] && { dim_msg "$USERNAME — $(L "Recent non trovata" "Recent not found")"; continue; }
+        [[ -z "$RECENT_DIR" ]] && { dim_msg "$USERNAME - $(L "Recent non trovata" "Recent not found")"; continue; }
 
         mapfile -t LNK_FILES < <(find "$RECENT_DIR" -maxdepth 1 -iname "*.lnk" -type f -printf "%T@ %p\n" 2>/dev/null | sort -rn | cut -d' ' -f2- | head -50)
         if [[ ${#LNK_FILES[@]} -eq 0 ]]; then
             mapfile -t LNK_FILES < <(find "$RECENT_DIR" -maxdepth 1 -iname "*.lnk" -type f -print0 2>/dev/null | xargs -0 ls -t 2>/dev/null | head -50)
         fi
         local COUNT=${#LNK_FILES[@]}
-        [[ $COUNT -eq 0 ]] && { dim_msg "$USERNAME — $(L "nessun .lnk trovato" "no .lnk files found")"; continue; }
+        [[ $COUNT -eq 0 ]] && { dim_msg "$USERNAME - $(L "nessun .lnk trovato" "no .lnk files found")"; continue; }
 
-        ok "$USERNAME — $COUNT $(L "file .lnk recenti" "recent .lnk files")"
+        ok "$USERNAME - $COUNT $(L "file .lnk recenti" "recent .lnk files")"
         TOTAL_USERS=$((TOTAL_USERS + 1))
 
         for LNK in "${LNK_FILES[@]}"; do

@@ -1,7 +1,7 @@
 
 # --- LINUX 7 — User Accounts ---
 module_linux_accounts() {
-    section_header "Linux — User Accounts" "$RED"
+    section_header "Linux - User Accounts" "$RED"
     check_target_root || return 1
     local ETC; ETC=$(ci_find_dir "$WIN_ROOT" "etc")
     [[ -z "$ETC" ]] && { warn "$(L "Directory etc non trovata." "etc directory not found.")"; return 0; }

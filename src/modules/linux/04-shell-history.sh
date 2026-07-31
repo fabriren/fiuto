@@ -1,7 +1,7 @@
 
 # --- LINUX 4 — Shell History (per utente) ---
 module_linux_shell_history() {
-    section_header "Linux — Shell History" "$MAGENTA"
+    section_header "Linux - Shell History" "$MAGENTA"
     check_target_root || return 1
     local FILES=(.bash_history .zsh_history .sh_history .history .python_history .mysql_history .psql_history .lesshst .node_repl_history)
     local KW="password|passwd|secret|credential|token|ssh|scp|curl|wget|nc |ncat|base64|sudo|chmod \\+x|/dev/tcp|reverse|nmap|chattr"
@@ -28,9 +28,9 @@ module_linux_shell_history() {
             UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + 1))
             CARDS+=$(file_card_html "$FISH/fish_history" "$KW" "\$" "histts")
         fi
-        [[ $UCOUNT -eq 0 ]] && { dim_msg "$UNAME — $(L "nessuna history" "no history")"; continue; }
+        [[ $UCOUNT -eq 0 ]] && { dim_msg "$UNAME - $(L "nessuna history" "no history")"; continue; }
         USERS=$((USERS + 1))
-        ok "$UNAME — ${BOLD}$UCOUNT file"
+        ok "$UNAME - ${BOLD}$UCOUNT file"
         for HF in "${FILES[@]}"; do
             local F="$HOME_DIR/$HF"; [[ -f "$F" && -s "$F" ]] || continue
             echo -e "  ${DIM}• $HF${RESET}"; print_file_lines "$F" "$KW" 30; echo ""

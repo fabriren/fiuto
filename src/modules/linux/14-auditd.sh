@@ -7,7 +7,7 @@
 # Logs" copre /var/log testuali ma non tocca audit.log, che ha un formato
 # proprio (campi chiave=valore, stringhe in esadecimale, timestamp epoch).
 module_linux_auditd() {
-    section_header "Linux — auditd" "$RED"
+    section_header "Linux - auditd" "$RED"
     check_target_root || return 1
 
     local AUDITDIR; AUDITDIR=$(ci_find_dir "$WIN_ROOT" "var/log/audit")

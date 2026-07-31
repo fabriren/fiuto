@@ -13,7 +13,7 @@
 #  valida. Il report distingue le due cose invece di lasciarlo intendere.
 # ================================================================
 module_macos_applications() {
-    section_header "macOS — $(L "Inventario applicazioni" "Application inventory")" "$GREEN"
+    section_header "macOS - $(L "Inventario applicazioni" "Application inventory")" "$GREEN"
     check_target_root || return 1
 
     local -a ROOTS=()

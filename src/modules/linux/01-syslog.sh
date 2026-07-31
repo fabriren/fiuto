@@ -5,7 +5,7 @@
 
 # --- LINUX 1 — System Logs (/var/log testuali) ---
 module_linux_syslog() {
-    section_header "Linux — System Logs" "$GREEN"
+    section_header "Linux - System Logs" "$GREEN"
     check_target_root || return 1
     local LOGDIR; LOGDIR=$(ci_find_dir "$WIN_ROOT" "var/log")
     [[ -z "$LOGDIR" ]] && { warn "$(L "Directory var/log non trovata." "var/log directory not found.")"; return 0; }
@@ -17,7 +17,7 @@ module_linux_syslog() {
         local F; F=$(ci_find_file "$LOGDIR" "$NAME")
         [[ -z "$F" || ! -s "$F" ]] && continue
         FOUND=$((FOUND + 1))
-        ok "$NAME — ${BOLD}$(stat -c %s "$F" 2>/dev/null) B"
+        ok "$NAME - ${BOLD}$(stat -c %s "$F" 2>/dev/null) B"
         print_file_lines "$F" "$KW" 60
         echo ""
         BODY+=$(file_card_html "$F" "$KW" "≣")

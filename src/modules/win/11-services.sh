@@ -3,7 +3,7 @@
 #  MODULO 11 — Services (Servizi Windows)
 # ================================================================
 module_services() {
-    section_header "$(L "Services — Servizi Windows" "Services — Windows Services")" "$RED"
+    section_header "$(L "Services - Servizi Windows" "Services - Windows Services")" "$RED"
     check_win_root || return 1
 
     if ! check_regipy; then
@@ -125,7 +125,7 @@ PYEOF
             DETAILS+="<div class='drow'><span class='lbl'>OBJ</span><span class='mono fld warn'>$(_esc "$SVC_OBJ")</span></div>"
         fi
         [[ -n "$SVC_DESC" ]] && DETAILS+="<div class='drow'><span class='lbl'>DSC</span><span class='fld' style='font-size:.72rem;color:var(--text-mid)'>$(_esc "$SVC_DESC")</span></div>"
-        [[ -z "$DETAILS"  ]] && DETAILS="<span class='dim' style='font-size:.72rem'>—</span>"
+        [[ -z "$DETAILS"  ]] && DETAILS="<span class='dim' style='font-size:.72rem'>-</span>"
 
         local DISP_HTML=""
         [[ -n "$SVC_DISP" && "$SVC_DISP" != "$SVC_NAME" ]] && \
@@ -161,7 +161,7 @@ PYEOF
           .tname{font-family:var(--mono);font-size:.72rem;color:var(--text-mid);word-break:break-all;
                  min-width:140px;max-width:240px;padding:.5rem .8rem .5rem 1rem}
         </style>
-        <div class='stitle'>Servizi Windows — IMG · OBJ · DSC</div>
+        <div class='stitle'>Servizi Windows - IMG · OBJ · DSC</div>
         <div class='card'><table>
           <thead><tr>
             <th style='width:18%'>Nome / Display</th>

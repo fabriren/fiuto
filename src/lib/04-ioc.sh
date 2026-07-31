@@ -253,9 +253,9 @@ load_ioc_file() {
     # formato, e senza questa riga si scoprirebbe solo dall'assenza di match.
     local BREAKDOWN; BREAKDOWN=$(printf '%s\n' "${IOC_TYPES[@]}" | cut -d'|' -f1 \
         | sort | uniq -c | awk '{printf "%s=%s ", $2, $1}')
-    ok "$(t ioc_loaded) ${#IOC_LIST[@]} ($FORMAT) — ${BREAKDOWN}"
+    ok "$(t ioc_loaded) ${#IOC_LIST[@]} ($FORMAT) - ${BREAKDOWN}"
     [[ "$NDUP" -gt 0 ]] && info "$(L "Duplicati ignorati:" "Duplicates ignored:") $NDUP"
-    log_msg "[IOC] $FORMAT: ${#IOC_LIST[@]} indicatori da $IOCFILE — $BREAKDOWN"
+    log_msg "[IOC] $FORMAT: ${#IOC_LIST[@]} indicatori da $IOCFILE - $BREAKDOWN"
     return 0
 }
 

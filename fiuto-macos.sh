@@ -90,7 +90,7 @@ _find_user_cwd() {
 }
 INVOCATION_DIR="$(_find_user_cwd)"
 unset -f _find_user_cwd
-WIN_ROOT=""          # root del volume selezionato (Windows/Linux/macOS — es. /mnt/disk)
+WIN_ROOT=""          # root del volume selezionato (Windows/Linux/macOS - es. /mnt/disk)
 OS_TYPE=""           # tipo OS del volume: windows | linux | macos | unknown
 REPORT_BASE_DIR=""   # directory base dei report HTML
 SCAN_DATE=""         # impostata all'avvio
@@ -255,8 +255,8 @@ t() {
         "en:batch_report_dir") echo "Report base directory:" ;;
         "it:batch_report_dir") echo "Report base dir:" ;;
 
-        "en:batch_started") echo "=== FIUTO started in batch mode — WIN_ROOT=" ;;
-        "it:batch_started") echo "=== FIUTO avviato in modalità batch — WIN_ROOT=" ;;
+        "en:batch_started") echo "=== FIUTO started in batch mode - WIN_ROOT=" ;;
+        "it:batch_started") echo "=== FIUTO avviato in modalità batch - WIN_ROOT=" ;;
 
         "en:specify_root_all") echo "Specify the root: $0 /mnt/windows --all" ;;
         "it:specify_root_all") echo "Specifica la root: $0 /mnt/windows --all" ;;
@@ -738,9 +738,9 @@ load_ioc_file() {
     # formato, e senza questa riga si scoprirebbe solo dall'assenza di match.
     local BREAKDOWN; BREAKDOWN=$(printf '%s\n' "${IOC_TYPES[@]}" | cut -d'|' -f1 \
         | sort | uniq -c | awk '{printf "%s=%s ", $2, $1}')
-    ok "$(t ioc_loaded) ${#IOC_LIST[@]} ($FORMAT) — ${BREAKDOWN}"
+    ok "$(t ioc_loaded) ${#IOC_LIST[@]} ($FORMAT) - ${BREAKDOWN}"
     [[ "$NDUP" -gt 0 ]] && info "$(L "Duplicati ignorati:" "Duplicates ignored:") $NDUP"
-    log_msg "[IOC] $FORMAT: ${#IOC_LIST[@]} indicatori da $IOCFILE — $BREAKDOWN"
+    log_msg "[IOC] $FORMAT: ${#IOC_LIST[@]} indicatori da $IOCFILE - $BREAKDOWN"
     return 0
 }
 
@@ -1127,8 +1127,8 @@ total = sum(counts.values())
 banner = (
     '<div class="card" style="margin:1rem 0;border-color:#f0883e">'
     '<div style="padding:1rem 1.5rem;font-size:.82rem;line-height:1.7">'
-    '<b>' + L('COPIA OSCURATA — non e\' il report originale',
-              'REDACTED COPY — this is not the original report') + '</b><br>'
+    '<b>' + L('COPIA OSCURATA - non e\' il report originale',
+              'REDACTED COPY - this is not the original report') + '</b><br>'
     + L('Da questa copia sono stati rimossi i valori delle credenziali (hash NTLM, PSK, '
         'token, chiavi private). Il report originale, integro, sta nello stesso percorso '
         'senza il suffisso <code>.redacted</code>: e\' quello da conservare come reperto e '
@@ -1167,7 +1167,7 @@ PYEOF
     [[ -f "$OUT" ]] || return 0
     local D; D=$(_redact_dir) && printf '%s\t%s\n' "${N:-0}" "$OUT" >> "${D}/done" 2>/dev/null
     evidence_note "$OUT" "copia oscurata" 2>/dev/null || true
-    log_msg "[REDACT] $OUT — ${N:-0} occorrenze oscurate"
+    log_msg "[REDACT] $OUT - ${N:-0} occorrenze oscurate"
     return 0
 }
 
@@ -1263,8 +1263,8 @@ image_type() {
     [[ -f "$F" ]] || { echo "assente"; return 1; }
     local MAGIC; MAGIC=$(head -c 8 "$F" 2>/dev/null | od -An -tx1 | tr -d ' \n')
     case "$MAGIC" in
-        45564609*) echo "ewf" ; return ;;   # "EVF\x09" — EnCase E01
-        45564632*) echo "ewf2"; return ;;   # "EVF2"    — Ex01
+        45564609*) echo "ewf" ; return ;;   # "EVF\x09" - EnCase E01
+        45564632*) echo "ewf2"; return ;;   # "EVF2"    - Ex01
     esac
     case "$MAGIC" in
         4b444d56*) echo "vmdk" ; return ;;  # "KDMV"
@@ -1370,7 +1370,7 @@ image_open() {
     [[ -f "$IMG" ]] || { err "$(L "Immagine non trovata:" "Image not found:") $IMG" >&2; return 1; }
 
     local TYPE; TYPE=$(image_type "$IMG")
-    info "$(L "Immagine:" "Image:") ${BOLD}$(basename "$IMG")${RESET} — $(L "formato" "format"): ${BOLD}${TYPE}" >&2
+    info "$(L "Immagine:" "Image:") ${BOLD}$(basename "$IMG")${RESET} - $(L "formato" "format"): ${BOLD}${TYPE}" >&2
 
     case "$TYPE" in
         vmdk|vhdx|qcow2)
@@ -1445,7 +1445,7 @@ image_open() {
     fi
     if [[ "$CRYPTO" != "none" ]] && ! _image_key > /dev/null; then
         err "$(L "Partizione ${CRYPTO}: serve la chiave con --unlock <chiave|file>." \
-                 "Partition is ${CRYPTO}: a key is required — --unlock <key|file>.")" >&2
+                 "Partition is ${CRYPTO}: a key is required - --unlock <key|file>.")" >&2
         info "$(L "FIUTO non tenta di indovinarla." "FIUTO does not attempt to guess it.")" >&2
         return 1
     fi
@@ -2414,7 +2414,7 @@ PYEOF
 
     if [[ "$STATUS" == "OK" && -s "$OUT" ]]; then
         _hive_replay_note "recovered" "$BASE" "${DETAIL} $(L "pagine dirty riapplicate" "dirty pages replayed")"
-        info "$(L "Transaction log applicati a" "Transaction logs applied to") ${BOLD}${BASE}${RESET} — ${DETAIL} $(L "pagine dirty" "dirty pages")" >&2
+        info "$(L "Transaction log applicati a" "Transaction logs applied to") ${BOLD}${BASE}${RESET} - ${DETAIL} $(L "pagine dirty" "dirty pages")" >&2
         log_msg "[HIVE] replay OK: $ORIG -> $OUT (${DETAIL} dirty pages)"
         _unlock; echo "$OUT"
         return
@@ -2425,7 +2425,7 @@ PYEOF
     : > "${OUT}.skip"
     _hive_replay_note "failed" "$BASE" "$DETAIL"
     warn "$(L "Replay dei transaction log fallito per" "Transaction log replay failed for") ${BASE}: ${DETAIL}" >&2
-    log_msg "[HIVE] replay FAILED: $ORIG — $DETAIL"
+    log_msg "[HIVE] replay FAILED: $ORIG - $DETAIL"
     _unlock; echo "$ORIG"
 }
 
@@ -2519,7 +2519,7 @@ html_header() {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>${TITLE} — DFIR Report</title>
+<title>${TITLE} - DFIR Report</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500;700&family=DM+Sans:wght@400;500;700&display=swap');
   :root {
@@ -2666,7 +2666,7 @@ html_footer() {
     local SRC="$2"
     cat << HTMLEOF
 <footer>
-  <div>fiuto.sh — $(L "generato il" "generated on") ${SCAN}</div>
+  <div>fiuto.sh - $(L "generato il" "generated on") ${SCAN}</div>
   <div>$(L "Sorgente:" "Source:") <span>${SRC}</span></div>
 </footer>
 HTMLEOF
@@ -2688,7 +2688,7 @@ HTMLEOF
       var card=node.closest ? node.closest('.card') : null, label='';
       if(card){
         var u=card.querySelector('.uname'), p=card.querySelector('.upath');
-        label=[u&&u.textContent.trim(), p&&p.textContent.trim()].filter(Boolean).join(' — ');
+        label=[u&&u.textContent.trim(), p&&p.textContent.trim()].filter(Boolean).join(' - ');
       }
       if(label && label!==lastLabel){ lines.push('# '+csvCell(label)); lastLabel=label; }
       if(node.tagName==='TABLE'){
@@ -2707,7 +2707,7 @@ HTMLEOF
     });
     if(!lines.length){ return; }
     var blob=new Blob(['\ufeff'+lines.join('\r\n')], {type:'text/csv;charset=utf-8'});
-    var name=(document.title||'fiuto_report').replace(/\s*—.*$/,'').replace(/[^\w.-]+/g,'_').replace(/^_+|_+$/g,'').slice(0,80)||'fiuto_report';
+    var name=(document.title||'fiuto_report').replace(/\s*-.*$/,'').replace(/[^\w.-]+/g,'_').replace(/^_+|_+$/g,'').slice(0,80)||'fiuto_report';
     var a=document.createElement('a');
     a.href=URL.createObjectURL(blob); a.download=name+'.csv';
     document.body.appendChild(a); a.click();
@@ -3152,7 +3152,7 @@ PYEOF
         cat "$OUT" >> "$COMBINED" 2>/dev/null || true
     fi
     ok "$(L "Export JSONL:" "JSONL export:") ${BOLD}${N}$(L " eventi" " events")${RESET} → $(basename "$OUT")"
-    log_msg "[JSONL] $OUT — $N eventi"
+    log_msg "[JSONL] $OUT - $N eventi"
 }
 
 # ================================================================
@@ -3161,7 +3161,7 @@ PYEOF
 
 debug_mounts() {
     echo ""
-    section_header "$(L "DEBUG — Mount attivi su questo sistema" "DEBUG — Active Mounts on This System")" "$YELLOW"
+    section_header "$(L "DEBUG - Mount attivi su questo sistema" "DEBUG - Active Mounts on This System")" "$YELLOW"
     echo -e "  ${DIM}── /proc/mounts (non di sistema) ───────────────────${RESET}"
     echo ""
     local SKIP_FS='tmpfs|sysfs|proc|devtmpfs|cgroup2?|fusectl|tracefs|securityfs|pstore|bpf|hugetlbfs|mqueue|debugfs|configfs|overlay|squashfs|nsfs|efivarfs|autofs|ramfs|rpc_pipefs'
@@ -3452,15 +3452,15 @@ setup_report_dir() {
             _RW_OK=true
             _RW_MSG="${GREEN}[$(L "scrivibile" "writable")]${RESET}"
         else
-            _RW_MSG="${RED}[$(L "SOLA LETTURA — i report NON potranno essere salvati!" "READ ONLY — reports CANNOT be saved!")]${RESET}"
+            _RW_MSG="${RED}[$(L "SOLA LETTURA - i report NON potranno essere salvati!" "READ ONLY - reports CANNOT be saved!")]${RESET}"
         fi
     else
         local _P; _P=$(dirname "$_CHOSEN")
         if [[ -w "$_P" ]]; then
             _RW_OK=true
-            _RW_MSG="${GREEN}[$(L "verrà creata — parent scrivibile" "will be created — parent writable")]${RESET}"
+            _RW_MSG="${GREEN}[$(L "verrà creata - parent scrivibile" "will be created - parent writable")]${RESET}"
         else
-            _RW_MSG="${RED}[$(L "parent '${_P}' NON scrivibile — i report NON potranno essere salvati!" "parent '${_P}' NOT writable — reports CANNOT be saved!")]${RESET}"
+            _RW_MSG="${RED}[$(L "parent '${_P}' NON scrivibile - i report NON potranno essere salvati!" "parent '${_P}' NOT writable - reports CANNOT be saved!")]${RESET}"
         fi
     fi
     echo ""
@@ -3532,7 +3532,7 @@ run_batch_module() {
 
     if [[ $SKIPPED -eq 1 ]]; then
         printf '\r\033[K'
-        echo -e "  ${YELLOW}[⏭]${RESET} [${mod_num}/${total_mods}] $mod_name — $(L "annullato (ESC)" "cancelled (ESC)")"
+        echo -e "  ${YELLOW}[⏭]${RESET} [${mod_num}/${total_mods}] $mod_name - $(L "annullato (ESC)" "cancelled (ESC)")"
         SUMMARY_TABLE+=("$mod_num|$mod_name|SKIP|$(L "annullato" "cancelled")")
         rm -f "$_REP_TMP"
         return
@@ -3545,11 +3545,11 @@ run_batch_module() {
         done < "$_REP_TMP"
         local rep_path="${GENERATED_REPORTS[-1]}"
         printf '\r\033[K'
-        echo -e "  ${GREEN}[✓]${RESET} [${mod_num}/${total_mods}] $mod_name — report: ${DIM}${rep_path}${RESET}"
+        echo -e "  ${GREEN}[✓]${RESET} [${mod_num}/${total_mods}] $mod_name - report: ${DIM}${rep_path}${RESET}"
         SUMMARY_TABLE+=("$mod_num|$mod_name|SI|$rep_path")
     else
         printf '\r\033[K'
-        echo -e "  ${DIM}[i] [${mod_num}/${total_mods}] $mod_name — $(L "nessun risultato" "no results")${RESET}"
+        echo -e "  ${DIM}[i] [${mod_num}/${total_mods}] $mod_name - $(L "nessun risultato" "no results")${RESET}"
         SUMMARY_TABLE+=("$mod_num|$mod_name|NO|-")
     fi
     rm -f "$_REP_TMP"
@@ -3629,10 +3629,10 @@ run_batch_pool() {
                 [[ -n "$_rep" && -f "$_rep" ]] && GENERATED_REPORTS+=("$_rep")
             done < "$_rf"
             local _last; _last=$(tail -1 "$_rf")
-            echo -e "  ${GREEN}[✓]${RESET} [${_i}/${_total}] $_label — report: ${DIM}${_last}${RESET}"
+            echo -e "  ${GREEN}[✓]${RESET} [${_i}/${_total}] $_label - report: ${DIM}${_last}${RESET}"
             SUMMARY_TABLE+=("$_i|$_label|SI|$_last")
         else
-            echo -e "  ${DIM}[i] [${_i}/${_total}] $_label — $(L "nessun risultato" "no results")${RESET}"
+            echo -e "  ${DIM}[i] [${_i}/${_total}] $_label - $(L "nessun risultato" "no results")${RESET}"
             SUMMARY_TABLE+=("$_i|$_label|NO|-")
         fi
     done
@@ -3659,6 +3659,16 @@ generate_full_dashboard() {
     local DASH="${REPORT_BASE_DIR}/index.html"
     local TABS="" COUNT_OK=0 COUNT_TOTAL=0
 
+    # L'executive summary e' la PRIMA scheda, ed e' quella su cui la dashboard
+    # si apre: e' il documento da cui si comincia a leggere, non uno dei
+    # novanta report da cercare nella lista.
+    local SUMMARY_HTML="${REPORT_BASE_DIR}/executive_summary.html"
+    if [[ -f "$SUMMARY_HTML" ]]; then
+        TABS+="<button class='tab tab-summary' data-src='executive_summary.html'>"
+        TABS+="<span class='tn'>★</span><span class='tl'>$(html_esc "$(L "Executive Summary" "Executive Summary")")</span>"
+        TABS+="<span class='dot ok'></span></button>"
+    fi
+
     for row in "${SUMMARY_TABLE[@]}"; do
         IFS='|' read -r mnum mname msy mpath <<< "$row"
         [[ -z "$mnum" ]] && continue
@@ -3671,7 +3681,7 @@ generate_full_dashboard() {
             TABS+="<button class='tab' data-src='$(html_esc "$rel")'><span class='tn'>${NUM2}</span><span class='tl'>${NAME_ESC}</span><span class='dot ok'></span></button>"
         else
             local CLS="none" LBL
-            [[ "$msy" == "SKIP" ]] && { CLS="skip"; LBL="skip"; } || LBL="—"
+            [[ "$msy" == "SKIP" ]] && { CLS="skip"; LBL="skip"; } || LBL="-"
             TABS+="<button class='tab disabled' disabled title='$([ "$msy" = "SKIP" ] && echo "$(L "saltato" "skipped")" || echo "$(L "nessuna evidenza" "no findings")")'><span class='tn'>${NUM2}</span><span class='tl'>${NAME_ESC}</span><span class='dot ${CLS}'></span></button>"
         fi
     done
@@ -3686,7 +3696,7 @@ generate_full_dashboard() {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FIUTO — Full Report (${OSL})</title>
+<title>FIUTO - Full Report (${OSL})</title>
 <style>
   :root{ --bg:#080b0f; --bg2:#0d1117; --bg3:#131920; --bg4:#1a2332; --border:#1e2d3d;
     --accent:#58a6ff; --accent2:#ff7b72; --accent3:#3fb950; --accent4:#f0883e;
@@ -3713,6 +3723,8 @@ generate_full_dashboard() {
   .tab.active{color:#fff;border-color:var(--accent4);background:rgba(240,136,62,.12)}
   .tab.active .tn{color:var(--accent4)}
   .tab.disabled{opacity:.4;cursor:not-allowed}
+  .tab-summary{background:rgba(240,136,62,.14);border-color:var(--accent4);color:#fff}
+  .tab-summary .tn{color:var(--accent4)}
   .dot{width:.45rem;height:.45rem;border-radius:50%;flex-shrink:0}
   .dot.ok{background:var(--accent3)} .dot.none{background:var(--border)} .dot.skip{background:var(--accent4)}
   main{flex:1;position:relative;background:var(--bg)}
@@ -3729,7 +3741,7 @@ generate_full_dashboard() {
 <header>
   <div class="hicon">${NOSE_SVG}</div>
   <div class="htxt">
-    <h1>FIUTO — Full Report</h1>
+    <h1>FIUTO - Full Report</h1>
     <div class="sub">${OSL} · ${HOST_DISP} · ${SCAN}</div>
   </div>
   <div class="hstats">
@@ -3751,14 +3763,20 @@ generate_full_dashboard() {
   var tabs=document.querySelectorAll('.tab:not(.disabled)'),
       viewer=document.getElementById('viewer'),
       ph=document.getElementById('placeholder');
+  function show(t){
+    document.querySelectorAll('.tab').forEach(function(x){x.classList.remove('active');});
+    t.classList.add('active');
+    var src=t.getAttribute('data-src');
+    if(src){ viewer.src=src; viewer.classList.add('show'); ph.style.display='none'; }
+  }
   tabs.forEach(function(t){
-    t.addEventListener('click',function(){
-      document.querySelectorAll('.tab').forEach(function(x){x.classList.remove('active');});
-      t.classList.add('active');
-      var src=t.getAttribute('data-src');
-      if(src){ viewer.src=src; viewer.classList.add('show'); ph.style.display='none'; }
-    });
+    t.addEventListener('click',function(){ show(t); });
   });
+  /* All'apertura si mostra subito l'executive summary, se c'e': e' il
+     documento da cui si comincia. Altrimenti resta il segnaposto, che spiega
+     cosa fare, invece di aprire a caso il primo modulo dell'elenco. */
+  var first=document.querySelector('.tab-summary');
+  if(first){ show(first); }
 })();
 </script>
 </body></html>
@@ -3839,7 +3857,7 @@ render_menu_from_registry() {
     # "SELEZIONA UN MODULO" (19 caratteri) sforava il campo da 18 e spingeva
     # fuori il bordo destro: il riquadro non si chiudeva. Un valore scritto a
     # mano va rifatto a ogni traduzione e a ogni etichetta di OS nuova.
-    local _INNER="   F I U T O  —  ${_OSL}  —  ${_TITLE}   "
+    local _INNER="   F I U T O  -  ${_OSL}  -  ${_TITLE}   "
     local _W=$(( ${#_INNER} > 50 ? ${#_INNER} : 50 ))
     local _BAR; _BAR=$(printf '═%.0s' $(seq 1 "$_W"))
     # Il riempimento si scrive a mano invece di usare %-*s: ${#stringa} conta i
@@ -3863,7 +3881,7 @@ render_menu_from_registry() {
         fi
         echo -e "  ${WHITE}[P]${RESET}  ${BOLD}Report dir:${RESET} ${DIM}${REPORT_BASE_DIR}${RESET}  ${_RW_COLOR}[${_RW_LABEL}]${RESET}"
     else
-        echo -e "  ${WHITE}[P]${RESET}  ${BOLD}Report dir:${RESET} ${RED}$(L "non impostata — premi [P] per configurare" "not set — press [P] to configure")${RESET}"
+        echo -e "  ${WHITE}[P]${RESET}  ${BOLD}Report dir:${RESET} ${RED}$(L "non impostata - premi [P] per configurare" "not set - press [P] to configure")${RESET}"
     fi
     echo -e "  ${WHITE}[R]${RESET}  ${BOLD}$(L "Imposta root da analizzare" "Set analysis root")${RESET}  ${DIM}${WIN_ROOT:-($_NOT_SET)} [${_OSL}]${RESET}"
     echo -e "  ${YELLOW}[D]${RESET}  ${BOLD}$(L "Debug mount attivi" "Debug active mounts")${RESET}  ${DIM}${_DIAG}${RESET}"
@@ -3956,7 +3974,7 @@ run_all_from_registry() {
         if [[ -n "${_guard:-}" ]] && declare -F "$_guard" > /dev/null; then
             local _reason
             if ! _reason=$("$_guard"); then
-                echo -e "  ${DIM}[i] [$_i/$_total] ${_label} — $(L "saltato" "skipped") (${_reason})${RESET}"
+                echo -e "  ${DIM}[i] [$_i/$_total] ${_label} - $(L "saltato" "skipped") (${_reason})${RESET}"
                 SUMMARY_TABLE+=("$_i|$_label|SKIP|$_reason")
                 continue
             fi
@@ -3996,7 +4014,9 @@ run_all_from_registry() {
     ok "$(L "Report salvati integralmente in:" "All reports saved in:") ${BOLD}$REPORT_BASE_DIR"
     # Il riepilogo va generato PRIMA della dashboard: la dashboard elenca i
     # report esistenti, e il riepilogo e' il primo che va aperto.
-    generate_executive_summary
+    # Il riepilogo non si apre da solo: diventa la prima scheda della
+    # dashboard, ed e' quella su cui la dashboard si apre.
+    SUMMARY_NO_PROMPT=true generate_executive_summary
     generate_full_dashboard
     redact_summary
 }
@@ -4361,12 +4381,12 @@ out.append(esc(L(
     "Questa pagina ordina il lavoro, non lo conclude. Ogni voce dice da quale modulo viene, "
     "su quale dato ha fatto match e perche' quel dato conta: il giudizio su cosa sia successo "
     "resta all'analista, che deve aprire il report del modulo e guardare il contesto. "
-    "L'assenza di riscontri non e' un attestato di pulizia — significa che le regole applicate, "
+    "L'assenza di riscontri non e' un attestato di pulizia - significa che le regole applicate, "
     "che sono poche e deliberatamente conservative, non hanno trovato nulla.",
     "This page orders the work, it does not conclude it. Every entry states which module it comes "
     "from, which data it matched and why that data matters: the judgement on what happened stays "
     "with the analyst, who must open the module report and look at the context. "
-    "No findings is not a clean bill of health — it means the applied rules, which are few and "
+    "No findings is not a clean bill of health - it means the applied rules, which are few and "
     "deliberately conservative, found nothing.")))
 out.append('</div></div>')
 
@@ -4464,7 +4484,7 @@ print(d["score"], c["CRITICA"], c["ALTA"], c["MEDIA"], c["BASSA"], len(d["correl
     {
         html_header "Executive Summary"
         html_page_header "SUM" "Executive Summary" \
-            "$(L "Riepilogo di sessione — priorità e correlazioni" "Session summary — priorities and correlations")" \
+            "$(L "Riepilogo di sessione - priorità e correlazioni" "Session summary - priorities and correlations")" \
             "$SCAN" "$WIN_ROOT"
         printf "<div class='statsbar'>%s</div>\n" "$STATS"
         echo "<main>"
@@ -4485,6 +4505,10 @@ print(d["score"], c["CRITICA"], c["ALTA"], c["MEDIA"], c["BASSA"], len(d["correl
     ok "$(L "Executive summary:" "Executive summary:") ${BOLD}${OUT}"
     info "$(L "Riscontri:" "Findings:") ${BOLD}$(( ${NCRIT:-0} + ${NHIGH:-0} + ${NMED:-0} + ${NLOW:-0} ))${RESET}  ·  $(L "critici/alti:" "critical/high:") ${BOLD}$(( ${NCRIT:-0} + ${NHIGH:-0} ))${RESET}  ·  $(L "correlazioni:" "correlations:") ${BOLD}${NCORR:-0}"
     log_msg "[SUMMARY] score=$SCORE crit=${NCRIT:-0} high=${NHIGH:-0} corr=${NCORR:-0}"
+    # Dopo --all il riepilogo diventa una scheda della dashboard, che si apre
+    # gia' posizionata li'. Chiedere anche qui vorrebbe dire due domande di
+    # fila e due finestre aperte sullo stesso contenuto.
+    [[ "${SUMMARY_NO_PROMPT:-false}" == "true" ]] && return 0
     open_report_prompt "$OUT"
 }
 
@@ -4518,12 +4542,12 @@ module_ps_history() {
         local PSRL_DIR
         PSRL_DIR=$(ci_find_dir "$USER_DIR" "$PSREADLINE_REL")
         if [[ -z "$PSRL_DIR" || ! -d "$PSRL_DIR" ]]; then
-            dim_msg "$USERNAME — $(L "PSReadLine non trovata" "PSReadLine not found")"
+            dim_msg "$USERNAME - $(L "PSReadLine non trovata" "PSReadLine not found")"
             continue
         fi
         mapfile -t HIST_FILES < <(find "$PSRL_DIR" -maxdepth 1 -iname "*_history.txt" -type f 2>/dev/null)
         if [[ ${#HIST_FILES[@]} -eq 0 ]]; then
-            warn "$USERNAME — $(L "PSReadLine trovata ma nessun history" "PSReadLine found but no history")"
+            warn "$USERNAME - $(L "PSReadLine trovata ma nessun history" "PSReadLine found but no history")"
             continue
         fi
         declare -a SORT_LIST=()
@@ -4535,7 +4559,7 @@ module_ps_history() {
         done
         mapfile -t SORTED < <(printf '%s\n' "${SORT_LIST[@]}" | sort -t'|' -k1 -rn)
         local COUNT=${#SORTED[@]}
-        ok "$USERNAME — ${BOLD}$COUNT file history"
+        ok "$USERNAME - ${BOLD}$COUNT file history"
         local FILE_NAMES="" FILE_SIZES="" FILE_CTIMES="" FILE_MTIMES="" FILE_PATHS=""
         for ENTRY in "${SORTED[@]}"; do
             local F="${ENTRY#*|}"
@@ -4550,7 +4574,7 @@ module_ps_history() {
                 FCTIME=$(stat -c "%z" "$F" 2>/dev/null | cut -d'.' -f1 || echo "?")
             fi
             local LINES; LINES=$(wc -l < "$F" 2>/dev/null || echo "?")
-            echo -e "      ${DIM}• $FNAME  (${FSIZE} bytes, ${LINES} righe — creato: $FCTIME)${RESET}"
+            echo -e "      ${DIM}• $FNAME  (${FSIZE} bytes, ${LINES} righe - creato: $FCTIME)${RESET}"
             # Stampa contenuto con highlight
             local DECODED
             DECODED=$("$PY3" -c "
@@ -4737,7 +4761,7 @@ PYEOF
 #  MODULO 7 — Notepad TabState
 # ================================================================
 module_notepad_tabstate() {
-    section_header "$(L "Notepad TabState — Tab Rimasti Aperti" "Notepad TabState — Open Tabs")" "$MAGENTA"
+    section_header "$(L "Notepad TabState - Tab Rimasti Aperti" "Notepad TabState - Open Tabs")" "$MAGENTA"
     check_win_root || return 1
 
     local NOTEPAD_PKG="Microsoft.WindowsNotepad_8wekyb3d8bbwe"
@@ -4834,21 +4858,21 @@ PYEOF
         local USERNAME; USERNAME=$(basename "$USER_DIR")
         local PACKAGES_DIR
         PACKAGES_DIR=$(ci_find_dir "$USER_DIR" "AppData/Local/Packages")
-        [[ -z "$PACKAGES_DIR" ]] && { dim_msg "$USERNAME — $(L "AppData\\Local\\Packages non trovata" "AppData\\Local\\Packages not found")"; continue; }
+        [[ -z "$PACKAGES_DIR" ]] && { dim_msg "$USERNAME - $(L "AppData\\Local\\Packages non trovata" "AppData\\Local\\Packages not found")"; continue; }
         local NOTEPAD_DIR
         NOTEPAD_DIR=$(find "$PACKAGES_DIR" -maxdepth 1 -iname "${NOTEPAD_PKG}*" -type d 2>/dev/null | head -1)
-        [[ -z "$NOTEPAD_DIR" ]] && { dim_msg "$USERNAME — $(L "Notepad UWP non installato" "Notepad UWP not installed")"; continue; }
+        [[ -z "$NOTEPAD_DIR" ]] && { dim_msg "$USERNAME - $(L "Notepad UWP non installato" "Notepad UWP not installed")"; continue; }
         local TABSTATE_DIR
         TABSTATE_DIR=$(ci_find_dir "$NOTEPAD_DIR" "LocalState/TabState")
-        [[ -z "$TABSTATE_DIR" || ! -d "$TABSTATE_DIR" ]] && { warn "$USERNAME — $(L "TabState non trovata" "TabState not found")"; continue; }
+        [[ -z "$TABSTATE_DIR" || ! -d "$TABSTATE_DIR" ]] && { warn "$USERNAME - $(L "TabState non trovata" "TabState not found")"; continue; }
         mapfile -t BIN_FILES < <(find "$TABSTATE_DIR" -maxdepth 1 -iname "*.bin" -type f -printf "%T@ %p\n" 2>/dev/null | sort -rn | cut -d' ' -f2-)
         if [[ ${#BIN_FILES[@]} -eq 0 ]]; then
             # Fallback se printf %T@ non è supportato (BSD/macOS)
             mapfile -t BIN_FILES < <(find "$TABSTATE_DIR" -maxdepth 1 -iname "*.bin" -type f -print0 2>/dev/null | xargs -0 ls -t 2>/dev/null)
         fi
         local COUNT=${#BIN_FILES[@]}
-        [[ $COUNT -eq 0 ]] && { warn "$USERNAME — $(L "TabState vuota" "TabState empty")"; continue; }
-        ok "$USERNAME — $COUNT $(L "file .bin trovati" ".bin files found")"
+        [[ $COUNT -eq 0 ]] && { warn "$USERNAME - $(L "TabState vuota" "TabState empty")"; continue; }
+        ok "$USERNAME - $COUNT $(L "file .bin trovati" ".bin files found")"
         local FILE_NAMES="" FILE_SIZES="" FILE_MTIMES="" FILE_CTIMES=""
         for BIN in "${BIN_FILES[@]}"; do
             local FNAME; FNAME=$(basename "$BIN")
@@ -4872,7 +4896,7 @@ PYEOF
                         printf "        ${DIM}%4d${RESET}  %s\n" "$LN" "$LINE"
                     done <<< "$TERM_TEXT"
                 else
-                    echo -e "      ${DIM}• $FNAME  ($FSIZE bytes — nessun testo)${RESET}"
+                    echo -e "      ${DIM}• $FNAME  ($FSIZE bytes - nessun testo)${RESET}"
                 fi
             fi
             FILE_NAMES="${FILE_NAMES}${FNAME}|"
@@ -4972,7 +4996,7 @@ PYEOF
 #  MODULO 2 — IFEO (Image File Execution Options)
 # ================================================================
 module_ifeo() {
-    section_header "IFEO — Image File Execution Options" "$RED"
+    section_header "IFEO - Image File Execution Options" "$RED"
     check_win_root || return 1
 
     if ! check_regipy; then
@@ -5104,7 +5128,7 @@ PYEOF
 #  MODULO 3 — BAM (Background Activity Moderator)
 # ================================================================
 module_bam() {
-    section_header "BAM — Background Activity Moderator" "$BLUE"
+    section_header "BAM - Background Activity Moderator" "$BLUE"
     check_win_root || return 1
 
     if ! check_regipy; then
@@ -5252,7 +5276,7 @@ PYEOF
 
     {
         html_header "BAM"
-        html_page_header "BA" "BAM — <span>Background Activity</span> Moderator" \
+        html_page_header "BA" "BAM - <span>Background Activity</span> Moderator" \
             "SYSTEM\\ControlSet001\\Services\\bam\\State\\UserSettings" "$SCAN" "$WIN_ROOT"
         echo "<div class='statsbar'>
           <div class='stat'><div class='label'>Eseguibili</div><div class='value'>${TOTAL}</div></div>
@@ -5406,7 +5430,7 @@ PYEOF
 #  MODULO 6 — Prefetch
 # ================================================================
 module_prefetch() {
-    section_header "$(L "Prefetch — Eseguibili Tracciati" "Prefetch — Execution History")" "$GREEN"
+    section_header "$(L "Prefetch - Eseguibili Tracciati" "Prefetch - Execution History")" "$GREEN"
     check_win_root || return 1
 
     local PREF_DIR
@@ -5586,7 +5610,7 @@ PYEOF
         [[ -n "$T_TRIGGERS" ]] && DETAILS+="<div class='drow'><span class='lbl'>TRG</span><span class='mono fld' style='color:var(--accent4)'>$(_esc "$T_TRIGGERS")</span></div>"
         [[ -n "$T_AUTHOR"   ]] && DETAILS+="<div class='drow'><span class='lbl'>AUT</span><span class='mono fld dim'>$(_esc "$T_AUTHOR")</span></div>"
         [[ -n "$T_DESC"     ]] && DETAILS+="<div class='drow'><span class='lbl'>DSC</span><span class='fld' style='font-size:.72rem;color:var(--text-mid)'>$(_esc "$T_DESC")</span></div>"
-        [[ -z "$DETAILS"    ]] && DETAILS="<span class='dim' style='font-size:.72rem'>—</span>"
+        [[ -z "$DETAILS"    ]] && DETAILS="<span class='dim' style='font-size:.72rem'>-</span>"
 
         ROWS+="<tr ${ROW_STYLE}>
           <td class='tname' style='vertical-align:top;padding-top:.5rem'>$(_esc "$TNAME")</td>
@@ -5642,7 +5666,7 @@ PYEOF
             padding: .5rem .8rem .5rem 1rem;
           }
         </style>
-        <div class='stitle'>Task pianificati — CMD · ARG · DIR · TRG · AUT · DSC</div>
+        <div class='stitle'>Task pianificati - CMD · ARG · DIR · TRG · AUT · DSC</div>
         <div class='card'><table>
           <thead><tr>
             <th style='width:22%;min-width:160px'>Task</th>
@@ -5662,7 +5686,7 @@ PYEOF
 #  MODULO 9 — USB / Dispositivi Rimovibili
 # ================================================================
 module_usb() {
-    section_header "$(L "USB — Dispositivi Rimovibili" "USB — Removable Devices")" "$BLUE"
+    section_header "$(L "USB - Dispositivi Rimovibili" "USB - Removable Devices")" "$BLUE"
     check_win_root || return 1
 
     if ! check_regipy; then
@@ -5767,16 +5791,16 @@ module_lnk() {
         local USERNAME; USERNAME=$(basename "$USER_DIR")
         local RECENT_DIR
         RECENT_DIR=$(ci_find_dir "$USER_DIR" "AppData/Roaming/Microsoft/Windows/Recent")
-        [[ -z "$RECENT_DIR" ]] && { dim_msg "$USERNAME — $(L "Recent non trovata" "Recent not found")"; continue; }
+        [[ -z "$RECENT_DIR" ]] && { dim_msg "$USERNAME - $(L "Recent non trovata" "Recent not found")"; continue; }
 
         mapfile -t LNK_FILES < <(find "$RECENT_DIR" -maxdepth 1 -iname "*.lnk" -type f -printf "%T@ %p\n" 2>/dev/null | sort -rn | cut -d' ' -f2- | head -50)
         if [[ ${#LNK_FILES[@]} -eq 0 ]]; then
             mapfile -t LNK_FILES < <(find "$RECENT_DIR" -maxdepth 1 -iname "*.lnk" -type f -print0 2>/dev/null | xargs -0 ls -t 2>/dev/null | head -50)
         fi
         local COUNT=${#LNK_FILES[@]}
-        [[ $COUNT -eq 0 ]] && { dim_msg "$USERNAME — $(L "nessun .lnk trovato" "no .lnk files found")"; continue; }
+        [[ $COUNT -eq 0 ]] && { dim_msg "$USERNAME - $(L "nessun .lnk trovato" "no .lnk files found")"; continue; }
 
-        ok "$USERNAME — $COUNT $(L "file .lnk recenti" "recent .lnk files")"
+        ok "$USERNAME - $COUNT $(L "file .lnk recenti" "recent .lnk files")"
         TOTAL_USERS=$((TOTAL_USERS + 1))
 
         for LNK in "${LNK_FILES[@]}"; do
@@ -5866,7 +5890,7 @@ PYEOF
 #  MODULO 4 — Cache RDP (Terminal Server Client)
 # ================================================================
 module_rdp_cache() {
-    section_header "$(L "Cache RDP — Terminal Server Client" "RDP Cache — Terminal Server Client")" "$CYAN"
+    section_header "$(L "Cache RDP - Terminal Server Client" "RDP Cache - Terminal Server Client")" "$CYAN"
     check_win_root || return 1
 
     local RDP_REL="AppData/Local/Microsoft/Terminal Server Client/Cache"
@@ -5879,7 +5903,7 @@ module_rdp_cache() {
         local CACHE_DIR
         CACHE_DIR=$(ci_find_dir "$USER_DIR" "$RDP_REL")
         if [[ -z "$CACHE_DIR" || ! -d "$CACHE_DIR" ]]; then
-            dim_msg "$USERNAME — $(L "Cache RDP non trovata" "RDP cache not found")"
+            dim_msg "$USERNAME - $(L "Cache RDP non trovata" "RDP cache not found")"
             continue
         fi
         mapfile -t CACHE_FILES < <(find "$CACHE_DIR" -maxdepth 1 -type f \( -iname "*.bmc" -o -iname "*.bin" \) -printf "%T@ %p\n" 2>/dev/null | sort -rn | cut -d' ' -f2-)
@@ -5888,16 +5912,16 @@ module_rdp_cache() {
         fi
         local COUNT=${#CACHE_FILES[@]}
         if [[ $COUNT -eq 0 ]]; then
-            warn "$USERNAME — $(L "Directory cache trovata ma vuota" "Cache directory found but empty")"
+            warn "$USERNAME - $(L "Directory cache trovata ma vuota" "Cache directory found but empty")"
             continue
         fi
-        ok "$USERNAME — $COUNT $(L "file cache trovati in:" "cache files found in:") $CACHE_DIR"
+        ok "$USERNAME - $COUNT $(L "file cache trovati in:" "cache files found in:") $CACHE_DIR"
         local FILES_INFO=""
         for F in "${CACHE_FILES[@]}"; do
             local FNAME; FNAME=$(basename "$F")
             local FSIZE; FSIZE=$(stat -c "%s" "$F" 2>/dev/null || echo "?")
             local FMTIME; FMTIME=$(stat -c "%y" "$F" 2>/dev/null | cut -d'.' -f1 || echo "?")
-            echo -e "      ${DIM}• $FNAME  (${FSIZE} bytes — mod: $FMTIME)${RESET}"
+            echo -e "      ${DIM}• $FNAME  (${FSIZE} bytes - mod: $FMTIME)${RESET}"
             FILES_INFO="${FILES_INFO}${FNAME}:${FSIZE}:${FMTIME}|"
         done
         RES_USERS+=("$USERNAME")
@@ -5943,7 +5967,7 @@ except: pass
 PYEOF
 )
             if [[ -n "$RDP_SERVERS" ]]; then
-                echo -e "  ${GREEN}${BOLD}$USERNAME — $(L "Server RDP trovati:" "RDP servers found:")${RESET}"
+                echo -e "  ${GREEN}${BOLD}$USERNAME - $(L "Server RDP trovati:" "RDP servers found:")${RESET}"
                 while IFS=$'\t' read -r HOST UNAME; do
                     printf "      ${CYAN}%-40s${RESET}  ${DIM}utente: %s${RESET}\n" "$HOST" "${UNAME:--}"
                 done <<< "$RDP_SERVERS"
@@ -6025,7 +6049,7 @@ PYEOF
 #  MODULO 11 — Services (Servizi Windows)
 # ================================================================
 module_services() {
-    section_header "$(L "Services — Servizi Windows" "Services — Windows Services")" "$RED"
+    section_header "$(L "Services - Servizi Windows" "Services - Windows Services")" "$RED"
     check_win_root || return 1
 
     if ! check_regipy; then
@@ -6147,7 +6171,7 @@ PYEOF
             DETAILS+="<div class='drow'><span class='lbl'>OBJ</span><span class='mono fld warn'>$(_esc "$SVC_OBJ")</span></div>"
         fi
         [[ -n "$SVC_DESC" ]] && DETAILS+="<div class='drow'><span class='lbl'>DSC</span><span class='fld' style='font-size:.72rem;color:var(--text-mid)'>$(_esc "$SVC_DESC")</span></div>"
-        [[ -z "$DETAILS"  ]] && DETAILS="<span class='dim' style='font-size:.72rem'>—</span>"
+        [[ -z "$DETAILS"  ]] && DETAILS="<span class='dim' style='font-size:.72rem'>-</span>"
 
         local DISP_HTML=""
         [[ -n "$SVC_DISP" && "$SVC_DISP" != "$SVC_NAME" ]] && \
@@ -6183,7 +6207,7 @@ PYEOF
           .tname{font-family:var(--mono);font-size:.72rem;color:var(--text-mid);word-break:break-all;
                  min-width:140px;max-width:240px;padding:.5rem .8rem .5rem 1rem}
         </style>
-        <div class='stitle'>Servizi Windows — IMG · OBJ · DSC</div>
+        <div class='stitle'>Servizi Windows - IMG · OBJ · DSC</div>
         <div class='card'><table>
           <thead><tr>
             <th style='width:18%'>Nome / Display</th>
@@ -6216,7 +6240,7 @@ PYEOF
 #  MODULO 12 — Event Log (Security / System / PowerShell / RDP)
 # ================================================================
 module_evtx() {
-    section_header "$(L "Event Log — Analisi .evtx" "Event Log — .evtx Analysis")" "$RED"
+    section_header "$(L "Event Log - Analisi .evtx" "Event Log - .evtx Analysis")" "$RED"
     check_win_root || return 1
 
     if ! "$PY3" -c "import Evtx" 2>/dev/null; then
@@ -6295,7 +6319,7 @@ PYEOF
     for EVTX_NAME in "${!EVTX_MAP[@]}"; do
         local EVTX_FILE
         EVTX_FILE=$(ci_find_file "$EVTX_DIR" "$EVTX_NAME")
-        [[ -z "$EVTX_FILE" ]] && { dim_msg "$EVTX_NAME — $(L "non trovato" "not found")"; continue; }
+        [[ -z "$EVTX_FILE" ]] && { dim_msg "$EVTX_NAME - $(L "non trovato" "not found")"; continue; }
 
         local EIDS_CSV="${EVTX_MAP[$EVTX_NAME]// /,}"
         local LABEL="${EVTX_NAME%.evtx}"; LABEL="${LABEL//%4/\/}"
@@ -6403,7 +6427,7 @@ for ev in events:
         if sv and sv not in SKIP:
             parts.append(f"<div class='drow'><span class='lbl'>{H.escape(k)}</span>"
                          f"<span class='fld mono'>{H.escape(sv[:200])}</span></div>")
-    detail=''.join(parts[:8]) or "<span class='dim'>—</span>"
+    detail=''.join(parts[:8]) or "<span class='dim'>-</span>"
     susp=ev.get('eid','') in SUSP
     rs="style='background:rgba(255,123,114,.07);border-left:3px solid var(--accent2)'" if susp else ""
     ec="bad" if susp else "ok"
@@ -6438,7 +6462,7 @@ PYEOF
           .drow{display:flex;align-items:flex-start;margin-bottom:.18rem}
           .fld{word-break:break-all;overflow-wrap:anywhere;white-space:pre-wrap;flex:1}
         </style>
-        <div class='stitle'>$(L "Eventi per timestamp — EID · Timestamp · Sorgente · Dettagli" "Events by timestamp — EID · Timestamp · Source · Details")</div>
+        <div class='stitle'>$(L "Eventi per timestamp - EID · Timestamp · Sorgente · Dettagli" "Events by timestamp - EID · Timestamp · Source · Details")</div>
         <div class='card'><table>
           <thead><tr>
             <th style='width:11%'>EID</th>
@@ -6461,7 +6485,7 @@ PYEOF
 #  MODULO 13 — Amcache + Shimcache (timeline esecuzione binari)
 # ================================================================
 module_amcache() {
-    section_header "$(L "Amcache + Shimcache — Timeline Binari" "Amcache + Shimcache — Binary Timeline")" "$YELLOW"
+    section_header "$(L "Amcache + Shimcache - Timeline Binari" "Amcache + Shimcache - Binary Timeline")" "$YELLOW"
     check_win_root || return 1
 
     if ! check_regipy; then
@@ -6627,7 +6651,7 @@ PYEOF
         done <<< "$SHIM_DATA"
         ok "$(L "Shimcache: $SHIM_COUNT entry" "Shimcache: $SHIM_COUNT entries")"
     else
-        warn "$(L "Hive SYSTEM non trovato" "SYSTEM hive not found") — Shimcache saltato"
+        warn "$(L "Hive SYSTEM non trovato" "SYSTEM hive not found") - Shimcache saltato"
     fi
 
     separator
@@ -6678,12 +6702,12 @@ PYEOF
           <div class='stat'><div class='label'>Amcache entry</div><div class='value'>${AMC_COUNT}</div></div>
           <div class='stat info'><div class='label'>Shimcache entry</div><div class='value'>${SHIM_COUNT}</div></div>
         </div><main>
-        <div class='stitle'>Amcache — Eseguibili con hash SHA1</div>
+        <div class='stitle'>Amcache - Eseguibili con hash SHA1</div>
         <div class='card'><table>
           <thead><tr><th>Path</th><th>LinkDate</th><th>$(L "SHA1 (troncato)" "SHA1 (truncated)")</th><th>Publisher</th></tr></thead>
           <tbody>${AMC_ROWS:-<tr><td colspan='4' class='dim' style='padding:1rem'>$(L "Nessun dato" "No data")</td></tr>}</tbody>
         </table></div>
-        <div class='stitle' style='margin-top:2rem'>Shimcache — Eseguibili visti dal sistema</div>
+        <div class='stitle' style='margin-top:2rem'>Shimcache - Eseguibili visti dal sistema</div>
         <div class='card'><table>
           <thead><tr><th>Path</th><th>Timestamp</th></tr></thead>
           <tbody>${SHIM_ROWS:-<tr><td colspan='2' class='dim' style='padding:1rem'>$(L "Nessun dato" "No data")</td></tr>}</tbody>
@@ -6700,7 +6724,7 @@ PYEOF
 #  MODULO 14 — Recycle Bin ($Recycle.Bin)
 # ================================================================
 module_recycle_bin() {
-    section_header "$(L "Recycle Bin — File Eliminati" "Recycle Bin — Deleted Files")" "$GREEN"
+    section_header "$(L "Recycle Bin - File Eliminati" "Recycle Bin - Deleted Files")" "$GREEN"
     check_win_root || return 1
 
 
@@ -6834,7 +6858,7 @@ PYEOF
           <div class='stat'><div class='label'>File eliminati</div><div class='value'>${TOTAL}</div></div>
           <div class='stat'><div class='label'>Sospetti</div><div class='value' style='color:var(--accent2)'>${SUSP_COUNT}</div></div>
         </div><main>
-        <div class='stitle'>$(L "File nel Cestino — SID · Path originale · Data eliminazione · Dimensione" "Recycle Bin Files — SID · Original path · Deletion date · Size")</div>
+        <div class='stitle'>$(L "File nel Cestino - SID · Path originale · Data eliminazione · Dimensione" "Recycle Bin Files - SID · Original path · Deletion date · Size")</div>
         <div class='card'><table>
           <thead><tr><th style='width:16%'>SID</th><th>$(L "Path originale" "Original path")</th><th style='width:14%'>$(L "Eliminato" "Deleted")</th><th style='width:8%'>Dim.</th></tr></thead>
           <tbody>${ROWS}</tbody>
@@ -6851,7 +6875,7 @@ PYEOF
 #  MODULO 15 — WMI Subscriptions (persistenza invisibile)
 # ================================================================
 module_wmi() {
-    section_header "$(L "WMI Subscriptions — Persistenza Invisibile" "WMI Subscriptions — Fileless Persistence")" "$RED"
+    section_header "$(L "WMI Subscriptions - Persistenza Invisibile" "WMI Subscriptions - Fileless Persistence")" "$RED"
     check_win_root || return 1
 
 
@@ -6873,7 +6897,7 @@ module_wmi() {
         OBJECTS_FILE=$(find "$WMI_DIR" -iname "OBJECTS.DATA" 2>/dev/null | head -1)
 
     if [[ -z "$OBJECTS_FILE" ]]; then
-        warn "$(L "OBJECTS.DATA non trovato — analisi tramite strings sul repository" "OBJECTS.DATA not found — analysis via strings on repository")"
+        warn "$(L "OBJECTS.DATA non trovato - analisi tramite strings sul repository" "OBJECTS.DATA not found - analysis via strings on repository")"
     fi
 
     declare -a WMI_ENTRIES=()
@@ -6982,13 +7006,13 @@ PYEOF
         <style>
           .fld{word-break:break-all;overflow-wrap:anywhere;white-space:pre-wrap}
         </style>
-        <div class='stitle'>$(L "WMI Event Subscriptions — Tipo · Contenuto" "WMI Event Subscriptions — Type · Content")</div>
+        <div class='stitle'>$(L "WMI Event Subscriptions - Tipo · Contenuto" "WMI Event Subscriptions - Type · Content")</div>
         <div class='card'><table>
           <thead><tr><th style='width:20%'>$(L "Tipo" "Type")</th><th>$(L "Valore / Query / Script" "Value / Query / Script")</th></tr></thead>
           <tbody>${ROWS}</tbody>
         </table></div>
         <div style='margin-top:1.5rem;padding:1rem 1.5rem;background:var(--bg3);border:1px solid var(--border);border-radius:6px;font-size:.8rem'>
-          <div style='font-family:var(--mono);color:var(--accent);margin-bottom:.5rem'>ℹ ATT&amp;CK T1546.003 — WMI Event Subscription</div>
+          <div style='font-family:var(--mono);color:var(--accent);margin-bottom:.5rem'>ℹ ATT&amp;CK T1546.003 - WMI Event Subscription</div>
           <div style='color:var(--text-mid);line-height:1.8'>
             Meccanismo di persistenza invisibile: non compare in Run keys, Task, né Services.<br>
             Classi chiave: <span class='mono'>__EventFilter</span> · <span class='mono'>CommandLineEventConsumer</span> · <span class='mono'>ActiveScriptEventConsumer</span> · <span class='mono'>__FilterToConsumerBinding</span>
@@ -7006,7 +7030,7 @@ PYEOF
 #  MODULO 16 — SRUM (System Resource Usage Monitor)
 # ================================================================
 module_srum() {
-    section_header "SRUM — System Resource Usage Monitor" "$BLUE"
+    section_header "SRUM - System Resource Usage Monitor" "$BLUE"
     check_win_root || return 1
 
     local SRUM_PATH
@@ -7028,7 +7052,7 @@ module_srum() {
     "$PY3" -c "import pyesedb" 2>/dev/null && HAS_ESE=true
 
     if ! $HAS_ESE; then
-        warn "pyesedb non disponibile — parsing tramite strings (risultati parziali)"
+        warn "pyesedb non disponibile - parsing tramite strings (risultati parziali)"
         warn "Per parsing completo: pip install pyesedb  (richiede libesedb)"
         echo ""
         # Fallback strings: cerca nomi applicazione e byte trasferiti
@@ -7205,7 +7229,7 @@ PYEOF
 #  MODULO 17 — Browser History (Chrome / Edge / Firefox)
 # ================================================================
 module_browser() {
-    section_header "Browser History — Chrome / Edge / Firefox" "$CYAN"
+    section_header "Browser History - Chrome / Edge / Firefox" "$CYAN"
     check_win_root || return 1
 
 
@@ -7384,7 +7408,7 @@ PYEOF
 <div class='statsbar' style='align-items:center;flex-wrap:wrap'>
   <div class='stat'><div class='label'>Visite totali</div>
     <div class='value' id='cnt-all' style='cursor:pointer' onclick="setFilter('all')" title='Mostra tutto'>0</div></div>
-  <div class='stat'><div class='label'>⚠ Sospette — clicca per filtrare</div>
+  <div class='stat'><div class='label'>⚠ Sospette - clicca per filtrare</div>
     <div class='value' id='cnt-susp' style='color:var(--accent2);cursor:pointer' onclick="setFilter('susp')" title='Filtra solo sospette'>0</div></div>
   <div style='margin-left:auto;display:flex;gap:.6rem;align-items:center'>
     <button id='btn-all'  class='fbtn fbtn-on' onclick="setFilter('all')">Tutte</button>
@@ -7395,7 +7419,7 @@ PYEOF
 FILTERHTML
         echo "<main>
         <style>.fld{word-break:break-all;overflow-wrap:anywhere;white-space:pre-wrap}</style>
-        <div class='stitle'>$(L "Cronologia navigazione — Timestamp · Utente/Browser · URL · Titolo · Visite" "Browsing history — Timestamp · User/Browser · URL · Title · Visits")</div>
+        <div class='stitle'>$(L "Cronologia navigazione - Timestamp · Utente/Browser · URL · Titolo · Visite" "Browsing history - Timestamp · User/Browser · URL · Title · Visits")</div>
         <div class='card'><table id='brtable'>
           <thead><tr>
             <th style='width:12%'>Timestamp</th>
@@ -7502,7 +7526,7 @@ with open(tmp_file, 'a', encoding='utf-8') as f:
     local P_COUNT="${COUNTS%|*}"
     local P_SUSP="${COUNTS#*|}"
 
-    ok "$USERNAME / $BLABEL — $P_COUNT visite"
+    ok "$USERNAME / $BLABEL - $P_COUNT visite"
     TOTAL=$((TOTAL + P_COUNT))
     SUSP_COUNT=$((SUSP_COUNT + P_SUSP))
 
@@ -7523,7 +7547,7 @@ for v in normal:
 #  MODULO 18 — UserAssist + RunMRU + TypedPaths + WordWheelQuery
 # ================================================================
 module_userassist() {
-    section_header "UserAssist / RunMRU / TypedPaths — Attività Utente" "$MAGENTA"
+    section_header "UserAssist / RunMRU / TypedPaths - Attività Utente" "$MAGENTA"
     check_win_root || return 1
 
     if ! check_regipy; then
@@ -7542,7 +7566,7 @@ module_userassist() {
     while IFS= read -r USER_DIR; do
         local USERNAME; USERNAME=$(basename "$USER_DIR")
         local NTUSER; NTUSER=$(get_user_hive "$USER_DIR" "NTUSER.DAT")
-        [[ -z "$NTUSER" ]] && { dim_msg "$USERNAME — NTUSER.DAT $(L "non trovato" "not found")"; continue; }
+        [[ -z "$NTUSER" ]] && { dim_msg "$USERNAME - NTUSER.DAT $(L "non trovato" "not found")"; continue; }
 
         info "Parsing NTUSER.DAT: $USERNAME"
 
@@ -7765,29 +7789,29 @@ PYEOF
     {
         html_header "UserAssist"
         html_page_header "UA" "UserAssist / RunMRU / <span>TypedPaths</span>" \
-            "NTUSER.DAT — Attività interattiva utente" "$SCAN" "$WIN_ROOT"
+            "NTUSER.DAT - Attività interattiva utente" "$SCAN" "$WIN_ROOT"
         echo "<div class='statsbar'>
           <div class='stat'><div class='label'>UserAssist</div><div class='value'>${TOTAL_UA}</div></div>
           <div class='stat info'><div class='label'>RunMRU</div><div class='value'>${TOTAL_RUN}</div></div>
           <div class='stat ok'><div class='label'>TypedPaths</div><div class='value'>${TOTAL_TP}</div></div>
           <div class='stat'><div class='label'>WordWheel</div><div class='value' style='color:var(--accent4)'>${TOTAL_WW}</div></div>
         </div><main>
-        <div class='stitle'>UserAssist — Programmi avviati dalla GUI (ROT13 decodificato)</div>
+        <div class='stitle'>UserAssist - Programmi avviati dalla GUI (ROT13 decodificato)</div>
         <div class='card'><table>
           <thead><tr><th style='width:12%'>$(L "Utente" "User")</th><th>$(L "Eseguibile" "Executable")</th><th style='width:6%'>$(L "Avvii" "Runs")</th><th style='width:16%'>$(L "Ultimo uso" "Last used")</th></tr></thead>
           <tbody>${UA_ROWS:-<tr><td colspan='4' class='dim' style='padding:1rem'>$(L "Nessun dato" "No data")</td></tr>}</tbody>
         </table></div>
-        <div class='stitle' style='margin-top:2rem'>RunMRU — Comandi digitati in Esegui (Win+R)</div>
+        <div class='stitle' style='margin-top:2rem'>RunMRU - Comandi digitati in Esegui (Win+R)</div>
         <div class='card'><table>
           <thead><tr><th style='width:12%'>$(L "Utente" "User")</th><th>$(L "Comando" "Command")</th></tr></thead>
           <tbody>${RUN_ROWS:-<tr><td colspan='2' class='dim' style='padding:1rem'>$(L "Nessun dato" "No data")</td></tr>}</tbody>
         </table></div>
-        <div class='stitle' style='margin-top:2rem'>TypedPaths — Percorsi digitati in Explorer</div>
+        <div class='stitle' style='margin-top:2rem'>TypedPaths - Percorsi digitati in Explorer</div>
         <div class='card'><table>
           <thead><tr><th style='width:12%'>$(L "Utente" "User")</th><th style='width:8%'>Slot</th><th>$(L "Percorso" "Path")</th></tr></thead>
           <tbody>${TP_ROWS:-<tr><td colspan='3' class='dim' style='padding:1rem'>$(L "Nessun dato" "No data")</td></tr>}</tbody>
         </table></div>
-        <div class='stitle' style='margin-top:2rem'>WordWheelQuery — Ricerche in Start Menu</div>
+        <div class='stitle' style='margin-top:2rem'>WordWheelQuery - Ricerche in Start Menu</div>
         <div class='card'><table>
           <thead><tr><th style='width:12%'>$(L "Utente" "User")</th><th>$(L "Termine cercato" "Search term")</th></tr></thead>
           <tbody>${WW_ROWS:-<tr><td colspan='2' class='dim' style='padding:1rem'>$(L "Nessun dato" "No data")</td></tr>}</tbody>
@@ -7804,7 +7828,7 @@ PYEOF
 #  MODULO 19 — ShellBags (navigazione cartelle, anche cancellate)
 # ================================================================
 module_shellbags() {
-    section_header "$(L "ShellBags — Navigazione Cartelle" "ShellBags — Folder Navigation")" "$CYAN"
+    section_header "$(L "ShellBags - Navigazione Cartelle" "ShellBags - Folder Navigation")" "$CYAN"
     check_win_root || return 1
 
     if ! check_regipy; then
@@ -7973,9 +7997,9 @@ PYEOF
         done
 
         if $FOUND_ANY; then
-            ok "$USERNAME — $TOTAL shellbags totali"
+            ok "$USERNAME - $TOTAL shellbags totali"
         else
-            dim_msg "$USERNAME — $(L "nessuna ShellBag trovata" "no ShellBag found")"
+            dim_msg "$USERNAME - $(L "nessuna ShellBag trovata" "no ShellBag found")"
         fi
 
     done < <(get_user_homes)
@@ -8014,13 +8038,13 @@ PYEOF
 
     {
         html_header "ShellBags"
-        html_page_header "SB" "ShellBags — <span>Navigazione Cartelle</span>" \
+        html_page_header "SB" "ShellBags - <span>Navigazione Cartelle</span>" \
             "UsrClass.dat → BagMRU" "$SCAN" "$WIN_ROOT"
         echo "<div class='statsbar'>
           <div class='stat'><div class='label'>ShellBags</div><div class='value'>${TOTAL}</div></div>
           <div class='stat'><div class='label'>Sospette</div><div class='value' style='color:var(--accent2)'>${SUSP_COUNT}</div></div>
         </div><main>
-        <div class='stitle'>Cartelle visitate — anche se poi cancellate o smontate</div>
+        <div class='stitle'>Cartelle visitate - anche se poi cancellate o smontate</div>
         <div class='card'><table>
           <thead><tr><th style='width:12%'>$(L "Utente" "User")</th><th>$(L "Percorso ricostruito" "Reconstructed path")</th><th style='width:12%'>Hive</th></tr></thead>
           <tbody>${ROWS}</tbody>
@@ -8037,7 +8061,7 @@ PYEOF
 #  MODULO 20 — SAM: Hash password account locali
 # ================================================================
 module_sam() {
-    section_header "$(L "SAM — Hash Account Locali" "SAM — Local Account Hashes")" "$RED"
+    section_header "$(L "SAM - Hash Account Locali" "SAM - Local Account Hashes")" "$RED"
     check_win_root || return 1
 
     local SAM_HIVE;  SAM_HIVE=$(get_hive "SAM")
@@ -8193,12 +8217,12 @@ PYEOF
 
     {
         html_header "SAM"
-        html_page_header "SM" "SAM — <span>Hash Account Locali</span>" \
+        html_page_header "SM" "SAM - <span>Hash Account Locali</span>" \
             "Windows\\System32\\config\\SAM" "$SCAN" "$WIN_ROOT"
         echo "<div class='statsbar'>
           <div class='stat'><div class='label'>Account</div><div class='value'>${TOTAL}</div></div>
         </div><main>
-        <div class='stitle'>Hash NTLM account locali — craccabili offline con hashcat/john</div>
+        <div class='stitle'>Hash NTLM account locali - craccabili offline con hashcat/john</div>
         <div class='card'><table>
           <thead><tr><th>Username</th><th style='width:7%'>RID</th><th style='width:27%'>LM Hash</th><th style='width:27%'>NT Hash</th><th>Note</th></tr></thead>
           <tbody>${ROWS}</tbody>
@@ -8222,7 +8246,7 @@ PYEOF
 #  MODULO 21 — MFT Timeline (Master File Table)
 # ================================================================
 module_mft() {
-    section_header "MFT — Master File Table Timeline" "$YELLOW"
+    section_header "MFT - Master File Table Timeline" "$YELLOW"
     check_win_root || return 1
 
     local MFT_FILE=""
@@ -8254,26 +8278,26 @@ module_mft() {
         fi
 
         if [[ -z "$MFT_FILE" ]]; then
-            warn "$(L "\$MFT non accessibile — il volume è montato con ntfs3 (driver kernel)" "\$MFT not accessible — volume mounted with ntfs3 (kernel driver)")"
+            warn "$(L "\$MFT non accessibile - il volume è montato con ntfs3 (driver kernel)" "\$MFT not accessible - volume mounted with ntfs3 (kernel driver)")"
             echo ""
             info "$(L "Il driver ntfs3 non espone i file di sistema (\$MFT, \$LogFile, ecc.)." "The ntfs3 driver does not expose system files (\$MFT, \$LogFile, etc.).")"
             info "$(L "Per accedere all'\$MFT hai due opzioni:" "To access \$MFT you have two options:")"
             echo ""
             if [[ -n "$DEV" ]]; then
-                echo -e "  ${CYAN}Opzione A${RESET} — rimonta con ntfs-3g (supporta file di sistema):"
+                echo -e "  ${CYAN}Opzione A${RESET} - rimonta con ntfs-3g (supporta file di sistema):"
                 echo -e "  ${DIM}sudo umount \"$WIN_ROOT\"${RESET}"
                 echo -e "  ${DIM}sudo mount -t ntfs-3g -o ro,noload,show_sys_files \"$DEV\" \"$WIN_ROOT\"${RESET}"
                 echo ""
-                echo -e "  ${CYAN}Opzione B${RESET} — estrai \$MFT senza rimontare (richiede ntfs-3g-tools):"
+                echo -e "  ${CYAN}Opzione B${RESET} - estrai \$MFT senza rimontare (richiede ntfs-3g-tools):"
                 echo -e "  ${DIM}sudo apt install ntfs-3g${RESET}"
                 echo -e "  ${DIM}ntfscat -f \"$DEV\" '\$MFT' > /tmp/MFT && sudo chmod a+r /tmp/MFT${RESET}"
                 echo -e "  ${DIM}# poi imposta WIN_ROOT e riavvia il modulo${RESET}"
             else
-                echo -e "  ${CYAN}Opzione A${RESET} — rimonta con ntfs-3g:"
+                echo -e "  ${CYAN}Opzione A${RESET} - rimonta con ntfs-3g:"
                 echo -e "  ${DIM}sudo umount \"$WIN_ROOT\"${RESET}"
                 echo -e "  ${DIM}sudo mount -t ntfs-3g -o ro,noload,show_sys_files /dev/DEVICE \"$WIN_ROOT\"${RESET}"
                 echo ""
-                echo -e "  ${CYAN}Opzione B${RESET} — estrai direttamente:"
+                echo -e "  ${CYAN}Opzione B${RESET} - estrai direttamente:"
                 echo -e "  ${DIM}ntfscat -f /dev/DEVICE '\$MFT' > /tmp/MFT${RESET}"
             fi
             echo ""
@@ -8454,8 +8478,8 @@ PYEOF
 
     {
         html_header "MFT"
-        html_page_header "MF" "MFT — <span>Master File Table</span> Timeline" \
-            "\$MFT — radice volume NTFS" "$SCAN" "$WIN_ROOT"
+        html_page_header "MF" "MFT - <span>Master File Table</span> Timeline" \
+            "\$MFT - radice volume NTFS" "$SCAN" "$WIN_ROOT"
         echo "<div class='statsbar'>
           <div class='stat'><div class='label'>File analizzati</div><div class='value'>${TOTAL_LINES}</div></div>
           <div class='stat'><div class='label'>Sospetti</div><div class='value' style='color:var(--accent2)'>${SUSP_COUNT}</div></div>
@@ -8493,7 +8517,7 @@ PYEOF
 #  MODULO 22 — OpenSaveMRU / LastVisitedMRU (dialoghi file)
 # ================================================================
 module_opensave() {
-    section_header "$(L "OpenSaveMRU / LastVisitedMRU — Dialoghi File" "OpenSaveMRU / LastVisitedMRU — File Dialogs")" "$GREEN"
+    section_header "$(L "OpenSaveMRU / LastVisitedMRU - Dialoghi File" "OpenSaveMRU / LastVisitedMRU - File Dialogs")" "$GREEN"
     check_win_root || return 1
 
     if ! check_regipy; then
@@ -8663,12 +8687,12 @@ PYEOF
           <div class='stat'><div class='label'>File aperti/salvati</div><div class='value'>${TOTAL_OS}</div></div>
           <div class='stat info'><div class='label'>App + cartelle</div><div class='value'>${TOTAL_LV}</div></div>
         </div><main>
-        <div class='stitle'>OpenSaveMRU — File aperti o salvati tramite dialogo di Windows</div>
+        <div class='stitle'>OpenSaveMRU - File aperti o salvati tramite dialogo di Windows</div>
         <div class='card'><table>
           <thead><tr><th style='width:12%'>$(L "Utente" "User")</th><th style='width:8%'>$(L "Estensione" "Extension")</th><th>Path</th></tr></thead>
           <tbody>${OS_ROWS:-<tr><td colspan='3' class='dim' style='padding:1rem'>$(L "Nessun dato" "No data")</td></tr>}</tbody>
         </table></div>
-        <div class='stitle' style='margin-top:2rem'>LastVisitedMRU — Ultima cartella visitata per applicazione</div>
+        <div class='stitle' style='margin-top:2rem'>LastVisitedMRU - Ultima cartella visitata per applicazione</div>
         <div class='card'><table>
           <thead><tr><th style='width:12%'>$(L "Utente" "User")</th><th style='width:20%'>Applicazione</th><th>$(L "Ultima cartella" "Last folder")</th></tr></thead>
           <tbody>${LV_ROWS:-<tr><td colspan='3' class='dim' style='padding:1rem'>$(L "Nessun dato" "No data")</td></tr>}</tbody>
@@ -8685,7 +8709,7 @@ PYEOF
 #  MODULO 23 — USN Journal ($UsnJrnl:$J)
 # ================================================================
 module_usn() {
-    section_header "$(L "USN Journal — Change Log NTFS" "USN Journal — NTFS Change Log")" "$CYAN"
+    section_header "$(L "USN Journal - Change Log NTFS" "USN Journal - NTFS Change Log")" "$CYAN"
     check_win_root || return 1
 
 
@@ -8714,7 +8738,7 @@ module_usn() {
                 return 0
             fi
         else
-            warn "$(L "\$UsnJrnl non accessibile — volume montato con ntfs3 (driver kernel)" "\$UsnJrnl not accessible — volume mounted with ntfs3 (kernel driver)")"
+            warn "$(L "\$UsnJrnl non accessibile - volume montato con ntfs3 (driver kernel)" "\$UsnJrnl not accessible - volume mounted with ntfs3 (kernel driver)")"
             [[ -n "$DEV" ]] && info "Prova: ntfscat -f \"$DEV\" '\$Extend/\$UsnJrnl:\$J' > /tmp/J"
             return 0
         fi
@@ -8836,13 +8860,13 @@ PYEOF
     local TABLE_ROWS; TABLE_ROWS=$(cat "$TMP_USN_ROWS" 2>/dev/null || echo "")
     {
         html_header "USN Journal"
-        html_page_header "UJ" "USN Journal — <span>Change Log</span> NTFS" \
+        html_page_header "UJ" "USN Journal - <span>Change Log</span> NTFS" \
             "\$Extend\\\$UsnJrnl:\$J" "$SCAN" "$WIN_ROOT"
         echo "<div class='statsbar'>
           <div class='stat'><div class='label'>Record totali</div><div class='value'>${TOTAL_LINES}</div></div>
           <div class='stat'><div class='label'>Sospetti</div><div class='value' style='color:var(--accent2)'>${SUSP_COUNT}</div></div>
         </div><main>
-        <div class='stitle'>$(L "Change Journal NTFS — Timestamp · File · Ext · Azione" "NTFS Change Journal — Timestamp · File · Ext · Action")</div>
+        <div class='stitle'>$(L "Change Journal NTFS - Timestamp · File · Ext · Azione" "NTFS Change Journal - Timestamp · File · Ext · Action")</div>
         <div class='card'><table>
           <thead><tr><th style='width:14%'>Timestamp</th><th>$(L "Nome file" "Filename")</th><th style='width:6%'>Ext</th><th>$(L "Motivo" "Reason")</th></tr></thead>
           <tbody>${TABLE_ROWS:-<tr><td colspan='4' class='dim' style='padding:1rem'>Nessun record</td></tr>}</tbody>
@@ -8858,7 +8882,7 @@ PYEOF
 #  MODULO 24 — NTDS.dit (Active Directory hashes)
 # ================================================================
 module_ntds() {
-    section_header "NTDS.dit — Active Directory Hashes" "$RED"
+    section_header "NTDS.dit - Active Directory Hashes" "$RED"
     check_win_root || return 1
 
 
@@ -8872,7 +8896,7 @@ module_ntds() {
         [[ -n "$_NTDS_DIR" ]] && NTDS_FILE=$(find "$_NTDS_DIR" -maxdepth 1 -iname "ntds.dit" -type f 2>/dev/null | head -1)
     fi
     if [[ -z "$NTDS_FILE" ]]; then
-        warn "$(L "ntds.dit non trovato — questo non è un Domain Controller (o la struttura NTDS/ è assente)" "ntds.dit not found — this is not a Domain Controller (or NTDS/ structure is absent)")"
+        warn "$(L "ntds.dit non trovato - questo non è un Domain Controller (o la struttura NTDS/ è assente)" "ntds.dit not found - this is not a Domain Controller (or NTDS/ structure is absent)")"
         return 0
     fi
     local SYS_HIVE; SYS_HIVE=$(get_hive "SYSTEM")
@@ -8884,7 +8908,7 @@ module_ntds() {
     echo ""
 
     if ! "$PY3" -c "from impacket.examples.secretsdump import NTDSHashes" 2>/dev/null; then
-        warn "$(L "impacket non trovato — installalo con:" "impacket not found — install it with:") ${PY3} -m pip install impacket"
+        warn "$(L "impacket non trovato - installalo con:" "impacket not found - install it with:") ${PY3} -m pip install impacket"
         info "$(L "Fallback: estrazione account senza hash tramite strings..." "Fallback: account extraction without hashes via strings...")"
         local ACC_STRINGS
         ACC_STRINGS=$(strings "$NTDS_FILE" 2>/dev/null | grep -E '^[A-Za-z0-9_.-]{3,20}\$?$' | sort -u | head -100 || true)
@@ -8900,7 +8924,7 @@ module_ntds() {
     register_tmp "$TMP_DIR"
 
     # Copia con timeout: su share SMB da DC live la copia può bloccarsi indefinitamente
-    info "$(L "Copia ntds.dit in /tmp (timeout 180s — file di rete, attendere)..." "Copying ntds.dit to /tmp (timeout 180s — network file, please wait)...")"
+    info "$(L "Copia ntds.dit in /tmp (timeout 180s - file di rete, attendere)..." "Copying ntds.dit to /tmp (timeout 180s - network file, please wait)...")"
     if ! portable_timeout 180 cp "$NTDS_FILE" "$TMP_DIR/ntds.dit" 2>/dev/null; then
         err "$(L "Timeout o errore nella copia di ntds.dit (share lenta o file bloccato da Windows)" "Timeout or error copying ntds.dit (slow share or file locked by Windows)")"
         info "$(L "Suggerimento: esegui il modulo su un'immagine montata offline oppure tramite VSS snapshot" "Hint: run the module on an offline mounted image or via VSS snapshot")"
@@ -8963,7 +8987,7 @@ PYEOF
             err "$(L "ntds.dit è bloccato dal servizio Active Directory (DC live, Errno 35 / EAGAIN)." "ntds.dit is locked by Active Directory service (live DC, Errno 35 / EAGAIN).")"
             info "$(L "Soluzioni: 1) ntdsutil IFM sul DC  2) impacket-secretsdump remoto  3) immagine disco offline" "Solutions: 1) ntdsutil IFM on DC  2) remote impacket-secretsdump  3) offline disk image")"
         else
-            err "$(L "Dump vuoto — ntds.dit potrebbe essere in stato dirty o corrotto." "Empty dump — ntds.dit may be dirty or corrupted.")"
+            err "$(L "Dump vuoto - ntds.dit potrebbe essere in stato dirty o corrotto." "Empty dump - ntds.dit may be dirty or corrupted.")"
             info "$(L "Prova il modulo 38 (PAD Offline) che usa analisi ESE con recovery avanzato." "Try module 38 (PAD Offline) which uses ESE analysis with advanced recovery.")"
         fi
         return 1
@@ -9017,12 +9041,12 @@ PYEOF
     done
     {
         html_header "NTDS.dit"
-        html_page_header "AD" "NTDS.dit — <span>Active Directory</span> Hashes" \
+        html_page_header "AD" "NTDS.dit - <span>Active Directory</span> Hashes" \
             "Windows\\NTDS\\ntds.dit" "$SCAN" "$WIN_ROOT"
         echo "<div class='statsbar'>
           <div class='stat'><div class='label'>Account</div><div class='value'>${TOTAL}</div></div>
         </div><main>
-        <div class='stitle'>Hash NTLM account AD — craccabili offline con hashcat -m 1000</div>
+        <div class='stitle'>Hash NTLM account AD - craccabili offline con hashcat -m 1000</div>
         <div class='card'><table>
           <thead><tr><th>Username</th><th style='width:8%'>RID</th><th style='width:30%'>NT Hash</th><th>Note</th></tr></thead>
           <tbody>${ROWS}</tbody>
@@ -9046,7 +9070,7 @@ PYEOF
 #  MODULO 25 — Hibernation / Pagefile (artefatti memoria)
 # ================================================================
 module_hiberfil() {
-    section_header "$(L "Hibernation / Pagefile — Artefatti Memoria" "Hibernation / Pagefile — Memory Artifacts")" "$BLUE"
+    section_header "$(L "Hibernation / Pagefile - Artefatti Memoria" "Hibernation / Pagefile - Memory Artifacts")" "$BLUE"
     check_win_root || return 1
 
 
@@ -9168,7 +9192,7 @@ PYEOF
           <div class='stat info'><div class='label'>Stringhe estratte</div><div class='value'>${TOTAL_STRINGS}</div></div>
         </div><main>
         <style>.fld{word-break:break-all;overflow-wrap:anywhere;white-space:pre-wrap}</style>
-        <div class='stitle'>Artefatti in memoria — analisi tramite strings (parziale)</div>
+        <div class='stitle'>Artefatti in memoria - analisi tramite strings (parziale)</div>
         <div class='cards'>${CARDS_HTML}</div></main>"
         html_footer "$SCAN" "$WIN_ROOT"
     } > "$REPORT_HTML"
@@ -9181,7 +9205,7 @@ PYEOF
 #  MODULO 26 — WER Files (Windows Error Reporting)
 # ================================================================
 module_wer_files() {
-    section_header "WER Files — Windows Error Reporting" "$MAGENTA"
+    section_header "WER Files - Windows Error Reporting" "$MAGENTA"
     check_win_root || return 1
 
     local TOTAL_FILES=0
@@ -9241,7 +9265,7 @@ module_wer_files() {
         local OWNER="${ENTRY#*|}"
         local FNAME; FNAME=$(basename "$(dirname "$F")")
         local FMTIME; FMTIME=$(stat -c "%y" "$F" 2>/dev/null | cut -d'.' -f1 || echo "?")
-        echo -e "      ${DIM}[$(printf "%2d" $SCAN_COUNT)] • $FNAME  (${OWNER}) — $FMTIME${RESET}"
+        echo -e "      ${DIM}[$(printf "%2d" $SCAN_COUNT)] • $FNAME  (${OWNER}) - $FMTIME${RESET}"
     done
 
     separator
@@ -9321,7 +9345,7 @@ PYEOF
 #  MODULO 27 — Credential Manager (DPAPI blobs)
 # ================================================================
 module_credential_manager() {
-    section_header "Credential Manager — DPAPI Blobs" "$MAGENTA"
+    section_header "Credential Manager - DPAPI Blobs" "$MAGENTA"
     check_win_root || return 1
 
 
@@ -9381,7 +9405,7 @@ PYEOF
     separator
     info "$(L "Blob DPAPI trovati:" "DPAPI blobs found:") ${BOLD}$TOTAL"
     [[ $TOTAL -eq 0 ]] && { warn "$(L "Nessun blob DPAPI trovato." "No DPAPI blobs found.")"; return 0; }
-    warn "$(L "I blob sono cifrati con DPAPI — richiedono la master key utente per la decifratura" "Blobs are DPAPI-encrypted — require the user master key for decryption")"
+    warn "$(L "I blob sono cifrati con DPAPI - richiedono la master key utente per la decifratura" "Blobs are DPAPI-encrypted - require the user master key for decryption")"
     info "$(L "Tool utili: dpapick3, mimikatz (sekurlsa::dpapi), impacket dpapi" "Useful tools: dpapick3, mimikatz (sekurlsa::dpapi), impacket dpapi")"
     ask_yn "Generare report HTML?" || return 0
 
@@ -9405,12 +9429,12 @@ PYEOF
     done
     {
         html_header "Credential Manager"
-        html_page_header "CM" "Credential Manager — <span>DPAPI Blobs</span>" \
+        html_page_header "CM" "Credential Manager - <span>DPAPI Blobs</span>" \
             "AppData\\Local\\Microsoft\\Credentials" "$SCAN" "$WIN_ROOT"
         echo "<div class='statsbar'>
           <div class='stat'><div class='label'>Blob trovati</div><div class='value'>${TOTAL}</div></div>
         </div><main>
-        <div class='stitle'>$(L "Blob DPAPI — Utente · File · Path · MasterKey GUID · Dim · Timestamp" "DPAPI Blobs — User · File · Path · MasterKey GUID · Size · Timestamp")</div>
+        <div class='stitle'>$(L "Blob DPAPI - Utente · File · Path · MasterKey GUID · Dim · Timestamp" "DPAPI Blobs - User · File · Path · MasterKey GUID · Size · Timestamp")</div>
         <div class='card'><table>
           <thead><tr><th>$(L "Utente" "User")</th><th>File</th><th>Store</th><th>MK GUID</th><th>Dim.</th><th>$(L "Modificato" "Modified")</th></tr></thead>
           <tbody>${ROWS}</tbody>
@@ -9433,7 +9457,7 @@ PYEOF
 #  MODULO 28 — WLAN & VPN Profiles
 # ================================================================
 module_wlan() {
-    section_header "$(L "WLAN & VPN — Profili di Rete" "WLAN & VPN — Network Profiles")" "$CYAN"
+    section_header "$(L "WLAN & VPN - Profili di Rete" "WLAN & VPN - Network Profiles")" "$CYAN"
     check_win_root || return 1
 
 
@@ -9537,7 +9561,7 @@ PYEOF
     done
     {
         html_header "WLAN VPN"
-        html_page_header "WL" "WLAN / VPN — <span>Profili di Rete</span>" \
+        html_page_header "WL" "WLAN / VPN - <span>Profili di Rete</span>" \
             "ProgramData\\Microsoft\\Wlansvc + NetworkList" "$SCAN" "$WIN_ROOT"
         echo "<div class='statsbar'>
           <div class='stat'><div class='label'>Profili totali</div><div class='value'>${TOTAL_WLAN}</div></div>
@@ -9558,7 +9582,7 @@ PYEOF
 #  MODULO 29 — AppX / UWP Packages
 # ================================================================
 module_appx() {
-    section_header "$(L "AppX / UWP — Pacchetti Store Installati" "AppX / UWP — Installed Store Packages")" "$GREEN"
+    section_header "$(L "AppX / UWP - Pacchetti Store Installati" "AppX / UWP - Installed Store Packages")" "$GREEN"
     check_win_root || return 1
 
     if ! check_regipy; then
@@ -9669,13 +9693,13 @@ PYEOF
     done
     {
         html_header "AppX"
-        html_page_header "AX" "AppX / UWP — <span>Pacchetti Store</span>" \
+        html_page_header "AX" "AppX / UWP - <span>Pacchetti Store</span>" \
             "AppModel\\Repository\\Packages" "$SCAN" "$WIN_ROOT"
         echo "<div class='statsbar'>
           <div class='stat'><div class='label'>Pacchetti</div><div class='value'>${TOTAL}</div></div>
           <div class='stat'><div class='label'>Sospetti</div><div class='value' style='color:var(--accent2)'>${SUSP_COUNT}</div></div>
         </div><main>
-        <div class='stitle'>Pacchetti UWP installati — path fuori Windows Apps = potenziale sideload</div>
+        <div class='stitle'>Pacchetti UWP installati - path fuori Windows Apps = potenziale sideload</div>
         <div class='card'><table>
           <thead><tr><th style='width:10%'>Scope</th><th>Package Name</th><th style='width:20%'>Publisher</th><th>Install Path</th></tr></thead>
           <tbody>${ROWS}</tbody>
@@ -9775,7 +9799,7 @@ PYEOF
                     if [[ -n "$DL_OUT" ]]; then
                         echo "$DL_OUT" >> "$TMP_DL_ROWS"
                         TOTAL_DL=$((TOTAL_DL + $(echo "$DL_OUT" | wc -l)))
-                        ok "$USERNAME / $BLABEL — $(L "download trovati" "downloads found")"
+                        ok "$USERNAME / $BLABEL - $(L "download trovati" "downloads found")"
                     fi
                 done
             else
@@ -9822,7 +9846,7 @@ PYEOF
                 if [[ -n "$DL_OUT" ]]; then
                     echo "$DL_OUT" >> "$TMP_DL_ROWS"
                     TOTAL_DL=$((TOTAL_DL + $(echo "$DL_OUT" | wc -l)))
-                    ok "$USERNAME / $BLABEL — $(L "download trovati" "downloads found")"
+                    ok "$USERNAME / $BLABEL - $(L "download trovati" "downloads found")"
                 fi
             fi
         done
@@ -9865,7 +9889,7 @@ PYEOF
             if [[ -n "$LG_OUT" ]]; then
                 echo "$LG_OUT" >> "$TMP_LG_ROWS"
                 TOTAL_LG=$((TOTAL_LG + $(echo "$LG_OUT" | wc -l)))
-                ok "$USERNAME / $BLABEL — $(L "credenziali salvate trovate" "saved credentials found")"
+                ok "$USERNAME / $BLABEL - $(L "credenziali salvate trovate" "saved credentials found")"
             fi
         done
     done < <(get_user_homes)
@@ -9888,12 +9912,12 @@ PYEOF
           <div class='stat info'><div class='label'>Login salvati</div><div class='value'>${TOTAL_LG}</div></div>
         </div><main>
         <style>.fld{word-break:break-all;overflow-wrap:anywhere;white-space:pre-wrap}</style>
-        <div class='stitle'>$(L "Download — Timestamp · Utente/Browser · URL · Destinazione" "Downloads — Timestamp · User/Browser · URL · Destination")</div>
+        <div class='stitle'>$(L "Download - Timestamp · Utente/Browser · URL · Destinazione" "Downloads - Timestamp · User/Browser · URL · Destination")</div>
         <div class='card'><table>
           <thead><tr><th style='width:12%'>Timestamp</th><th style='width:14%'>$(L "Utente/Browser" "User/Browser")</th><th>URL</th><th style='width:20%'>$(L "Destinazione" "Destination")</th></tr></thead>
           <tbody>${DL_ROWS:-<tr><td colspan='4' class='dim' style='padding:1rem'>Nessun download trovato</td></tr>}</tbody>
         </table></div>
-        <div class='stitle' style='margin-top:2rem'>$(L "Login Data — Credenziali salvate (password cifrate DPAPI)" "Login Data — Saved credentials (DPAPI-encrypted passwords)")</div>
+        <div class='stitle' style='margin-top:2rem'>$(L "Login Data - Credenziali salvate (password cifrate DPAPI)" "Login Data - Saved credentials (DPAPI-encrypted passwords)")</div>
         <div class='card'><table>
           <thead><tr><th style='width:12%'>Timestamp</th><th style='width:14%'>$(L "Utente/Browser" "User/Browser")</th><th>URL</th><th style='width:15%'>Username</th><th style='width:10%'>Password</th></tr></thead>
           <tbody>${LG_ROWS:-<tr><td colspan='5' class='dim' style='padding:1rem'>Nessuna credenziale trovata</td></tr>}</tbody>
@@ -9910,7 +9934,7 @@ PYEOF
 #  MODULO 31 — Clipboard History (Win10+)
 # ================================================================
 module_clipboard() {
-    section_header "$(L "Clipboard History — Cronologia Appunti" "Clipboard History")" "$YELLOW"
+    section_header "$(L "Clipboard History - Cronologia Appunti" "Clipboard History")" "$YELLOW"
     check_win_root || return 1
 
 
@@ -9985,13 +10009,13 @@ PYEOF
     done
     {
         html_header "Clipboard History"
-        html_page_header "CB" "Clipboard History — <span>Cronologia Appunti</span>" \
+        html_page_header "CB" "Clipboard History - <span>Cronologia Appunti</span>" \
             "AppData\\Local\\Microsoft\\Windows\\Clipboard" "$SCAN" "$WIN_ROOT"
         echo "<div class='statsbar'>
           <div class='stat'><div class='label'>Voci</div><div class='value'>${TOTAL}</div></div>
           <div class='stat'><div class='label'>Sospette</div><div class='value' style='color:var(--accent2)'>${SUSP_COUNT}</div></div>
         </div><main>
-        <div class='stitle'>$(L "Clipboard History — Utente · Timestamp · Contenuto (troncato a 300 char)" "Clipboard History — User · Timestamp · Content (truncated to 300 chars)")</div>
+        <div class='stitle'>$(L "Clipboard History - Utente · Timestamp · Contenuto (troncato a 300 char)" "Clipboard History - User · Timestamp · Content (truncated to 300 chars)")</div>
         <div class='card'><table>
           <thead><tr><th style='width:12%'>$(L "Utente" "User")</th><th style='width:14%'>Timestamp</th><th>$(L "Contenuto" "Content")</th></tr></thead>
           <tbody>${ROWS}</tbody>
@@ -10007,7 +10031,7 @@ PYEOF
 #  MODULO 32 — Office MRU & Recent Docs
 # ================================================================
 module_office_mru() {
-    section_header "$(L "Office MRU — File Recenti Office" "Office MRU — Recent Office Files")" "$GREEN"
+    section_header "$(L "Office MRU - File Recenti Office" "Office MRU - Recent Office Files")" "$GREEN"
     check_win_root || return 1
 
     if ! check_regipy; then
@@ -10101,7 +10125,7 @@ PYEOF
     done
     {
         html_header "Office MRU"
-        html_page_header "OF" "Office MRU — <span>File Recenti</span>" \
+        html_page_header "OF" "Office MRU - <span>File Recenti</span>" \
             "NTUSER.DAT → Software\\Microsoft\\Office" "$SCAN" "$WIN_ROOT"
         echo "<div class='statsbar'>
           <div class='stat'><div class='label'>File recenti</div><div class='value'>${TOTAL}</div></div>
@@ -10123,7 +10147,7 @@ PYEOF
 #  MODULO 33 — Defender Quarantine
 # ================================================================
 module_defender_quarantine() {
-    section_header "$(L "Defender Quarantine — File in Quarantena" "Defender Quarantine — Quarantined Files")" "$RED"
+    section_header "$(L "Defender Quarantine - File in Quarantena" "Defender Quarantine - Quarantined Files")" "$RED"
     check_win_root || return 1
 
 
@@ -10215,12 +10239,12 @@ PYEOF
     done
     {
         html_header "Defender Quarantine"
-        html_page_header "DQ" "Defender — <span>Quarantine</span>" \
+        html_page_header "DQ" "Defender - <span>Quarantine</span>" \
             "ProgramData\\Microsoft\\Windows Defender\\Quarantine" "$SCAN" "$WIN_ROOT"
         echo "<div class='statsbar'>
           <div class='stat'><div class='label'>In quarantena</div><div class='value'>${TOTAL}</div></div>
         </div><main>
-        <div class='stitle'>$(L "File in quarantena — recuperabili offline da ResourceData/ (cifrati XOR)" "Quarantined files — recoverable offline from ResourceData/ (XOR-encrypted)")</div>
+        <div class='stitle'>$(L "File in quarantena - recuperabili offline da ResourceData/ (cifrati XOR)" "Quarantined files - recoverable offline from ResourceData/ (XOR-encrypted)")</div>
         <div class='card'><table>
           <thead><tr><th style='width:14%'>$(L "Rilevato" "Detected")</th><th style='width:22%'>$(L "Minaccia" "Threat")</th><th>$(L "Path originale" "Original path")</th><th style='width:18%'>SHA256</th><th style='width:6%'>Dim.</th></tr></thead>
           <tbody>${ROWS}</tbody>
@@ -10228,7 +10252,7 @@ PYEOF
         <div style='margin-top:1.5rem;padding:1rem 1.5rem;background:var(--bg3);border:1px solid var(--border);border-radius:6px;font-size:.8rem'>
           <div style='font-family:var(--mono);color:var(--accent);margin-bottom:.5rem'>Analisi payload (ambiente isolato)</div>
           <div style='font-family:var(--mono);font-size:.72rem;color:var(--text-dim)'>
-            I file in ResourceData/ sono cifrati con RC4 (key: hardcoded Defender) — tool: defender-un-quarantine.py<br>
+            I file in ResourceData/ sono cifrati con RC4 (key: hardcoded Defender) - tool: defender-un-quarantine.py<br>
             Ripristino: MpCmdRun.exe -Restore -FilePath &lt;path&gt;
           </div>
         </div></main>"
@@ -10243,7 +10267,7 @@ PYEOF
 #  MODULO 34 — PowerShell Script Block Logging (EID 4104)
 # ================================================================
 module_ps_scriptblock() {
-    section_header "PowerShell Script Block Logging — EID 4104" "$MAGENTA"
+    section_header "PowerShell Script Block Logging - EID 4104" "$MAGENTA"
     check_win_root || return 1
 
     local EVTX_DIR
@@ -10384,13 +10408,13 @@ PYEOF
     done
     {
         html_header "PS ScriptBlock Log"
-        html_page_header "PS4" "PS Script Block Logging — <span>EID 4104</span>" \
+        html_page_header "PS4" "PS Script Block Logging - <span>EID 4104</span>" \
             "Microsoft-Windows-PowerShell%4Operational.evtx" "$SCAN" "$WIN_ROOT" "$HIVE_HASH"
         echo "<div class='statsbar'>
           <div class='stat'><div class='label'>Script Block unici</div><div class='value'>${TOTAL}</div></div>
           <div class='stat'><div class='label'>Sospetti</div><div class='value' style='color:var(--accent2)'>${SUSP}</div></div>
         </div><main>
-        <div class='stitle'>Event ID 4104 — Frammenti riassemblati per ScriptBlockId — ScriptBlockText (max 1000000 char)</div>
+        <div class='stitle'>Event ID 4104 - Frammenti riassemblati per ScriptBlockId - ScriptBlockText (max 1000000 char)</div>
         <div class='card'><table>
           <thead><tr><th style='width:16%'>Timestamp</th><th style='width:18%'>Path script</th><th>ScriptBlockText</th></tr></thead>
           <tbody>${ROWS}</tbody>
@@ -10406,7 +10430,7 @@ PYEOF
 #  MODULO 35 — JumpLists (AutomaticDestinations + CustomDestinations)
 # ================================================================
 module_jumplists() {
-    section_header "JumpLists — AutomaticDestinations & CustomDestinations" "$GREEN"
+    section_header "JumpLists - AutomaticDestinations & CustomDestinations" "$GREEN"
     check_win_root || return 1
 
     declare -a ALL_ENTRIES=()
@@ -10470,13 +10494,13 @@ module_jumplists() {
     done
     {
         html_header "JumpLists"
-        html_page_header "JL" "JumpLists — <span>AutomaticDestinations · CustomDestinations</span>" \
+        html_page_header "JL" "JumpLists - <span>AutomaticDestinations · CustomDestinations</span>" \
             "AppData\\Roaming\\Microsoft\\Windows\\Recent\\*Destinations" "$SCAN" "$WIN_ROOT"
         echo "<div class='statsbar'>
           <div class='stat'><div class='label'>Entries</div><div class='value'>${TOTAL}</div></div>
           <div class='stat'><div class='label'>Sospette</div><div class='value' style='color:var(--accent2)'>${SUSP}</div></div>
         </div><main>
-        <div class='stitle'>$(L "JumpLists — Utente · Tipo · Timestamp · File · Percorsi estratti (strings)" "JumpLists — User · Type · Timestamp · File · Extracted paths (strings)")</div>
+        <div class='stitle'>$(L "JumpLists - Utente · Tipo · Timestamp · File · Percorsi estratti (strings)" "JumpLists - User · Type · Timestamp · File · Extracted paths (strings)")</div>
         <div class='card'><table>
           <thead><tr><th style='width:10%'>$(L "Utente" "User")</th><th style='width:7%'>$(L "Tipo" "Type")</th><th style='width:14%'>Modificato</th><th style='width:14%'>File JL</th><th>Percorsi estratti</th></tr></thead>
           <tbody>${ROWS}</tbody>
@@ -10492,7 +10516,7 @@ module_jumplists() {
 #  MODULO 36 — Network Artifacts (DNS Cache, Interfacce, NetworkList)
 # ================================================================
 module_network_artifacts() {
-    section_header "$(L "Network Artifacts — DNS · Interfacce · NetworkList" "Network Artifacts — DNS · Interfaces · NetworkList")" "$CYAN"
+    section_header "$(L "Network Artifacts - DNS · Interfacce · NetworkList" "Network Artifacts - DNS · Interfaces · NetworkList")" "$CYAN"
     check_win_root || return 1
 
     if ! check_regipy; then
@@ -10626,7 +10650,7 @@ PYEOF
     done
     {
         html_header "Network Artifacts"
-        html_page_header "NET" "Network Artifacts — <span>Profili · Firme · Interfacce</span>" \
+        html_page_header "NET" "Network Artifacts - <span>Profili · Firme · Interfacce</span>" \
             "SOFTWARE · SYSTEM hive" "$SCAN" "$WIN_ROOT" "$HIVE_HASH"
         echo "<div class='statsbar'>
           <div class='stat info'><div class='label'>Profili rete</div><div class='value'>${TOTAL_P}</div></div>
@@ -10663,7 +10687,7 @@ PYEOF
 #  MODULO 37 — Master Timeline (aggregazione cross-moduli)
 # ================================================================
 module_master_timeline() {
-    section_header "$(L "Master Timeline — Aggregazione Cross-Moduli" "Master Timeline — Cross-Module Aggregation")" "$YELLOW"
+    section_header "$(L "Master Timeline - Aggregazione Cross-Moduli" "Master Timeline - Cross-Module Aggregation")" "$YELLOW"
 
     if [[ ${#GENERATED_REPORTS[@]} -eq 0 ]]; then
         warn "$(L "Nessun report generato in questa sessione." "No reports generated in this session.")"
@@ -10726,7 +10750,7 @@ for rpath in sys.argv[1:]:
                 continue
             ts = ts_m.group(0).replace('T', ' ')[:19]
             text = ' '.join(strip_tags(mm.group(3)).split())[:200]
-            desc = (role + ': ' + text) if role and role != '—' else text
+            desc = (role + ': ' + text) if role and role != '-' else text
             key = (ts, mod, desc[:40])
             if key in seen:
                 continue
@@ -10756,7 +10780,7 @@ PYEOF
 
     {
         html_header "Master Timeline"
-        html_page_header "TL" "Master Timeline — <span>$(L "Aggregazione Cross-Moduli" "Cross-Module Aggregation")</span>" \
+        html_page_header "TL" "Master Timeline - <span>$(L "Aggregazione Cross-Moduli" "Cross-Module Aggregation")</span>" \
             "$(L "Aggregazione di" "Aggregation of") ${NR} $(L "report" "reports")" "$SCAN" "$WIN_ROOT"
         cat << STATSEOF
 <div class='statsbar'>
@@ -10765,7 +10789,7 @@ PYEOF
   <div class='stat ok'><div class='label'>$(L "Mostrati nel report" "Shown in report")</div><div class='value'>${SHOW_COUNT}</div></div>
 </div>
 <main>
-<div class='stitle'>$(L "Timeline cronologica (decrescente) — ordinata per data" "Chronological timeline (descending) — sorted by date")</div>
+<div class='stitle'>$(L "Timeline cronologica (decrescente) - ordinata per data" "Chronological timeline (descending) - sorted by date")</div>
 <div class='card'>
 <table>
   <thead><tr>
@@ -10816,7 +10840,7 @@ TABLEEOF
 #  MODULO 38 — PAD Offline (Active Directory Analysis)
 # ================================================================
 module_pad_offline() {
-    section_header "PAD Offline — Active Directory Analysis (NTDS.dit)" "$CYAN"
+    section_header "PAD Offline - Active Directory Analysis (NTDS.dit)" "$CYAN"
     check_win_root || return 1
 
     # ── Trova NTDS.dit ────────────────────────────────────────────
@@ -10847,7 +10871,7 @@ module_pad_offline() {
     if [[ -n "$SYSTEM_HIVE" ]]; then
         info "SYSTEM hive: $SYSTEM_HIVE"
     else
-        warn "$(L "SYSTEM hive non trovato — attributi cifrati (hash) non disponibili; tutti gli altri OK" "SYSTEM hive not found — encrypted attributes (hashes) unavailable; all others OK")"
+        warn "$(L "SYSTEM hive non trovato - attributi cifrati (hash) non disponibili; tutti gli altri OK" "SYSTEM hive not found - encrypted attributes (hashes) unavailable; all others OK")"
         SYSTEM_HIVE=""
     fi
 
@@ -10878,9 +10902,9 @@ module_pad_offline() {
     if portable_timeout 180 cp "$NTDS_PATH" "$TMP_NTDS" 2>/dev/null; then
         chmod 600 "$TMP_NTDS" 2>/dev/null || true
         NTDS_TO_USE="$TMP_NTDS"
-        info "$(L "Copia completata — uso copia locale." "Copy completed — using local copy.")"
+        info "$(L "Copia completata - uso copia locale." "Copy completed - using local copy.")"
     else
-        warn "$(L "Copia non riuscita (file bloccato da Windows o rete lenta) — uso path originale." "Copy failed (file locked by Windows or slow network) — using original path.")"
+        warn "$(L "Copia non riuscita (file bloccato da Windows o rete lenta) - uso path originale." "Copy failed (file locked by Windows or slow network) - using original path.")"
         info "$(L "Il dirty state verrà corretto in memoria (patch in-memory, senza write access)." "Dirty state will be corrected in memory (in-memory patch, no write access).")"
     fi
 
@@ -10938,9 +10962,9 @@ for _log_src_dir in _log_search_dirs:
         break
 
 if _has_ese_logs:
-    sys.stderr.write("INFO: log ESE trovati e copiati in tmp — impacket tenterà soft-recovery\n")
+    sys.stderr.write("INFO: log ESE trovati e copiati in tmp - impacket tenterà soft-recovery\n")
 else:
-    sys.stderr.write("INFO: no ESE log found — only dirty state patch will be applied\n")
+    sys.stderr.write("INFO: no ESE log found - only dirty state patch will be applied\n")
 
 try:
     from impacket.ese import ESENT_DB as _ESENT_DB_CLS
@@ -11155,7 +11179,7 @@ def _patch_ese_state(path):
                 break
 
         if magic_off == -1:
-            sys.stderr.write("INFO: ESE magic NON trovato nei primi 64 byte — patch impossibile\n")
+            sys.stderr.write("INFO: ESE magic NON trovato nei primi 64 byte - patch impossibile\n")
             return False, -1
 
         # dbstate si trova tipicamente a +28 o +48 bytes dal magic
@@ -11175,7 +11199,7 @@ def _patch_ese_state(path):
                     break
 
         if state_off == -1:
-            sys.stderr.write("INFO: dbstate non trovato con offset standard — skip patch\n")
+            sys.stderr.write("INFO: dbstate non trovato con offset standard - skip patch\n")
             return False, 0
 
         sys.stderr.write(f"INFO: ESE dbstate = {state_val} (2=Clean, 3=DirtyShutdown) @ offset {state_off}\n")
@@ -11200,7 +11224,7 @@ def _open_esent_db(path, skip_patch=False):
     # che deve applicare il soft-recovery. Se patchiamo a CleanShutdown, non lo fa.
     if skip_patch:
         patched, state = False, -1
-        sys.stderr.write("INFO: skip patch dirty state — log ESE disponibili per soft-recovery\n")
+        sys.stderr.write("INFO: skip patch dirty state - log ESE disponibili per soft-recovery\n")
     else:
         patched, state = _patch_ese_state(path)
         if state == -1:
@@ -11344,7 +11368,7 @@ try:
         avail.update(_r.keys())
         if _KEY_COLS.issubset(avail): break   # colonne chiave trovate, stop anticipato
     db.closeTable(cur)
-    sys.stderr.write(f"INFO: schema discovery — {len(avail)} colonne trovate in datatable\n")
+    sys.stderr.write(f"INFO: schema discovery - {len(avail)} colonne trovate in datatable\n")
     sys.stderr.write(f"INFO: COL_SAM={'ATTm590045' in avail} COL_STYPE={'ATTj590014' in avail or 'ATTi590014' in avail} COL_UAC={'ATTi590126' in avail}\n")
 except Exception as e:
     sys.stderr.write(f"FATAL cannot read datatable schema: {e}\n"); sys.exit(1)
@@ -11373,7 +11397,7 @@ COL_OPTF  = find_col(['ATTb591520','ATTm591520'], avail)
 _catalog_corrupt = (not COL_SAM or not COL_STYPE or not COL_UAC)
 if _catalog_corrupt:
     _sample = sorted(c for c in list(avail)[:20] if c.startswith('ATT'))
-    sys.stderr.write(f"WARNING: catalogo ESE parzialmente corrotto — colonne chiave non trovate\n")
+    sys.stderr.write(f"WARNING: catalogo ESE parzialmente corrotto - colonne chiave non trovate\n")
     sys.stderr.write(f"WARNING: COL_SAM={COL_SAM} COL_STYPE={COL_STYPE} COL_UAC={COL_UAC}\n")
     sys.stderr.write(f"WARNING: campione colonne ATT trovate: {_sample[:10]}\n")
     sys.stderr.write(f"CATALOG_CORRUPT:1\n")
@@ -11628,7 +11652,7 @@ domain_fl = 'N/A'; domain_root_dnt = None
 for dnt, o in objects.items():
     if o.get('behavior') is not None:
         fv = o['behavior']
-        domain_fl = f"{fv} — {FL_MAP.get(fv, 'Unknown')}"
+        domain_fl = f"{fv} - {FL_MAP.get(fv, 'Unknown')}"
         domain_root_dnt = dnt
         break
 
@@ -11940,12 +11964,12 @@ if _catalog_corrupt:
 html_out = f"""<!DOCTYPE html>
 <html lang="{L("it", "en")}"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>PAD Offline — DFIR Report</title>
+<title>PAD Offline - DFIR Report</title>
 <style>{CSS}</style></head><body>
 <header>
   <div class="hicon">AD</div>
   <div class="htxt">
-    <h1>PAD Offline — <span>{L("Panoramica Active Directory", "Active Directory Overview")}</span></h1>
+    <h1>PAD Offline - <span>{L("Panoramica Active Directory", "Active Directory Overview")}</span></h1>
     <div class="sub">NTDS.dit offline forensic analysis</div>
   </div>
   <div class="hmeta">
@@ -11981,31 +12005,31 @@ html_out = f"""<!DOCTYPE html>
 </tbody></table></div>
 
 {_catalog_corrupt_html}
-<div class="stitle">{L("Utenti Privilegiati", "Privileged Users")} — {total_priv} account ({len(PRIV_GROUPS)} gruppi monitorati)</div>
+<div class="stitle">{L("Utenti Privilegiati", "Privileged Users")} - {total_priv} account ({len(PRIV_GROUPS)} gruppi monitorati)</div>
 <div class="card"><table>
 <thead><tr><th>sAMAccountName</th><th>{L("Gruppi (Direct/Nested)", "Groups (Direct/Nested)")}</th><th>pwdLastSet</th><th>lastLogon</th><th>Flags</th><th>SID</th></tr></thead>
 <tbody>{rows_priv if rows_priv else _no_priv_row}</tbody>
 </table></div>
 
-<div class="stitle">{L("ACL Domain Root — ACE con diritti pericolosi", "ACL Domain Root — Dangerous ACE rights")}</div>
+<div class="stitle">{L("ACL Domain Root - ACE con diritti pericolosi", "ACL Domain Root - Dangerous ACE rights")}</div>
 <div class="card"><table>
 <thead><tr><th>Trustee</th><th>SID</th><th>{L("Diritti", "Rights")}</th><th>Access Mask</th><th>Flags</th></tr></thead>
 <tbody>{ace_rows(root_aces)}</tbody>
 </table></div>
 
-<div class="stitle">{L("ACL OU Domain Controllers — ACE con diritti pericolosi", "ACL OU Domain Controllers — Dangerous ACE rights")}</div>
+<div class="stitle">{L("ACL OU Domain Controllers - ACE con diritti pericolosi", "ACL OU Domain Controllers - Dangerous ACE rights")}</div>
 <div class="card"><table>
 <thead><tr><th>Trustee</th><th>SID</th><th>{L("Diritti", "Rights")}</th><th>Access Mask</th><th>Flags</th></tr></thead>
 <tbody>{ace_rows(dc_ou_aces)}</tbody>
 </table></div>
 
-<div class="stitle">Group Policy Objects — {total_gpo} {L("GPO totali", "total GPOs")}</div>
+<div class="stitle">Group Policy Objects - {total_gpo} {L("GPO totali", "total GPOs")}</div>
 <div class="card"><table>
 <thead><tr><th>Display Name</th><th>{L("Ultima Modifica", "Last Modified")}</th><th>Path SYSVOL</th></tr></thead>
 <tbody>{rows_gpo if rows_gpo else _no_gpo_row}</tbody>
 </table></div>
 
-<div class="stitle">{L("Computer nel Dominio", "Domain Computers")} — {total_comp} oggetti</div>
+<div class="stitle">{L("Computer nel Dominio", "Domain Computers")} - {total_comp} oggetti</div>
 <div class="card"><table>
 <thead><tr><th>Computer Name</th><th>Operating System</th><th>Distinguished Name</th></tr></thead>
 <tbody>{rows_comp if rows_comp else _no_comp_row}</tbody>
@@ -12014,7 +12038,7 @@ html_out = f"""<!DOCTYPE html>
 </main>
 <footer>
   <span>PAD Offline</span>
-  <span>fiuto.sh — DFIR Toolkit</span>
+  <span>fiuto.sh - DFIR Toolkit</span>
 </footer>
 </body></html>"""
 
@@ -12037,10 +12061,10 @@ PYEOF
         # Avviso catalogo corrotto
         if grep -q '^CATALOG_CORRUPT:1' "$PYERR_FILE" 2>/dev/null; then
             echo ""
-            warn "$(L "NTDS.dit con catalogo ESE parzialmente corrotto — dati utente non disponibili." "NTDS.dit with partially corrupted ESE catalog — user data unavailable.")"
+            warn "$(L "NTDS.dit con catalogo ESE parzialmente corrotto - dati utente non disponibili." "NTDS.dit with partially corrupted ESE catalog - user data unavailable.")"
             info "$(L "Le colonne sAMAccountName/samAccountType sono su pagine di catalogo non leggibili." "Columns sAMAccountName/samAccountType are on unreadable catalog pages.")"
             echo ""
-            echo -e "  ${BOLD}${YELLOW}Recupero necessario — scegli una delle opzioni:${RESET}"
+            echo -e "  ${BOLD}${YELLOW}Recupero necessario - scegli una delle opzioni:${RESET}"
             echo -e "  ${CYAN}1) Soft-recovery Linux${RESET} (richiede i log .jrs nella stessa dir di ntds.dit)"
             echo -e "     Copia ntds.dit + edb*.jrs + edb.chk in una cartella, poi rilancia."
             echo ""
@@ -12081,7 +12105,7 @@ PYEOF
             echo -e "  ${CYAN}$(L "3) Se hai già un'immagine disco (VHDX/E01) del DC:" "3) If you already have a disk image (VHDX/E01) of the DC:")${RESET}"
             echo -e "     $(L "Monta offline con" "Mount offline with") ${BOLD}./mount_image.sh${RESET} $(L "e rilancia il modulo su quel mount point." "and relaunch the module on that mount point.")"
         elif echo "${_PYERR}" | grep -qiE 'dirty|state|DirtyShutdown|Unknown state'; then
-            err "$(L "Generazione report fallita — database ESE in stato dirty non recuperabile." "Report generation failed — ESE database in unrecoverable dirty state.")"
+            err "$(L "Generazione report fallita - database ESE in stato dirty non recuperabile." "Report generation failed - ESE database in unrecoverable dirty state.")"
             info "$(L "Suggerimento: copia il file e prova 'esentutl /r edb /l .' in un ambiente Windows" "Hint: copy the file and try 'esentutl /r edb /l .' in a Windows environment")"
         else
             err "$(L "Generazione report fallita. Verifica che ntds.dit sia leggibile e non corrotto." "Report generation failed. Verify ntds.dit is readable and not corrupted.")"
@@ -12175,10 +12199,10 @@ module_ai_chat() {
         _ai_collect "Continue.dev" json "$USERNAME" < <(find "$USER_DIR" -maxdepth 4 -ipath '*/.continue/sessions/*' -iname '*.json' -type f 2>/dev/null)
 
         if [[ $_USER_FOUND -gt 0 ]]; then
-            ok "$USERNAME — ${BOLD}${_USER_FOUND}${RESET} $(L "artefatti AI" "AI artifacts")"
+            ok "$USERNAME - ${BOLD}${_USER_FOUND}${RESET} $(L "artefatti AI" "AI artifacts")"
             TOTAL_USERS=$((TOTAL_USERS+1))
         else
-            dim_msg "$USERNAME — $(L "nessun artefatto AI" "no AI artifacts")"
+            dim_msg "$USERNAME - $(L "nessun artefatto AI" "no AI artifacts")"
         fi
     done < <(get_user_homes)
     unset -f _ai_collect
@@ -12470,9 +12494,9 @@ def render(msgs, ai='AI'):
         if rc == 'r-user':
             label = 'UTENTE'
         elif rc == 'r-ai':
-            label = 'AI — ' + html.escape(ai)
+            label = 'AI - ' + html.escape(ai)
         else:
-            label = html.escape(role) if role else '—'
+            label = html.escape(role) if role else '-'
         nts   = norm_ts(ts)
         meta  = html.escape(nts) if nts else ''
         tag   = ''
@@ -12532,11 +12556,11 @@ for user, tools in data.items():
                 if kind == 'leveldb':
                     note = ("<div class='inv'>%s</div>" % html.escape(
                         "Contenuto ricavato per string-carving dal LevelDB "
-                        "(best-effort, non strutturato — verificare manualmente)."))
+                        "(best-effort, non strutturato - verificare manualmente)."))
                 body = note + "<div class='thread'>%s</div>" % ''.join(rows)
             elif kind in ('inventory', 'pb_inventory'):
                 body = ("<div class='inv'>%s</div>" %
-                        html.escape("Solo inventario — contenuto cifrato/proprietario non decodificato "
+                        html.escape("Solo inventario - contenuto cifrato/proprietario non decodificato "
                                     "(LevelDB / bundle conversations-v2 / protobuf Cascade)."))
             else:
                 body = "<div class='inv'>%s</div>" % html.escape("Nessun messaggio estratto.")
@@ -12645,7 +12669,7 @@ CSSEOF
 #  solo con questo log.
 # ================================================================
 module_setupapi() {
-    section_header "SetupAPI — $(L "Prima installazione dispositivi" "Device First Install")" "$BLUE"
+    section_header "SetupAPI - $(L "Prima installazione dispositivi" "Device First Install")" "$BLUE"
     check_win_root || return 1
 
     local -a LOGS=()
@@ -12839,7 +12863,7 @@ module_ps_transcripts() {
             "${ST:-?}" "${U:-?}" "${P:-?}" "$N" "${H:0:120}" "$F" >> "$META"
 
         if [[ "$N" -gt 0 ]]; then
-            ok "$(basename "$F") — ${BOLD}${N}$(L " righe sospette" " suspicious lines")"
+            ok "$(basename "$F") - ${BOLD}${N}$(L " righe sospette" " suspicious lines")"
         else
             dim_msg "$(basename "$F")"
         fi
@@ -13093,10 +13117,10 @@ module_vss() {
         BODY+="$(L "Ogni shadow copy e' una versione precedente del volume: contiene file poi cancellati e hive di registro anteriori alla compromissione. Il vero valore e' il confronto differenziale fra due istanti." \
             "Each shadow copy is an earlier version of the volume: it holds files later deleted and registry hives predating the compromise. The real value is the differential comparison between two points in time.")<br><br>"
         BODY+="<b>$(L "Procedura consigliata" "Suggested procedure")</b><br>"
-        BODY+="<code>vshadowinfo /dev/sdX1</code> — $(L "elenca gli snapshot e le loro date" "list snapshots and their dates")<br>"
-        BODY+="<code>vshadowmount /dev/sdX1 /mnt/vss</code> — $(L "espone gli snapshot come file vssN" "expose snapshots as vssN files")<br>"
+        BODY+="<code>vshadowinfo /dev/sdX1</code> - $(L "elenca gli snapshot e le loro date" "list snapshots and their dates")<br>"
+        BODY+="<code>vshadowmount /dev/sdX1 /mnt/vss</code> - $(L "espone gli snapshot come file vssN" "expose snapshots as vssN files")<br>"
         BODY+="<code>mount -o ro,loop /mnt/vss/vss1 /mnt/snap1</code><br>"
-        BODY+="<code>./fiuto.sh /mnt/snap1 --all</code> — $(L "rilancia FIUTO sullo snapshot" "re-run FIUTO on the snapshot")<br><br>"
+        BODY+="<code>./fiuto.sh /mnt/snap1 --all</code> - $(L "rilancia FIUTO sullo snapshot" "re-run FIUTO on the snapshot")<br><br>"
         BODY+="$(L "Confrontando i report di due snapshot si isola cosa e' cambiato nella finestra di compromissione." \
             "Comparing the reports of two snapshots isolates what changed during the compromise window.")"
     fi
@@ -13154,7 +13178,7 @@ module_pst_ost() {
         SZ=$(stat -c %s "$F" 2>/dev/null || echo 0)
         MT=$(stat -c %y "$F" 2>/dev/null | cut -d. -f1 || echo "?")
         TOTBYTES=$((TOTBYTES + SZ))
-        info "$(basename "$F") — ${BOLD}$(numfmt --to=iec "$SZ" 2>/dev/null || echo "$SZ")${RESET} ${DIM}${MT}${RESET}"
+        info "$(basename "$F") - ${BOLD}$(numfmt --to=iec "$SZ" 2>/dev/null || echo "$SZ")${RESET} ${DIM}${MT}${RESET}"
         INV+="${MT}	$(basename "$F")	${SZ}	${F}
 "
     done
@@ -13332,7 +13356,7 @@ PYEOF
 #  estraggono solo i nomi di file leggibili, e il report lo dichiara.
 # ================================================================
 module_cloud_sync() {
-    section_header "Cloud Sync — $(L "Provider e file sincronizzati" "Providers and synced files")" "$BLUE"
+    section_header "Cloud Sync - $(L "Provider e file sincronizzati" "Providers and synced files")" "$BLUE"
     check_win_root || return 1
 
     local BODY="" NPROV=0 NFILES=0 NACC=0
@@ -13367,7 +13391,7 @@ module_cloud_sync() {
             if [[ -n "$ODLDIR" ]]; then
                 local NODL; NODL=$(find "$ODLDIR" -type f \( -iname '*.odl' -o -iname '*.odlgz' -o -iname '*.aodl' \) 2>/dev/null | wc -l)
                 if [[ "$NODL" -gt 0 ]]; then
-                    info "OneDrive ($U) — ${BOLD}${NODL}${RESET} $(L "file di log" "log files")"
+                    info "OneDrive ($U) - ${BOLD}${NODL}${RESET} $(L "file di log" "log files")"
                     local NAMES
                     NAMES=$(find "$ODLDIR" -type f \( -iname '*.odl' -o -iname '*.aodl' \) -print0 2>/dev/null \
                             | xargs -0 strings -n 6 2>/dev/null \
@@ -13423,7 +13447,7 @@ except Exception:
                 [[ -z "$ROWS" || "$ROWS" == ERROR* ]] && continue
                 local N; N=$(printf '%s\n' "$ROWS" | grep -c . || true)
                 NFILES=$((NFILES + N))
-                info "Google Drive ($U) — ${BOLD}${N}${RESET} $(L "elementi" "items")"
+                info "Google Drive ($U) - ${BOLD}${N}${RESET} $(L "elementi" "items")"
                 while IFS=$'\t' read -r T D S; do
                     [[ -n "$T" ]] && FILEROWS+="Google Drive	${U}	${T}  (${D:-?}, ${S:-?} B)
 "
@@ -13456,8 +13480,8 @@ except Exception:
     BODY+="$(L "Un file trascinato in una cartella sincronizzata esce dal perimetro senza toccare nessun artefatto USB e senza generare traffico riconoscibile come esfiltrazione. Questi elenchi vanno confrontati con i dati che l'organizzazione considera riservati." \
         "A file dropped into a synced folder leaves the perimeter without touching any USB artefact and without generating traffic recognisable as exfiltration. Cross-check these lists against the data the organisation treats as confidential.")<br><br>"
     BODY+="<b>$(L "Attendibilita' delle fonti" "Source reliability")</b><br>"
-    BODY+="$(L "Google Drive: database SQLite, elenco completo e datato. Dropbox: configurazione JSON, account e percorsi. OneDrive: i log .odl sono binari con stringhe offuscate, qui se ne estraggono solo i nomi leggibili — sono indizi, non un inventario completo, e non hanno data." \
-        "Google Drive: SQLite database, complete and dated listing. Dropbox: JSON configuration, accounts and paths. OneDrive: .odl logs are binary with obfuscated strings; only readable names are extracted here — these are leads, not a complete inventory, and carry no timestamp.")"
+    BODY+="$(L "Google Drive: database SQLite, elenco completo e datato. Dropbox: configurazione JSON, account e percorsi. OneDrive: i log .odl sono binari con stringhe offuscate, qui se ne estraggono solo i nomi leggibili - sono indizi, non un inventario completo, e non hanno data." \
+        "Google Drive: SQLite database, complete and dated listing. Dropbox: JSON configuration, accounts and paths. OneDrive: .odl logs are binary with obfuscated strings; only readable names are extracted here - these are leads, not a complete inventory, and carry no timestamp.")"
     BODY+="</div></div>"
 
     if [[ -n "$ACCROWS" ]]; then
@@ -13831,7 +13855,7 @@ PYEOF
 #  mancano interlocutori e timestamp, e il report lo dichiara.
 # ================================================================
 module_chat_desktop() {
-    section_header "Chat Desktop — Slack / Teams / Discord" "$MAGENTA"
+    section_header "Chat Desktop - Slack / Teams / Discord" "$MAGENTA"
     check_win_root || return 1
 
     local MANIFEST; MANIFEST=$(mktemp); register_tmp "$MANIFEST"
@@ -13870,7 +13894,7 @@ module_chat_desktop() {
             if [[ "$N" -gt 0 ]]; then
                 NAPP=$((NAPP + 1))
                 FOUND_APPS+=("$APP ($U): $N")
-                ok "$APP — $U: ${BOLD}${N}${RESET} $(L "file LevelDB" "LevelDB files")"
+                ok "$APP - $U: ${BOLD}${N}${RESET} $(L "file LevelDB" "LevelDB files")"
             fi
         done
     done < <(get_user_homes)
@@ -13951,7 +13975,7 @@ PYEOF
     ok "$(L "Frammenti recuperati:" "Fragments recovered:") ${BOLD}$TOTAL"
     if [[ "$NFLAG" -gt 0 ]]; then
         warn "$(L "Frammenti segnalati (termini sensibili o IoC):" "Flagged fragments (sensitive terms or IoC):") ${BOLD}$NFLAG"
-        awk -F'\t' '$5!=""{printf "      [%s] %s — %s\n", $5, $1, substr($4,1,80)}' "$OUT" | head -15 | while IFS= read -r LN; do
+        awk -F'\t' '$5!=""{printf "      [%s] %s - %s\n", $5, $1, substr($4,1,80)}' "$OUT" | head -15 | while IFS= read -r LN; do
             echo -e "      ${MAGENTA}${LN}${RESET}"
         done
     fi
@@ -13997,7 +14021,7 @@ PYEOF
 #  macchine dove nessuno usa piu' Internet Explorer.
 # ================================================================
 module_webcache() {
-    section_header "WebCacheV01 — IE / Edge Legacy / WinINET" "$CYAN"
+    section_header "WebCacheV01 - IE / Edge Legacy / WinINET" "$CYAN"
     check_win_root || return 1
 
     local -a DBS=()
@@ -14235,7 +14259,7 @@ module_search_index() {
         return 0
     fi
     local SZ; SZ=$(stat -c %s "${DBS[0]}" 2>/dev/null || echo 0)
-    info "Windows.edb — ${BOLD}$(numfmt --to=iec "$SZ" 2>/dev/null || echo "$SZ")"
+    info "Windows.edb - ${BOLD}$(numfmt --to=iec "$SZ" 2>/dev/null || echo "$SZ")"
 
     local HAVE_ESE=false
     "$PY3" -c "import pyesedb" 2>/dev/null && HAVE_ESE=true
@@ -14440,7 +14464,7 @@ _guard_sigma() {
 }
 
 module_sigma() {
-    section_header "Sigma — Event Log" "$RED"
+    section_header "Sigma - Event Log" "$RED"
     check_win_root || return 1
 
     if [[ -z "${SIGMA_RULES:-}" ]]; then
@@ -14609,7 +14633,7 @@ print(s["rules_loaded"], s["rules_active"], s["rules_rejected_total"],
         "$PY3" -c '
 import json, sys
 for r in json.load(open(sys.argv[1]))["rules_rejected"][:10]:
-    print("      %s — %s" % (r["rule"][:60], r["reason"]))' "$STATS" 2>/dev/null
+    print("      %s - %s" % (r["rule"][:60], r["reason"]))' "$STATS" 2>/dev/null
         return 0
     fi
 
@@ -14717,7 +14741,7 @@ PYEOF
 
 # --- LINUX 1 — System Logs (/var/log testuali) ---
 module_linux_syslog() {
-    section_header "Linux — System Logs" "$GREEN"
+    section_header "Linux - System Logs" "$GREEN"
     check_target_root || return 1
     local LOGDIR; LOGDIR=$(ci_find_dir "$WIN_ROOT" "var/log")
     [[ -z "$LOGDIR" ]] && { warn "$(L "Directory var/log non trovata." "var/log directory not found.")"; return 0; }
@@ -14729,7 +14753,7 @@ module_linux_syslog() {
         local F; F=$(ci_find_file "$LOGDIR" "$NAME")
         [[ -z "$F" || ! -s "$F" ]] && continue
         FOUND=$((FOUND + 1))
-        ok "$NAME — ${BOLD}$(stat -c %s "$F" 2>/dev/null) B"
+        ok "$NAME - ${BOLD}$(stat -c %s "$F" 2>/dev/null) B"
         print_file_lines "$F" "$KW" 60
         echo ""
         BODY+=$(file_card_html "$F" "$KW" "≣")
@@ -14744,7 +14768,7 @@ module_linux_syslog() {
 
 # --- LINUX 2 — systemd Journal ---
 module_linux_journal() {
-    section_header "Linux — systemd Journal" "$GREEN"
+    section_header "Linux - systemd Journal" "$GREEN"
     check_target_root || return 1
     local JDIR; JDIR=$(ci_find_dir "$WIN_ROOT" "var/log/journal")
     [[ -z "$JDIR" ]] && { warn "$(L "Nessun journal persistente (var/log/journal assente)." "No persistent journal (var/log/journal missing).")"; return 0; }
@@ -14782,7 +14806,7 @@ module_linux_journal() {
 
 # --- LINUX 3 — Login History (wtmp/btmp/lastlog) ---
 module_linux_logins() {
-    section_header "Linux — Login History" "$CYAN"
+    section_header "Linux - Login History" "$CYAN"
     check_target_root || return 1
     local LOGDIR; LOGDIR=$(ci_find_dir "$WIN_ROOT" "var/log")
     local VARRUN; VARRUN=$(ci_find_dir "$WIN_ROOT" "var/run")
@@ -14851,7 +14875,7 @@ PYEOF
 
 # --- LINUX 4 — Shell History (per utente) ---
 module_linux_shell_history() {
-    section_header "Linux — Shell History" "$MAGENTA"
+    section_header "Linux - Shell History" "$MAGENTA"
     check_target_root || return 1
     local FILES=(.bash_history .zsh_history .sh_history .history .python_history .mysql_history .psql_history .lesshst .node_repl_history)
     local KW="password|passwd|secret|credential|token|ssh|scp|curl|wget|nc |ncat|base64|sudo|chmod \\+x|/dev/tcp|reverse|nmap|chattr"
@@ -14878,9 +14902,9 @@ module_linux_shell_history() {
             UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + 1))
             CARDS+=$(file_card_html "$FISH/fish_history" "$KW" "\$" "histts")
         fi
-        [[ $UCOUNT -eq 0 ]] && { dim_msg "$UNAME — $(L "nessuna history" "no history")"; continue; }
+        [[ $UCOUNT -eq 0 ]] && { dim_msg "$UNAME - $(L "nessuna history" "no history")"; continue; }
         USERS=$((USERS + 1))
-        ok "$UNAME — ${BOLD}$UCOUNT file"
+        ok "$UNAME - ${BOLD}$UCOUNT file"
         for HF in "${FILES[@]}"; do
             local F="$HOME_DIR/$HF"; [[ -f "$F" && -s "$F" ]] || continue
             echo -e "  ${DIM}• $HF${RESET}"; print_file_lines "$F" "$KW" 30; echo ""
@@ -14897,7 +14921,7 @@ module_linux_shell_history() {
 
 # --- LINUX 5 — AI CLI History ---
 module_linux_ai_history() {
-    section_header "Linux — AI CLI History" "$MAGENTA"
+    section_header "Linux - AI CLI History" "$MAGENTA"
     check_target_root || return 1
     # path relativi alla home da scandire (file o directory)
     local REL=(.claude .config/claude .aider.chat.history.md .aider.input.history .config/aichat .ollama/history
@@ -14919,7 +14943,7 @@ module_linux_ai_history() {
             fi
         done
         [[ $UCOUNT -eq 0 ]] && continue
-        USERS=$((USERS + 1)); ok "$UNAME — ${BOLD}$UCOUNT file AI"
+        USERS=$((USERS + 1)); ok "$UNAME - ${BOLD}$UCOUNT file AI"
         BODY+=$(generic_card_html "$UNAME" "$HOME_DIR" "$UCOUNT file" "$CARDS" "◈")
     done < <(get_linux_user_homes)
     separator
@@ -14932,7 +14956,7 @@ module_linux_ai_history() {
 
 # --- LINUX 6 — Browser History ---
 module_linux_browser() {
-    section_header "Linux — Browser History" "$CYAN"
+    section_header "Linux - Browser History" "$CYAN"
     check_target_root || return 1
     local BODY="" TOTAL=0 USERS=0
     while IFS= read -r HOME_DIR; do
@@ -14949,7 +14973,7 @@ module_linux_browser() {
                 local ROWS; ROWS=$(query_sqlite "$HISTDB" "SELECT datetime(last_visit_time/1000000-11644473600,'unixepoch'), url, title FROM urls ORDER BY last_visit_time DESC LIMIT 100000")
                 [[ -z "$ROWS" || "$ROWS" == ERROR* ]] && continue
                 UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + 1))
-                ok "$UNAME — $(basename "$(dirname "$HISTDB")") (Chromium)"
+                ok "$UNAME - $(basename "$(dirname "$HISTDB")") (Chromium)"
                 CARDS+=$(_browser_table_card "$HISTDB" "$ROWS")
             done < <(find "$BASE" -maxdepth 2 -name "History" -type f 2>/dev/null)
         done
@@ -14960,7 +14984,7 @@ module_linux_browser() {
                 local ROWS; ROWS=$(query_sqlite "$PLACES" "SELECT datetime(last_visit_date/1000000,'unixepoch'), url, title FROM moz_places WHERE last_visit_date IS NOT NULL ORDER BY last_visit_date DESC LIMIT 100000")
                 [[ -z "$ROWS" || "$ROWS" == ERROR* ]] && continue
                 UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + 1))
-                ok "$UNAME — $(basename "$(dirname "$PLACES")") (Firefox)"
+                ok "$UNAME - $(basename "$(dirname "$PLACES")") (Firefox)"
                 CARDS+=$(_browser_table_card "$PLACES" "$ROWS")
             done < <(find "$FBASE" -maxdepth 2 -name "places.sqlite" -type f 2>/dev/null)
         done
@@ -14998,7 +15022,7 @@ PYEOF
 
 # --- LINUX 7 — User Accounts ---
 module_linux_accounts() {
-    section_header "Linux — User Accounts" "$RED"
+    section_header "Linux - User Accounts" "$RED"
     check_target_root || return 1
     local ETC; ETC=$(ci_find_dir "$WIN_ROOT" "etc")
     [[ -z "$ETC" ]] && { warn "$(L "Directory etc non trovata." "etc directory not found.")"; return 0; }
@@ -15075,14 +15099,14 @@ PYEOF
 
 # --- LINUX 8 — Persistence ---
 module_linux_persistence() {
-    section_header "Linux — Persistence" "$ORANGE"
+    section_header "Linux - Persistence" "$ORANGE"
     check_target_root || return 1
     local KW="curl|wget|/tmp/|/dev/shm|base64|nc |ncat|python -c|bash -i|/dev/tcp|chmod|reverse|\\.onion|http"
     local BODY="" FOUND=0
     _persist_add() { # label, path(file o dir), glob
         local LABEL="$1" P="$2"
         if [[ -f "$P" && -s "$P" ]]; then
-            FOUND=$((FOUND + 1)); ok "$LABEL — $(basename "$P")"
+            FOUND=$((FOUND + 1)); ok "$LABEL - $(basename "$P")"
             BODY+=$(file_card_html "$P" "$KW" "⟳")
         elif [[ -d "$P" ]]; then
             while IFS= read -r F; do
@@ -15127,7 +15151,7 @@ module_linux_persistence() {
 
 # --- LINUX 9 — SSH Artifacts ---
 module_linux_ssh() {
-    section_header "Linux — SSH Artifacts" "$YELLOW"
+    section_header "Linux - SSH Artifacts" "$YELLOW"
     check_target_root || return 1
     local KW="ssh-rsa|ssh-ed25519|ecdsa|PermitRootLogin|PasswordAuthentication|AuthorizedKeys|ForwardAgent"
     local BODY="" FOUND=0
@@ -15151,7 +15175,7 @@ module_linux_ssh() {
         local PRIV; PRIV=$(find "$SSHD" -maxdepth 1 -type f -name "id_*" ! -name "*.pub" 2>/dev/null | wc -l)
         [[ "$PRIV" -gt 0 ]] && CARDS+="<div class='card' style='margin-bottom:.8rem'><div class='card-header'><div class='uicon'>⚿</div><div><div class='uname'>$(L "Chiavi private" "Private keys")</div><div class='upath'>$SSHD/id_*</div></div><div class='badge warn'>$PRIV $(L "chiavi" "keys")</div></div></div>"
         [[ $UCOUNT -eq 0 && "$PRIV" -eq 0 ]] && continue
-        ok "$UNAME — ${BOLD}$UCOUNT file"
+        ok "$UNAME - ${BOLD}$UCOUNT file"
         BODY+=$(generic_card_html "$UNAME" "$SSHD" "$UCOUNT file" "$CARDS" "⚿")
     done < <(get_linux_user_homes)
     separator
@@ -15164,7 +15188,7 @@ module_linux_ssh() {
 
 # --- LINUX 10 — Network Config ---
 module_linux_network() {
-    section_header "Linux — Network Config" "$CYAN"
+    section_header "Linux - Network Config" "$CYAN"
     check_target_root || return 1
     local KW="psk|password|key=|wpa|pre-shared|nameserver|DROP|ACCEPT|REJECT|-j |MASQUERADE"
     local BODY="" FOUND=0
@@ -15204,7 +15228,7 @@ module_linux_network() {
 
 # --- LINUX 11 — Installed Packages ---
 module_linux_packages() {
-    section_header "Linux — Installed Packages" "$GREEN"
+    section_header "Linux - Installed Packages" "$GREEN"
     check_target_root || return 1
     local BODY="" FOUND=0
     # dpkg
@@ -15212,7 +15236,7 @@ module_linux_packages() {
     if [[ -n "$DPKG" && -s "$DPKG" ]]; then
         FOUND=$((FOUND + 1))
         local PKGS; PKGS=$(grep -c '^Package:' "$DPKG" 2>/dev/null)
-        ok "dpkg — ${BOLD}$PKGS pacchetti"
+        ok "dpkg - ${BOLD}$PKGS pacchetti"
         local TAB; TAB=$(awk '/^Package:/{p=$2} /^Version:/{v=$2} /^Status:/{s=$0} /^$/{if(p)printf "<tr><td class=mono>%s</td><td class=\"mono dim\">%s</td></tr>\n",p,v; p=v=""}' "$DPKG" | head -100000)
         BODY+=$(generic_card_html "dpkg packages" "$DPKG" "$PKGS pkg" "<table><tr><th>Package</th><th>Version</th></tr>$TAB</table>" "▦")
     fi
@@ -15246,7 +15270,7 @@ module_linux_packages() {
 
 # --- LINUX 12 — Trash & Recent ---
 module_linux_trash() {
-    section_header "Linux — Trash & Recent" "$GREEN"
+    section_header "Linux - Trash & Recent" "$GREEN"
     check_target_root || return 1
     local BODY="" TOTAL=0 USERS=0
     while IFS= read -r HOME_DIR; do
@@ -15265,7 +15289,7 @@ module_linux_trash() {
             done < <(find "$TINFO" -maxdepth 1 -name "*.trashinfo" 2>/dev/null)
             if [[ $TN -gt 0 ]]; then
                 UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + TN))
-                ok "$UNAME — ${BOLD}$TN $(L "file cestinati" "trashed files")"
+                ok "$UNAME - ${BOLD}$TN $(L "file cestinati" "trashed files")"
                 CARDS+=$(generic_card_html "Trash" "$TINFO" "$TN file" "<table><tr><th>$(L "Cancellato il" "Deleted on")</th><th>$(L "Percorso originale" "Original path")</th></tr>$TTAB</table>" "♺")
             fi
         fi
@@ -15290,7 +15314,7 @@ module_linux_trash() {
 
 # --- LINUX 13 — Filesystem Timeline ---
 module_linux_timeline() {
-    section_header "Linux — Filesystem Timeline" "$YELLOW"
+    section_header "Linux - Filesystem Timeline" "$YELLOW"
     check_target_root || return 1
     info "$(L "Raccolta timestamp MAC nelle aree sensibili (può richiedere tempo)..." "Collecting MAC timestamps in sensitive areas (may take a while)...")"
     # aree di interesse forense
@@ -15341,7 +15365,7 @@ PYEOF
 # Logs" copre /var/log testuali ma non tocca audit.log, che ha un formato
 # proprio (campi chiave=valore, stringhe in esadecimale, timestamp epoch).
 module_linux_auditd() {
-    section_header "Linux — auditd" "$RED"
+    section_header "Linux - auditd" "$RED"
     check_target_root || return 1
 
     local AUDITDIR; AUDITDIR=$(ci_find_dir "$WIN_ROOT" "var/log/audit")
@@ -15502,7 +15526,7 @@ PYEOF
 # l'host — privileged, mount di / o del socket Docker, CAP_SYS_ADMIN,
 # condivisione del namespace PID/rete dell'host.
 module_linux_containers() {
-    section_header "Linux — Container (Docker / Podman)" "$BLUE"
+    section_header "Linux - Container (Docker / Podman)" "$BLUE"
     check_target_root || return 1
 
     local DOCKER PODMAN
@@ -15668,7 +15692,7 @@ PYEOF
 #  disallineata rispetto ai vicini.
 # ================================================================
 module_linux_pam() {
-    section_header "Linux — PAM" "$RED"
+    section_header "Linux - PAM" "$RED"
     check_target_root || return 1
 
     local PAMD; PAMD=$(ci_find_dir "$WIN_ROOT" "etc/pam.d")
@@ -15695,7 +15719,7 @@ module_linux_pam() {
             local N; N=$(grep -cE "$KW" "$F" 2>/dev/null || echo 0)
             if [[ "$N" -gt 0 ]]; then
                 NSUSP=$((NSUSP + 1))
-                ok "$(basename "$F") — ${BOLD}${N}${RESET} $(L "righe da verificare" "lines to check")"
+                ok "$(basename "$F") - ${BOLD}${N}${RESET} $(L "righe da verificare" "lines to check")"
                 local LN
                 while IFS= read -r LN; do
                     SUSPROWS+="$(basename "$F")	${LN}
@@ -15794,7 +15818,7 @@ module_linux_pam() {
 #  appartengono a nessun pacchetto.
 # ================================================================
 module_linux_kernel_modules() {
-    section_header "Linux — $(L "Moduli kernel e rootkit" "Kernel modules and rootkits")" "$RED"
+    section_header "Linux - $(L "Moduli kernel e rootkit" "Kernel modules and rootkits")" "$RED"
     check_target_root || return 1
 
     local BODY="" ROWS="" NCFG=0 NSUSP=0
@@ -15922,7 +15946,7 @@ module_linux_kernel_modules() {
 #  risposta che distinguono un tentativo fallito da uno riuscito.
 # ================================================================
 module_linux_webserver_logs() {
-    section_header "Linux — $(L "Log web server" "Web server logs")" "$ORANGE"
+    section_header "Linux - $(L "Log web server" "Web server logs")" "$ORANGE"
     check_target_root || return 1
 
     local -a LOGS=()
@@ -16091,7 +16115,7 @@ PYEOF
 #  dentro il report.
 # ================================================================
 module_linux_cloud_credentials() {
-    section_header "Linux — $(L "Credenziali cloud e sviluppo" "Cloud and development credentials")" "$RED"
+    section_header "Linux - $(L "Credenziali cloud e sviluppo" "Cloud and development credentials")" "$RED"
     check_target_root || return 1
 
     local ROWS="" NFILE=0 NSECRET=0
@@ -16165,9 +16189,9 @@ module_linux_cloud_credentials() {
             ROWS+="${MT}	${U}	${LABEL}	${REL}	${PERM} ${WARNP}	${SZ}	${IDENT}
 "
             if [[ -n "$WARNP" ]]; then
-                warn "$U — $REL ($PERM) — $WARNP"
+                warn "$U - $REL ($PERM) - $WARNP"
             else
-                ok "$U — ${BOLD}${LABEL}${RESET} ${DIM}${REL}${RESET}"
+                ok "$U - ${BOLD}${LABEL}${RESET} ${DIM}${REL}${RESET}"
             fi
         done
     done < <(get_target_user_homes)
@@ -16188,8 +16212,8 @@ module_linux_cloud_credentials() {
 
     local NOTE="<div class='card' style='margin-bottom:1rem;border-color:rgba(255,123,114,.5)'><div style='padding:1rem 1.5rem;font-size:.8rem;line-height:1.7'>"
     NOTE+="<b>$(L "Cosa mostra e cosa no" "What is shown and what is not")</b><br>"
-    NOTE+="$(L "La tabella riporta identificativi non segreti — profilo, access key ID, endpoint del cluster, registry, host — perche' servono a capire a cosa quelle credenziali davano accesso. Il materiale segreto (secret key, token, password, contenuto delle chiavi private) NON viene mai stampato: e' la sua esistenza a essere il dato utile, riprodurlo qui aggiungerebbe solo un altro posto da cui puo' trapelare." \
-        "The table shows non-secret identifiers — profile, access key ID, cluster endpoint, registry, host — because they establish what those credentials granted access to. Secret material (secret keys, tokens, passwords, private key contents) is never printed: its existence is the useful fact, reproducing it here would only add one more place it can leak from.")<br><br>"
+    NOTE+="$(L "La tabella riporta identificativi non segreti - profilo, access key ID, endpoint del cluster, registry, host - perche' servono a capire a cosa quelle credenziali davano accesso. Il materiale segreto (secret key, token, password, contenuto delle chiavi private) NON viene mai stampato: e' la sua esistenza a essere il dato utile, riprodurlo qui aggiungerebbe solo un altro posto da cui puo' trapelare." \
+        "The table shows non-secret identifiers - profile, access key ID, cluster endpoint, registry, host - because they establish what those credentials granted access to. Secret material (secret keys, tokens, passwords, private key contents) is never printed: its existence is the useful fact, reproducing it here would only add one more place it can leak from.")<br><br>"
     NOTE+="<b>$(L "Priorita' di risposta" "Response priority")</b><br>"
     NOTE+="$(L "Ogni credenziale elencata va considerata compromessa e ruotata. Le chiavi SSH senza passphrase e i file con permessi larghi vanno per primi." \
         "Every credential listed must be treated as compromised and rotated. SSH keys without a passphrase and files with loose permissions come first.")"
@@ -16217,7 +16241,7 @@ module_linux_cloud_credentials() {
 #  compromessa find puo' essere sostituito o un rootkit puo' nascondere i file.
 # ================================================================
 module_linux_suid_caps() {
-    section_header "Linux — SUID/SGID $(L "e capabilities" "and capabilities")" "$ORANGE"
+    section_header "Linux - SUID/SGID $(L "e capabilities" "and capabilities")" "$ORANGE"
     check_target_root || return 1
 
     info "$(L "Scansione del filesystem in corso..." "Scanning the filesystem...")"
@@ -16283,8 +16307,8 @@ module_linux_suid_caps() {
     local BODY=""
     BODY+="<div class='card' style='margin-bottom:1rem'><div style='padding:1rem 1.5rem;font-size:.8rem;line-height:1.7'>"
     BODY+="<b>$(L "Come leggere l'elenco atteso" "How to read the expected set")</b><br>"
-    BODY+="$(L "I binari SUID di sistema (passwd, sudo, mount...) sono separati dagli altri solo per ridurre il rumore. Non sono dichiarati sicuri: un /usr/bin/passwd sostituito resta nell'elenco atteso, e va confrontato con l'hash del pacchetto. Il segnale forte e' un SUID FUORI dall'elenco — soprattutto una shell, un interprete o un binario in /tmp, /home o /var." \
-        "System SUID binaries (passwd, sudo, mount...) are separated from the rest only to cut noise. They are not declared safe: a replaced /usr/bin/passwd still sits in the expected set and must be checked against the package hash. The strong signal is a SUID OUTSIDE the set — especially a shell, an interpreter, or a binary under /tmp, /home or /var.")<br><br>"
+    BODY+="$(L "I binari SUID di sistema (passwd, sudo, mount...) sono separati dagli altri solo per ridurre il rumore. Non sono dichiarati sicuri: un /usr/bin/passwd sostituito resta nell'elenco atteso, e va confrontato con l'hash del pacchetto. Il segnale forte e' un SUID FUORI dall'elenco - soprattutto una shell, un interprete o un binario in /tmp, /home o /var." \
+        "System SUID binaries (passwd, sudo, mount...) are separated from the rest only to cut noise. They are not declared safe: a replaced /usr/bin/passwd still sits in the expected set and must be checked against the package hash. The strong signal is a SUID OUTSIDE the set - especially a shell, an interpreter, or a binary under /tmp, /home or /var.")<br><br>"
     BODY+="$(L "Le capabilities sono l'alternativa moderna al SUID e vengono spesso dimenticate in fase di audit: CAP_SETUID, CAP_SYS_ADMIN e CAP_DAC_OVERRIDE su un binario arbitrario equivalgono di fatto a root." \
         "Capabilities are the modern alternative to SUID and are often overlooked during audits: CAP_SETUID, CAP_SYS_ADMIN and CAP_DAC_OVERRIDE on an arbitrary binary are effectively root.")"
     if ! $CAPS_OK; then
@@ -16319,7 +16343,7 @@ module_linux_suid_caps() {
 
 # --- macOS 1 — System Logs ---
 module_macos_logs() {
-    section_header "macOS — System Logs" "$GREEN"
+    section_header "macOS - System Logs" "$GREEN"
     check_target_root || return 1
     local KW="fail|error|denied|invalid|sudo|root|unauthorized|jailbreak|malware"
     local BODY="" FOUND=0
@@ -16335,7 +16359,7 @@ module_macos_logs() {
         local ASL; ASL=$(ci_find_dir "$LOGDIR" "asl")
         if [[ -n "$ASL" ]]; then
             local ACOUNT; ACOUNT=$(find "$ASL" -maxdepth 1 -type f 2>/dev/null | wc -l)
-            [[ "$ACOUNT" -gt 0 ]] && { FOUND=$((FOUND + 1)); ok "asl ($ACOUNT file)"; BODY+="<div class='card'><div class='card-header'><div class='uicon'>≣</div><div><div class='uname'>ASL logs</div><div class='upath'>$ASL</div></div><div class='badge'>$ACOUNT file</div></div><div style='padding:1rem 1.5rem'><p class='dim mono' style='font-size:.72rem'>$(L "Formato binario ASL — analisi approfondita fuori scope offline." "Binary ASL format — deep parsing out of offline scope.")</p></div></div>"; }
+            [[ "$ACOUNT" -gt 0 ]] && { FOUND=$((FOUND + 1)); ok "asl ($ACOUNT file)"; BODY+="<div class='card'><div class='card-header'><div class='uicon'>≣</div><div><div class='uname'>ASL logs</div><div class='upath'>$ASL</div></div><div class='badge'>$ACOUNT file</div></div><div style='padding:1rem 1.5rem'><p class='dim mono' style='font-size:.72rem'>$(L "Formato binario ASL - analisi approfondita fuori scope offline." "Binary ASL format - deep parsing out of offline scope.")</p></div></div>"; }
         fi
     fi
     # Nota: unified logs .tracev3 esplicitamente fuori scope
@@ -16366,7 +16390,7 @@ PYEOF
 
 # --- macOS 2 — User Accounts (dslocal) ---
 module_macos_accounts() {
-    section_header "macOS — User Accounts" "$RED"
+    section_header "macOS - User Accounts" "$RED"
     check_target_root || return 1
     local UDIR
     UDIR=$(ci_find_dir "$WIN_ROOT" "var/db/dslocal/nodes/Default/users")
@@ -16393,7 +16417,7 @@ module_macos_accounts() {
 
 # --- macOS 3 — Persistence (LaunchAgents/Daemons/cron) ---
 module_macos_persistence() {
-    section_header "macOS — Persistence" "$ORANGE"
+    section_header "macOS - Persistence" "$ORANGE"
     check_target_root || return 1
     local KW="curl|wget|/tmp/|/var/tmp|base64|python|bash -i|nc |/dev/tcp|RunAtLoad|KeepAlive|http"
     local BODY="" FOUND=0
@@ -16412,7 +16436,7 @@ module_macos_persistence() {
                 BODY+=$(file_card_html "$F" "$KW" "⟳")
             fi
         done < <(find "$D" -maxdepth 1 -type f \( -iname "*.plist" -o -iname "*.conf" \) 2>/dev/null)
-        [[ $n -gt 0 ]] && ok "$LABEL — $n plist ($D)"
+        [[ $n -gt 0 ]] && ok "$LABEL - $n plist ($D)"
     }
     _mac_persist_dir "LaunchDaemons" "$(ci_find_dir "$WIN_ROOT" "Library/LaunchDaemons")"
     _mac_persist_dir "LaunchAgents"  "$(ci_find_dir "$WIN_ROOT" "Library/LaunchAgents")"
@@ -16434,7 +16458,7 @@ module_macos_persistence() {
 
 # --- macOS 4 — Login Items (BTM) ---
 module_macos_loginitems() {
-    section_header "macOS — Login Items (BTM)" "$RED"
+    section_header "macOS - Login Items (BTM)" "$RED"
     check_target_root || return 1
     local BODY="" FOUND=0
     # backgrounditems.btm (vari percorsi a seconda della versione)
@@ -16457,7 +16481,7 @@ module_macos_loginitems() {
 
 # --- macOS 5 — Quarantine / Downloads ---
 module_macos_quarantine() {
-    section_header "macOS — Quarantine / Downloads" "$CYAN"
+    section_header "macOS - Quarantine / Downloads" "$CYAN"
     check_target_root || return 1
     local BODY="" TOTAL=0
     while IFS= read -r HOME_DIR; do
@@ -16476,7 +16500,7 @@ module_macos_quarantine() {
             fi
             [[ -z "$ROWS" || "$ROWS" == ERROR* ]] && continue
             local N; N=$(printf '%s\n' "$ROWS" | grep -c .); TOTAL=$((TOTAL + N))
-            ok "$UNAME — ${BOLD}$N $(L "download tracciati" "tracked downloads")"
+            ok "$UNAME - ${BOLD}$N $(L "download tracciati" "tracked downloads")"
             local TABLE
             if [[ $HEADERS_EXTRA -eq 1 ]]; then
                 TABLE=$(_rows_to_table "$ROWS" "$(L "Data" "Date")" "Agent" "URL" "$(L "Pagina origine" "Origin page")")
@@ -16496,7 +16520,7 @@ module_macos_quarantine() {
 
 # --- macOS 6 — TCC Privacy ---
 module_macos_tcc() {
-    section_header "macOS — TCC Privacy" "$RED"
+    section_header "macOS - TCC Privacy" "$RED"
     check_target_root || return 1
     local BODY="" TOTAL=0
     _tcc_card() { # db, label
@@ -16505,7 +16529,7 @@ module_macos_tcc() {
         [[ -z "$ROWS" || "$ROWS" == ERROR* ]] && ROWS=$(query_sqlite "$DB" "SELECT service, client, allowed FROM access ORDER BY service")
         [[ -z "$ROWS" || "$ROWS" == ERROR* ]] && return
         local N; N=$(printf '%s\n' "$ROWS" | grep -c .); TOTAL=$((TOTAL + N))
-        ok "$LBL — ${BOLD}$N $(L "permessi" "permissions")"
+        ok "$LBL - ${BOLD}$N $(L "permessi" "permissions")"
         local TABLE; TABLE=$(_rows_to_table "$ROWS" "Service" "Client" "Auth")
         BODY+=$(generic_card_html "$LBL" "$DB" "$N" "$TABLE" "⊘")
     }
@@ -16526,7 +16550,7 @@ module_macos_tcc() {
 
 # --- macOS 7 — KnowledgeC ---
 module_macos_knowledgec() {
-    section_header "macOS — KnowledgeC" "$BLUE"
+    section_header "macOS - KnowledgeC" "$BLUE"
     check_target_root || return 1
     local BODY="" TOTAL=0
     while IFS= read -r HOME_DIR; do
@@ -16536,7 +16560,7 @@ module_macos_knowledgec() {
         local ROWS; ROWS=$(query_sqlite "$DB" "SELECT datetime(ZCREATIONDATE+978307200,'unixepoch'), ZSTREAMNAME, ZVALUESTRING FROM ZOBJECT WHERE ZVALUESTRING IS NOT NULL ORDER BY ZCREATIONDATE DESC LIMIT 100000")
         [[ -z "$ROWS" || "$ROWS" == ERROR* ]] && continue
         local N; N=$(printf '%s\n' "$ROWS" | grep -c .); TOTAL=$((TOTAL + N))
-        ok "$U — ${BOLD}$N $(L "eventi" "events")"
+        ok "$U - ${BOLD}$N $(L "eventi" "events")"
         local TABLE; TABLE=$(_rows_to_table "$ROWS" "$(L "Data" "Date")" "Stream" "Value")
         BODY+=$(generic_card_html "$U" "$DB" "$N" "$TABLE" "◴")
     done < <(get_macos_user_homes)
@@ -16550,7 +16574,7 @@ module_macos_knowledgec() {
 
 # --- macOS 8 — Browser History ---
 module_macos_browser() {
-    section_header "macOS — Browser History" "$CYAN"
+    section_header "macOS - Browser History" "$CYAN"
     check_target_root || return 1
     local BODY="" TOTAL=0 USERS=0
     while IFS= read -r HOME_DIR; do
@@ -16560,7 +16584,7 @@ module_macos_browser() {
         if [[ -n "$SAF" ]]; then
             local ROWS; ROWS=$(query_sqlite "$SAF" "SELECT datetime(v.visit_time+978307200,'unixepoch'), i.url, v.title FROM history_visits v JOIN history_items i ON v.history_item=i.id ORDER BY v.visit_time DESC LIMIT 100000")
             if [[ -n "$ROWS" && "$ROWS" != ERROR* ]]; then
-                UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + 1)); ok "$U — Safari"
+                UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + 1)); ok "$U - Safari"
                 CARDS+=$(generic_card_html "Safari" "$SAF" "$(printf '%s\n' "$ROWS" | grep -c .) URL" "$(_rows_to_table "$ROWS" "$(L "Data" "Date")" "URL" "$(L "Titolo" "Title")")" "◐")
             fi
         fi
@@ -16570,7 +16594,7 @@ module_macos_browser() {
             while IFS= read -r HISTDB; do
                 local ROWS; ROWS=$(query_sqlite "$HISTDB" "SELECT datetime(last_visit_time/1000000-11644473600,'unixepoch'), url, title FROM urls ORDER BY last_visit_time DESC LIMIT 100000")
                 [[ -z "$ROWS" || "$ROWS" == ERROR* ]] && continue
-                UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + 1)); ok "$U — $(basename "$(dirname "$HISTDB")") (Chromium)"
+                UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + 1)); ok "$U - $(basename "$(dirname "$HISTDB")") (Chromium)"
                 CARDS+=$(_browser_table_card "$HISTDB" "$ROWS")
             done < <(find "$BASE" -maxdepth 2 -name "History" -type f 2>/dev/null)
         done
@@ -16580,7 +16604,7 @@ module_macos_browser() {
             while IFS= read -r PLACES; do
                 local ROWS; ROWS=$(query_sqlite "$PLACES" "SELECT datetime(last_visit_date/1000000,'unixepoch'), url, title FROM moz_places WHERE last_visit_date IS NOT NULL ORDER BY last_visit_date DESC LIMIT 100000")
                 [[ -z "$ROWS" || "$ROWS" == ERROR* ]] && continue
-                UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + 1)); ok "$U — Firefox"
+                UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + 1)); ok "$U - Firefox"
                 CARDS+=$(_browser_table_card "$PLACES" "$ROWS")
             done < <(find "$FB" -maxdepth 2 -name "places.sqlite" -type f 2>/dev/null)
         fi
@@ -16597,7 +16621,7 @@ module_macos_browser() {
 
 # --- macOS 9 — Shell & AI History ---
 module_macos_shell_ai_history() {
-    section_header "macOS — Shell & AI History" "$MAGENTA"
+    section_header "macOS - Shell & AI History" "$MAGENTA"
     check_target_root || return 1
     local FILES=(.zsh_history .bash_history .sh_history .python_history .psql_history .node_repl_history
                  .claude .aider.chat.history.md .config/aichat .ollama/history)
@@ -16620,7 +16644,7 @@ module_macos_shell_ai_history() {
             fi
         done
         [[ $UCOUNT -eq 0 ]] && continue
-        USERS=$((USERS + 1)); ok "$U — ${BOLD}$UCOUNT file"
+        USERS=$((USERS + 1)); ok "$U - ${BOLD}$UCOUNT file"
         BODY+=$(generic_card_html "$U" "$HOME_DIR" "$UCOUNT file" "$CARDS" "◢")
     done < <(get_macos_user_homes)
     separator
@@ -16633,7 +16657,7 @@ module_macos_shell_ai_history() {
 
 # --- macOS 10 — Recent Items ---
 module_macos_recent() {
-    section_header "macOS — Recent Items" "$GREEN"
+    section_header "macOS - Recent Items" "$GREEN"
     check_target_root || return 1
     local BODY="" TOTAL=0 USERS=0
     while IFS= read -r HOME_DIR; do
@@ -16662,7 +16686,7 @@ module_macos_recent() {
             fi
         fi
         [[ $UCOUNT -eq 0 ]] && continue
-        USERS=$((USERS + 1)); ok "$U — ${BOLD}$UCOUNT $(L "sorgenti" "sources")"
+        USERS=$((USERS + 1)); ok "$U - ${BOLD}$UCOUNT $(L "sorgenti" "sources")"
         BODY+=$(generic_card_html "$U" "$HOME_DIR" "$UCOUNT" "$CARDS" "◇")
     done < <(get_macos_user_homes)
     separator
@@ -16688,7 +16712,7 @@ module_macos_recent() {
 # file che li contiene, quindi le date qui sono un LIMITE SUPERIORE approssimato
 # (mtime del file di log), non l'istante dell'evento. Il report lo dichiara.
 module_macos_fsevents() {
-    section_header "macOS — FSEvents" "$MAGENTA"
+    section_header "macOS - FSEvents" "$MAGENTA"
     check_target_root || return 1
 
     local FSEDIR; FSEDIR=$(ci_find_dir "$WIN_ROOT" ".fseventsd")
@@ -16815,8 +16839,8 @@ PYEOF
     local NOTE
     NOTE="<div class='card' style='margin-bottom:1rem'><div style='padding:1rem 1.5rem;font-size:.8rem;line-height:1.7'>"
     NOTE+="<b>$(L "Nota sui tempi" "Note on timestamps")</b><br>"
-    NOTE+="$(L "I record FSEvents non contengono un timestamp: l'event ID e' un contatore monotono. La colonna data riporta il mtime del file di log che contiene il record, cioe' un LIMITE SUPERIORE approssimato dell'istante dell'evento — non la sua ora esatta. Per una datazione precisa va correlato con altri artefatti." \
-        "FSEvents records carry no timestamp: the event ID is a monotonic counter. The date column shows the mtime of the log file containing the record, i.e. an approximate UPPER BOUND of when the event happened — not its exact time. Precise dating requires correlation with other artefacts.")"
+    NOTE+="$(L "I record FSEvents non contengono un timestamp: l'event ID e' un contatore monotono. La colonna data riporta il mtime del file di log che contiene il record, cioe' un LIMITE SUPERIORE approssimato dell'istante dell'evento - non la sua ora esatta. Per una datazione precisa va correlato con altri artefatti." \
+        "FSEvents records carry no timestamp: the event ID is a monotonic counter. The date column shows the mtime of the log file containing the record, i.e. an approximate UPPER BOUND of when the event happened - not its exact time. Precise dating requires correlation with other artefacts.")"
     NOTE+="</div></div>"
 
     local STATS
@@ -16840,7 +16864,7 @@ PYEOF
 # delle stringhe leggibili (URL e percorsi). Il report lo dichiara apertamente e
 # rimanda a spotlight_parser per l'analisi strutturata.
 module_macos_spotlight() {
-    section_header "macOS — Spotlight" "$CYAN"
+    section_header "macOS - Spotlight" "$CYAN"
     check_target_root || return 1
 
     local -a STORES=()
@@ -16964,7 +16988,7 @@ PYEOF
 #  cancellazione della conversazione.
 # ================================================================
 module_macos_messages() {
-    section_header "macOS — Messages" "$CYAN"
+    section_header "macOS - Messages" "$CYAN"
     check_target_root || return 1
 
     local BODY="" TOTAL=0 NATT=0 NSUSP=0
@@ -16993,7 +17017,7 @@ module_macos_messages() {
 
         local N; N=$(printf '%s\n' "$ROWS" | grep -c . || true)
         TOTAL=$((TOTAL + N))
-        ok "$U — ${BOLD}${N}${RESET} $(L "messaggi" "messages")"
+        ok "$U - ${BOLD}${N}${RESET} $(L "messaggi" "messages")"
 
         # Messaggi con link o riferimenti a credenziali: sono quelli che
         # spiegano un accesso iniziale o una compromissione di account.
@@ -17011,7 +17035,7 @@ module_macos_messages() {
             local STABLE; STABLE=$(_rows_to_table "$SUSP" \
                 "$(L "Data" "Date")" "$(L "Interlocutore" "Handle")" "$(L "Direzione" "Direction")" \
                 "$(L "Testo" "Text")" "$(L "Servizio" "Service")")
-            BODY="<div class='cards'>$(generic_card_html "$U — $(L "messaggi con link o credenziali" "messages with links or credentials")" "$DB" "$NS" "$STABLE" "⚑")</div>${BODY}"
+            BODY="<div class='cards'>$(generic_card_html "$U - $(L "messaggi con link o credenziali" "messages with links or credentials")" "$DB" "$NS" "$STABLE" "⚑")</div>${BODY}"
         fi
 
         # Allegati: restano su disco anche dopo la cancellazione della chat.
@@ -17056,7 +17080,7 @@ module_macos_messages() {
 #    quarantena, ma non tutti i download vi finiscono.
 # ================================================================
 module_macos_cookies_downloads() {
-    section_header "macOS — Cookie & Download" "$YELLOW"
+    section_header "macOS - Cookie & Download" "$YELLOW"
     check_target_root || return 1
 
     local -a COOKIES=() PLISTS=()
@@ -17227,7 +17251,7 @@ for i, u in enumerate(urls):
 #  anteriore alla data dei fatti, l'assenza di rilevamenti non significa nulla.
 # ================================================================
 module_macos_xprotect() {
-    section_header "macOS — XProtect / Gatekeeper" "$RED"
+    section_header "macOS - XProtect / Gatekeeper" "$RED"
     check_target_root || return 1
 
     local BODY="" ROWS="" NFIND=0
@@ -17344,7 +17368,7 @@ module_macos_xprotect() {
 #  valida. Il report distingue le due cose invece di lasciarlo intendere.
 # ================================================================
 module_macos_applications() {
-    section_header "macOS — $(L "Inventario applicazioni" "Application inventory")" "$GREEN"
+    section_header "macOS - $(L "Inventario applicazioni" "Application inventory")" "$GREEN"
     check_target_root || return 1
 
     local -a ROOTS=()
@@ -17464,7 +17488,7 @@ module_macos_applications() {
 #  `diskutil apfs listSnapshots` sul volume vivo.
 # ================================================================
 module_macos_backups() {
-    section_header "macOS — Time Machine / Snapshot" "$BLUE"
+    section_header "macOS - Time Machine / Snapshot" "$BLUE"
     check_target_root || return 1
 
     local ROWS="" NDEST=0 NTRACE=0
@@ -17512,7 +17536,7 @@ module_macos_backups() {
             ROWS+="Backup	$(basename "$F")	$(stat -c %y "$F" 2>/dev/null | cut -d. -f1)
 "
         done < <(find "$BK" -mindepth 2 -maxdepth 2 -type d 2>/dev/null | head -100)
-        ok "Backups.backupdb — ${BOLD}${NBK}${RESET} $(L "backup" "backups")"
+        ok "Backups.backupdb - ${BOLD}${NBK}${RESET} $(L "backup" "backups")"
     fi
 
     separator
@@ -17564,7 +17588,7 @@ module_macos_backups() {
 #  di log ricostruita. Per quella serve `log show --archive` su un Mac.
 # ================================================================
 module_macos_unified_logs() {
-    section_header "macOS — Unified Logs (.tracev3)" "$MAGENTA"
+    section_header "macOS - Unified Logs (.tracev3)" "$MAGENTA"
     check_target_root || return 1
 
     local -a FILES=()
@@ -17585,7 +17609,7 @@ module_macos_unified_logs() {
     for F in "${FILES[@]}"; do
         TOTB=$(( TOTB + $(stat -c %s "$F" 2>/dev/null || echo 0) ))
     done
-    info "$(L "File .tracev3:" ".tracev3 files:") ${BOLD}${#FILES[@]}${RESET} — $(numfmt --to=iec "$TOTB" 2>/dev/null || echo "$TOTB B")"
+    info "$(L "File .tracev3:" ".tracev3 files:") ${BOLD}${#FILES[@]}${RESET} - $(numfmt --to=iec "$TOTB" 2>/dev/null || echo "$TOTB B")"
     info "$(L "Decompressione dei chunk in corso..." "Decompressing chunks...")"
 
     local IOCTMP; IOCTMP=$(mktemp); register_tmp "$IOCTMP"
@@ -17764,12 +17788,12 @@ PYEOF
 
     local NOTE="<div class='card' style='margin-bottom:1rem;border-color:rgba(255,166,87,.5)'><div style='padding:1rem 1.5rem;font-size:.8rem;line-height:1.7'>"
     NOTE+="<b>$(L "Livello di supporto: parziale, e dichiarato" "Support level: partial, and stated")</b><br>"
-    NOTE+="$(L "Questo modulo NON ricostruisce i messaggi di log. Un parser completo di .tracev3 deve interpretare il catalogo e risolvere i riferimenti alle stringhe nei file .uuidtext e nel dyld_shared_cache: e' un progetto a se'. Qui i chunk LZ4 vengono decompressi e se ne estraggono le stringhe gia' leggibili — percorsi, bundle id, URL, nomi di file." \
-        "This module does NOT reconstruct log messages. A complete .tracev3 parser must interpret the catalogue and resolve string references in .uuidtext files and the dyld_shared_cache: that is a project of its own. Here the LZ4 chunks are decompressed and the already-readable strings are extracted — paths, bundle ids, URLs, file names.")<br><br>"
+    NOTE+="$(L "Questo modulo NON ricostruisce i messaggi di log. Un parser completo di .tracev3 deve interpretare il catalogo e risolvere i riferimenti alle stringhe nei file .uuidtext e nel dyld_shared_cache: e' un progetto a se'. Qui i chunk LZ4 vengono decompressi e se ne estraggono le stringhe gia' leggibili - percorsi, bundle id, URL, nomi di file." \
+        "This module does NOT reconstruct log messages. A complete .tracev3 parser must interpret the catalogue and resolve string references in .uuidtext files and the dyld_shared_cache: that is a project of its own. Here the LZ4 chunks are decompressed and the already-readable strings are extracted - paths, bundle ids, URLs, file names.")<br><br>"
     NOTE+="$(L "Le date sono quelle di modifica del file che contiene la stringa: un limite superiore approssimato, non l'istante dell'evento." \
         "Dates are the modification times of the file containing the string: an approximate upper bound, not the moment of the event.")<br><br>"
     NOTE+="<b>$(L "Per l'analisi completa" "For full analysis")</b><br>"
-    NOTE+="<code>log show --archive /percorso/diagnostics.logarchive --info --debug</code> ($(L "richiede un Mac" "requires a Mac")) — "
+    NOTE+="<code>log show --archive /percorso/diagnostics.logarchive --info --debug</code> ($(L "richiede un Mac" "requires a Mac")) - "
     NOTE+="$(L "oppure" "or") <code>mandiant/macos-UnifiedLogs</code>."
     NOTE+="</div></div>"
 
@@ -17789,7 +17813,7 @@ PYEOF
 #  legge GENERATED_REPORTS, che a quel punto contiene gli altri moduli.
 # ================================================================
 module_xplat_master_timeline() {
-    section_header "$(L "Master Timeline — Aggregazione Cross-Moduli" "Master Timeline — Cross-Module Aggregation")" "$YELLOW"
+    section_header "$(L "Master Timeline - Aggregazione Cross-Moduli" "Master Timeline - Cross-Module Aggregation")" "$YELLOW"
     check_target_root || return 1
 
     local -a SRC=()
@@ -17918,7 +17942,7 @@ PYEOF
 #  spazio non allocato. Vale per tutti e tre i sistemi operativi.
 # ================================================================
 module_xplat_sqlite_recovery() {
-    section_header "$(L "Recupero record cancellati — SQLite" "Deleted record recovery — SQLite")" "$MAGENTA"
+    section_header "$(L "Recupero record cancellati - SQLite" "Deleted record recovery - SQLite")" "$MAGENTA"
     check_target_root || return 1
 
     # Database che valgono la pena in un'indagine, per OS.
@@ -18082,8 +18106,8 @@ PYEOF
     NOTE+="<b>$(L "Le categorie" "The categories")</b><br>"
     NOTE+="$(L "Le stringhe sono classificate per tipo e ordinate mettendo per prime le categorie rare. Gli URL sono deliberatamente in fondo: recuperare una cronologia cancellata produce migliaia di URL, quindi marcarli tutti come rilevanti non aiuterebbe a decidere da dove iniziare." \
         "Strings are classified by type and ordered with the rare categories first. URLs are deliberately last: recovering a deleted history yields thousands of URLs, so flagging them all as notable would not help decide where to start.")<br><br>"
-    NOTE+="$(L "Non trovare nulla non significa che l'utente non abbia cancellato: significa che lo spazio e' stato riutilizzato, o che il database e' stato compattato con VACUUM — operazione che azzera proprio questo tipo di recupero ed e' essa stessa degna di nota." \
-        "Finding nothing does not mean the user deleted nothing: it means the space was reused, or the database was compacted with VACUUM — an operation that wipes exactly this kind of recovery and is itself worth noting.")"
+    NOTE+="$(L "Non trovare nulla non significa che l'utente non abbia cancellato: significa che lo spazio e' stato riutilizzato, o che il database e' stato compattato con VACUUM - operazione che azzera proprio questo tipo di recupero ed e' essa stessa degna di nota." \
+        "Finding nothing does not mean the user deleted nothing: it means the space was reused, or the database was compacted with VACUUM - an operation that wipes exactly this kind of recovery and is itself worth noting.")"
     NOTE+="</div></div>"
 
     local STATS
@@ -18091,7 +18115,7 @@ PYEOF
     STATS+="$(stat_box "$(L "Prioritarie" "Priority")" "$NNOT" "$([[ "$NNOT" -gt 0 ]] && echo warn || echo info)")"
     STATS+="$(stat_box "Database" "${NDBHIT}/${NDB}" "info")"
     STATS+="$(stat_box "IoC" "$NIOC" "$([[ "$NIOC" -gt 0 ]] && echo warn || echo info)")"
-    finish_report "xplat_sqlite_recovery" "SQLite — $(L "record cancellati" "deleted records")" "SQL" \
+    finish_report "xplat_sqlite_recovery" "SQLite - $(L "record cancellati" "deleted records")" "SQL" \
         "$(L "freelist e spazio non allocato" "freelist and unallocated space")" "$STATS" \
         "${NOTE}<div class='cards'>$(generic_card_html "$(L "Resa per database" "Yield per database")" "$(L "riepilogo" "summary")" "$NDBHIT" "$STABLE" "∑")</div><div class='cards'>$(generic_card_html "$(L "Contenuto recuperato" "Recovered content")" "$(L "segnalati in testa" "flagged first")" "$TOTAL" "$TABLE" "♺")</div>"
 }
@@ -18113,7 +18137,7 @@ PYEOF
 #  Vale per tutti e tre i sistemi: la ESP e' condivisa fra gli OS installati.
 # ================================================================
 module_xplat_esp_bootkit() {
-    section_header "EFI System Partition — bootkit" "$RED"
+    section_header "EFI System Partition - bootkit" "$RED"
     check_target_root || return 1
 
     # La ESP puo' essere il volume stesso (montata a parte) oppure trovarsi
@@ -18527,7 +18551,7 @@ if s['stopped_at_cap']:
                              'The scan stopped at the maximum file cap: it is PARTIAL.') + '</b>')
 for r in s['rule_files_rejected']:
     out.append('<br>' + L('Regole scartate: ', 'Rules rejected: ')
-               + html.escape(r['file']) + ' — ' + html.escape(r['error']))
+               + html.escape(r['file']) + ' - ' + html.escape(r['error']))
 out.append('</div></div>')
 print(''.join(out))
 PYEOF
@@ -19035,7 +19059,7 @@ def _unallocated(page, is_first):
 
     Layout: header, array dei puntatori alle celle, spazio libero, contenuto
     delle celle. Cio' che sta fra la fine dell'array e l'inizio del contenuto
-    non e' in uso — ed e' li' che restano i record cancellati.
+    non e' in uso - ed e' li' che restano i record cancellati.
     """
     base = 100 if is_first else 0
     if len(page) < base + 8:
@@ -19610,10 +19634,10 @@ MODULES_WIN=(
     "module_browser|Browser History|CYAN|Chrome / Edge / Firefox"
     "module_userassist|UserAssist / RunMRU|MAGENTA|Attività interattiva utente§Interactive user activity"
     "module_shellbags|ShellBags|CYAN|Navigazione cartelle (anche cancellate)§Folder navigation (including deleted)"
-    "module_sam|SAM — Hash Locali§SAM — Local Hashes|RED|Hash NTLM account (impacket)§NTLM account hashes (impacket)"
+    "module_sam|SAM - Hash Locali§SAM - Local Hashes|RED|Hash NTLM account (impacket)§NTLM account hashes (impacket)"
     "module_mft|MFT Timeline|YELLOW|Master File Table + timestomping"
     "module_opensave|OpenSave / LastVisited MRU|GREEN|File aperti/salvati via dialogo§Files opened/saved via dialog"
-    "module_usn|USN Journal|CYAN|\$UsnJrnl:\$J — change log NTFS§\$UsnJrnl:\$J — NTFS change log"
+    "module_usn|USN Journal|CYAN|\$UsnJrnl:\$J - change log NTFS§\$UsnJrnl:\$J - NTFS change log"
     "module_ntds|NTDS.dit|RED|Active Directory hash (DC offline)"
     "module_hiberfil|Hibernation / Pagefile|BLUE|hiberfil.sys · pagefile.sys strings"
     "module_wer_files|WER Files (Error Reports)|RED|ReportArchive · ReportQueue (.wer)"
@@ -19624,23 +19648,23 @@ MODULES_WIN=(
     "module_clipboard|Clipboard History|YELLOW|Cronologia appunti Win10+§Clipboard history Win10+"
     "module_office_mru|Office MRU|GREEN|File recenti Word/Excel/PowerPoint§Recent Word/Excel/PowerPoint files"
     "module_defender_quarantine|Defender Quarantine|RED|File in quarantena + threatname§Quarantined files + threatname"
-    "module_ps_scriptblock|PS ScriptBlock Logging|MAGENTA|Event ID 4104 — PS Operational.evtx"
+    "module_ps_scriptblock|PS ScriptBlock Logging|MAGENTA|Event ID 4104 - PS Operational.evtx"
     "module_jumplists|JumpLists|GREEN|AutomaticDestinations · CustomDestinations"
     "module_network_artifacts|Network Artifacts|CYAN|Profili rete · Interfacce TCP/IP (registry)§Network profiles · TCP/IP interfaces (registry)"
     "module_master_timeline|Master Timeline|YELLOW|Aggregazione cross-moduli con filtri (con --all gira per ultima)§Cross-module aggregation with filters (runs last with --all)||defer"
-    "module_pad_offline|PAD Offline AD Analysis|RED|NTDS.dit offline — utenti privilegiati, ACL, GPO§NTDS.dit offline — privileged users, ACL, GPO|_guard_pad_offline"
+    "module_pad_offline|PAD Offline AD Analysis|RED|NTDS.dit offline - utenti privilegiati, ACL, GPO§NTDS.dit offline - privileged users, ACL, GPO|_guard_pad_offline"
     "module_ai_chat|AI Chat History|MAGENTA|Claude · ChatGPT · Copilot · Cursor · Gemini · Codex"
     "module_setupapi|SetupAPI Device Log|BLUE|Prima installazione dispositivi (USB)§Device first install (USB)"
     "module_ps_transcripts|PowerShell Transcript|MAGENTA|Sessioni complete: comandi + output§Full sessions: commands + output"
-    "module_lsa_secrets|LSA Secrets & DCC2|RED|SECURITY hive — password servizi, cache dominio§SECURITY hive — service passwords, domain cache"
+    "module_lsa_secrets|LSA Secrets & DCC2|RED|SECURITY hive - password servizi, cache dominio§SECURITY hive - service passwords, domain cache"
     "module_vss|Volume Shadow Copies|CYAN|Snapshot precedenti del volume§Earlier volume snapshots"
     "module_pst_ost|Outlook PST / OST|YELLOW|Posta locale, allegati, item cancellati§Local mail, attachments, deleted items"
-    "module_cloud_sync|Cloud Sync|BLUE|OneDrive/Dropbox/Drive — file sincronizzati§OneDrive/Dropbox/Drive — synced files"
+    "module_cloud_sync|Cloud Sync|BLUE|OneDrive/Dropbox/Drive - file sincronizzati§OneDrive/Dropbox/Drive - synced files"
     "module_bits|BITS Jobs|ORANGE|Download in background (T1197)§Background downloads (T1197)"
     "module_thumbcache|Thumbcache|GREEN|Miniature di file cancellati§Thumbnails of deleted files"
-    "module_chat_desktop|Chat Desktop|MAGENTA|Slack/Teams/Discord — LevelDB§Slack/Teams/Discord — LevelDB"
+    "module_chat_desktop|Chat Desktop|MAGENTA|Slack/Teams/Discord - LevelDB§Slack/Teams/Discord - LevelDB"
     "module_webcache|WebCacheV01|CYAN|IE/Edge Legacy + WinINET§IE/Edge Legacy + WinINET"
-    "module_search_index|Search Index|YELLOW|Windows.edb — file indicizzati§Windows.edb — indexed files"
+    "module_search_index|Search Index|YELLOW|Windows.edb - file indicizzati§Windows.edb - indexed files"
     "module_sigma|Sigma|RED|Regole Sigma sugli EVTX (--sigma)§Sigma rules over EVTX (--sigma)|_guard_sigma"
     "module_xplat_sqlite_recovery|SQLite Recovery|MAGENTA|Record cancellati da freelist e spazio libero§Deleted records from freelist and free space"
     "module_xplat_esp_bootkit|EFI System Partition|RED|Bootkit e persistenza pre-boot§Bootkits and pre-boot persistence"
@@ -19661,12 +19685,12 @@ MODULES_LINUX=(
     "module_linux_packages|Installed Packages|GREEN|dpkg / rpm / apt history / snap"
     "module_linux_trash|Trash & Recent|GREEN|~/.local/share/Trash + recently-used"
     "module_linux_timeline|Filesystem Timeline|YELLOW|MAC times aggregati (find/stat)"
-    "module_linux_auditd|auditd|RED|/var/log/audit — syscall, auth, EXECVE"
-    "module_linux_containers|Container|BLUE|Docker/Podman — inventario e fughe"
+    "module_linux_auditd|auditd|RED|/var/log/audit - syscall, auth, EXECVE"
+    "module_linux_containers|Container|BLUE|Docker/Podman - inventario e fughe"
     "module_xplat_master_timeline|Master Timeline|YELLOW|aggrega le evidenze degli altri moduli (con --all gira per ultimo)§aggregates the other modules' findings (runs last with --all)||defer"
     "module_linux_pam|PAM|RED|Backdoor di autenticazione§Authentication backdoors"
     "module_linux_kernel_modules|Kernel Modules|RED|LKM rootkit, modprobe.d, initramfs§LKM rootkits, modprobe.d, initramfs"
-    "module_linux_webserver_logs|Web Server Logs|ORANGE|nginx/apache — webshell, traversal, SQLi§nginx/apache — webshell, traversal, SQLi"
+    "module_linux_webserver_logs|Web Server Logs|ORANGE|nginx/apache - webshell, traversal, SQLi§nginx/apache - webshell, traversal, SQLi"
     "module_linux_cloud_credentials|Cloud Credentials|RED|~/.aws ~/.kube ~/.docker ~/.ssh§~/.aws ~/.kube ~/.docker ~/.ssh"
     "module_linux_suid_caps|SUID & Capabilities|ORANGE|Superficie di privilege escalation§Privilege escalation surface"
     "module_xplat_sqlite_recovery|SQLite Recovery|MAGENTA|Record cancellati da freelist e spazio libero§Deleted records from freelist and free space"
@@ -19685,15 +19709,15 @@ MODULES_MACOS=(
     "module_macos_browser|Browser History|CYAN|Safari / Chrome / Firefox"
     "module_macos_shell_ai_history|Shell & AI History|MAGENTA|zsh/bash + AI CLI"
     "module_macos_recent|Recent Items|GREEN|SFL / .Trash / recent items"
-    "module_macos_fsevents|FSEvents|MAGENTA|/.fseventsd — modifiche al filesystem"
-    "module_macos_spotlight|Spotlight|CYAN|store.db — provenienza download"
+    "module_macos_fsevents|FSEvents|MAGENTA|/.fseventsd - modifiche al filesystem"
+    "module_macos_spotlight|Spotlight|CYAN|store.db - provenienza download"
     "module_xplat_master_timeline|Master Timeline|YELLOW|aggrega le evidenze degli altri moduli (con --all gira per ultimo)§aggregates the other modules' findings (runs last with --all)||defer"
-    "module_macos_messages|Messages|CYAN|chat.db — iMessage e SMS§chat.db — iMessage and SMS"
+    "module_macos_messages|Messages|CYAN|chat.db - iMessage e SMS§chat.db - iMessage and SMS"
     "module_macos_cookies_downloads|Cookie & Download|YELLOW|Cookies.binarycookies · Downloads.plist§Cookies.binarycookies · Downloads.plist"
     "module_macos_xprotect|XProtect / Gatekeeper|RED|Difese native e autorizzazioni concesse§Native defences and granted authorisations"
     "module_macos_applications|Applications|GREEN|Inventario app, firma e posizione§App inventory, signature and location"
     "module_macos_backups|Time Machine / Snapshot|BLUE|Versioni precedenti dei file§Earlier versions of files"
-    "module_macos_unified_logs|Unified Logs|MAGENTA|.tracev3 — estrazione parziale§.tracev3 — partial extraction"
+    "module_macos_unified_logs|Unified Logs|MAGENTA|.tracev3 - estrazione parziale§.tracev3 - partial extraction"
     "module_xplat_sqlite_recovery|SQLite Recovery|MAGENTA|Record cancellati da freelist e spazio libero§Deleted records from freelist and free space"
     "module_xplat_esp_bootkit|EFI System Partition|RED|Bootkit e persistenza pre-boot§Bootkits and pre-boot persistence"
     "module_xplat_yara|YARA|RED|Scansione con regole esterne (--yara)§Scan with external rules (--yara)|_guard_yara"
@@ -19917,7 +19941,7 @@ _macos_image_open() {
     local IMG="$IMAGE_PATH"
     [[ -f "$IMG" ]] || { err "$(L "Immagine non trovata:" "Image not found:") $IMG" >&2; return 1; }
     local TYPE; TYPE=$(image_type "$IMG")
-    info "$(L "Immagine:" "Image:") ${BOLD}$(basename "$IMG")${RESET} — $(L "formato" "format"): ${BOLD}${TYPE}" >&2
+    info "$(L "Immagine:" "Image:") ${BOLD}$(basename "$IMG")${RESET} - $(L "formato" "format"): ${BOLD}${TYPE}" >&2
 
     case "$TYPE" in
         vmdk|vhdx|qcow2)
@@ -20093,7 +20117,7 @@ main() {
             -h|--help)
                 echo ""
                 if [[ "$LANG" == "it" ]]; then
-                    echo -e "${CYAN}${BOLD}fiuto.sh${RESET} — Toolkit DFIR per analisi di disco Windows offline"
+                    echo -e "${CYAN}${BOLD}fiuto.sh${RESET} - Toolkit DFIR per analisi di disco Windows offline"
                     echo ""
                     echo -e "  ${BOLD}Uso:${RESET}"
                     echo -e "    ./fiuto.sh                            # menu interattivo"
@@ -20132,7 +20156,7 @@ main() {
                     echo ""
                     echo -e "  ${BOLD}Moduli disponibili per sistema operativo:${RESET}"
                 else
-                    echo -e "${CYAN}${BOLD}fiuto.sh${RESET} — DFIR Toolkit for offline Windows disk analysis"
+                    echo -e "${CYAN}${BOLD}fiuto.sh${RESET} - DFIR Toolkit for offline Windows disk analysis"
                     echo ""
                     echo -e "  ${BOLD}Usage:${RESET}"
                     echo -e "    ./fiuto.sh                            # interactive menu"
@@ -20374,7 +20398,7 @@ main() {
                     clear
                     echo -e "${CYAN}${BOLD}"
                     echo "  ╔══════════════════════════════════════════════════════════╗"
-                    local _bt; _bt="$(L "FIUTO — Report generati in questa sessione" "FIUTO — Reports generated in this session")"
+                    local _bt; _bt="$(L "FIUTO - Report generati in questa sessione" "FIUTO - Reports generated in this session")"
                     local _btl=$(( (58 - ${#_bt}) / 2 )) _btr=$(( 58 - ${#_bt} - (58 - ${#_bt}) / 2 ))
                     printf "  ║%*s%s%*s║\n" "$_btl" "" "$_bt" "$_btr" ""
                     echo "  ╚══════════════════════════════════════════════════════════╝"

@@ -36,7 +36,7 @@ main() {
             -h|--help)
                 echo ""
                 if [[ "$LANG" == "it" ]]; then
-                    echo -e "${CYAN}${BOLD}fiuto.sh${RESET} — Toolkit DFIR per analisi di disco Windows offline"
+                    echo -e "${CYAN}${BOLD}fiuto.sh${RESET} - Toolkit DFIR per analisi di disco Windows offline"
                     echo ""
                     echo -e "  ${BOLD}Uso:${RESET}"
                     echo -e "    ./fiuto.sh                            # menu interattivo"
@@ -75,7 +75,7 @@ main() {
                     echo ""
                     echo -e "  ${BOLD}Moduli disponibili per sistema operativo:${RESET}"
                 else
-                    echo -e "${CYAN}${BOLD}fiuto.sh${RESET} — DFIR Toolkit for offline Windows disk analysis"
+                    echo -e "${CYAN}${BOLD}fiuto.sh${RESET} - DFIR Toolkit for offline Windows disk analysis"
                     echo ""
                     echo -e "  ${BOLD}Usage:${RESET}"
                     echo -e "    ./fiuto.sh                            # interactive menu"
@@ -317,7 +317,7 @@ main() {
                     clear
                     echo -e "${CYAN}${BOLD}"
                     echo "  ╔══════════════════════════════════════════════════════════╗"
-                    local _bt; _bt="$(L "FIUTO — Report generati in questa sessione" "FIUTO — Reports generated in this session")"
+                    local _bt; _bt="$(L "FIUTO - Report generati in questa sessione" "FIUTO - Reports generated in this session")"
                     local _btl=$(( (58 - ${#_bt}) / 2 )) _btr=$(( 58 - ${#_bt} - (58 - ${#_bt}) / 2 ))
                     printf "  ║%*s%s%*s║\n" "$_btl" "" "$_bt" "$_btr" ""
                     echo "  ╚══════════════════════════════════════════════════════════╝"

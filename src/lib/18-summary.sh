@@ -337,12 +337,12 @@ out.append(esc(L(
     "Questa pagina ordina il lavoro, non lo conclude. Ogni voce dice da quale modulo viene, "
     "su quale dato ha fatto match e perche' quel dato conta: il giudizio su cosa sia successo "
     "resta all'analista, che deve aprire il report del modulo e guardare il contesto. "
-    "L'assenza di riscontri non e' un attestato di pulizia — significa che le regole applicate, "
+    "L'assenza di riscontri non e' un attestato di pulizia - significa che le regole applicate, "
     "che sono poche e deliberatamente conservative, non hanno trovato nulla.",
     "This page orders the work, it does not conclude it. Every entry states which module it comes "
     "from, which data it matched and why that data matters: the judgement on what happened stays "
     "with the analyst, who must open the module report and look at the context. "
-    "No findings is not a clean bill of health — it means the applied rules, which are few and "
+    "No findings is not a clean bill of health - it means the applied rules, which are few and "
     "deliberately conservative, found nothing.")))
 out.append('</div></div>')
 
@@ -440,7 +440,7 @@ print(d["score"], c["CRITICA"], c["ALTA"], c["MEDIA"], c["BASSA"], len(d["correl
     {
         html_header "Executive Summary"
         html_page_header "SUM" "Executive Summary" \
-            "$(L "Riepilogo di sessione — priorità e correlazioni" "Session summary — priorities and correlations")" \
+            "$(L "Riepilogo di sessione - priorità e correlazioni" "Session summary - priorities and correlations")" \
             "$SCAN" "$WIN_ROOT"
         printf "<div class='statsbar'>%s</div>\n" "$STATS"
         echo "<main>"
@@ -461,6 +461,10 @@ print(d["score"], c["CRITICA"], c["ALTA"], c["MEDIA"], c["BASSA"], len(d["correl
     ok "$(L "Executive summary:" "Executive summary:") ${BOLD}${OUT}"
     info "$(L "Riscontri:" "Findings:") ${BOLD}$(( ${NCRIT:-0} + ${NHIGH:-0} + ${NMED:-0} + ${NLOW:-0} ))${RESET}  ·  $(L "critici/alti:" "critical/high:") ${BOLD}$(( ${NCRIT:-0} + ${NHIGH:-0} ))${RESET}  ·  $(L "correlazioni:" "correlations:") ${BOLD}${NCORR:-0}"
     log_msg "[SUMMARY] score=$SCORE crit=${NCRIT:-0} high=${NHIGH:-0} corr=${NCORR:-0}"
+    # Dopo --all il riepilogo diventa una scheda della dashboard, che si apre
+    # gia' posizionata li'. Chiedere anche qui vorrebbe dire due domande di
+    # fila e due finestre aperte sullo stesso contenuto.
+    [[ "${SUMMARY_NO_PROMPT:-false}" == "true" ]] && return 0
     open_report_prompt "$OUT"
 }
 

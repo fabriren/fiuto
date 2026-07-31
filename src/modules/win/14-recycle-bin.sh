@@ -3,7 +3,7 @@
 #  MODULO 14 — Recycle Bin ($Recycle.Bin)
 # ================================================================
 module_recycle_bin() {
-    section_header "$(L "Recycle Bin — File Eliminati" "Recycle Bin — Deleted Files")" "$GREEN"
+    section_header "$(L "Recycle Bin - File Eliminati" "Recycle Bin - Deleted Files")" "$GREEN"
     check_win_root || return 1
 
 
@@ -137,7 +137,7 @@ PYEOF
           <div class='stat'><div class='label'>File eliminati</div><div class='value'>${TOTAL}</div></div>
           <div class='stat'><div class='label'>Sospetti</div><div class='value' style='color:var(--accent2)'>${SUSP_COUNT}</div></div>
         </div><main>
-        <div class='stitle'>$(L "File nel Cestino — SID · Path originale · Data eliminazione · Dimensione" "Recycle Bin Files — SID · Original path · Deletion date · Size")</div>
+        <div class='stitle'>$(L "File nel Cestino - SID · Path originale · Data eliminazione · Dimensione" "Recycle Bin Files - SID · Original path · Deletion date · Size")</div>
         <div class='card'><table>
           <thead><tr><th style='width:16%'>SID</th><th>$(L "Path originale" "Original path")</th><th style='width:14%'>$(L "Eliminato" "Deleted")</th><th style='width:8%'>Dim.</th></tr></thead>
           <tbody>${ROWS}</tbody>

@@ -3,7 +3,7 @@
 #  MODULO 34 — PowerShell Script Block Logging (EID 4104)
 # ================================================================
 module_ps_scriptblock() {
-    section_header "PowerShell Script Block Logging — EID 4104" "$MAGENTA"
+    section_header "PowerShell Script Block Logging - EID 4104" "$MAGENTA"
     check_win_root || return 1
 
     local EVTX_DIR
@@ -144,13 +144,13 @@ PYEOF
     done
     {
         html_header "PS ScriptBlock Log"
-        html_page_header "PS4" "PS Script Block Logging — <span>EID 4104</span>" \
+        html_page_header "PS4" "PS Script Block Logging - <span>EID 4104</span>" \
             "Microsoft-Windows-PowerShell%4Operational.evtx" "$SCAN" "$WIN_ROOT" "$HIVE_HASH"
         echo "<div class='statsbar'>
           <div class='stat'><div class='label'>Script Block unici</div><div class='value'>${TOTAL}</div></div>
           <div class='stat'><div class='label'>Sospetti</div><div class='value' style='color:var(--accent2)'>${SUSP}</div></div>
         </div><main>
-        <div class='stitle'>Event ID 4104 — Frammenti riassemblati per ScriptBlockId — ScriptBlockText (max 1000000 char)</div>
+        <div class='stitle'>Event ID 4104 - Frammenti riassemblati per ScriptBlockId - ScriptBlockText (max 1000000 char)</div>
         <div class='card'><table>
           <thead><tr><th style='width:16%'>Timestamp</th><th style='width:18%'>Path script</th><th>ScriptBlockText</th></tr></thead>
           <tbody>${ROWS}</tbody>

@@ -1,7 +1,7 @@
 
 # --- macOS 10 — Recent Items ---
 module_macos_recent() {
-    section_header "macOS — Recent Items" "$GREEN"
+    section_header "macOS - Recent Items" "$GREEN"
     check_target_root || return 1
     local BODY="" TOTAL=0 USERS=0
     while IFS= read -r HOME_DIR; do
@@ -30,7 +30,7 @@ module_macos_recent() {
             fi
         fi
         [[ $UCOUNT -eq 0 ]] && continue
-        USERS=$((USERS + 1)); ok "$U — ${BOLD}$UCOUNT $(L "sorgenti" "sources")"
+        USERS=$((USERS + 1)); ok "$U - ${BOLD}$UCOUNT $(L "sorgenti" "sources")"
         BODY+=$(generic_card_html "$U" "$HOME_DIR" "$UCOUNT" "$CARDS" "◇")
     done < <(get_macos_user_homes)
     separator

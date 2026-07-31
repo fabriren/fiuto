@@ -50,7 +50,7 @@ html_header() {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>${TITLE} — DFIR Report</title>
+<title>${TITLE} - DFIR Report</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500;700&family=DM+Sans:wght@400;500;700&display=swap');
   :root {
@@ -197,7 +197,7 @@ html_footer() {
     local SRC="$2"
     cat << HTMLEOF
 <footer>
-  <div>fiuto.sh — $(L "generato il" "generated on") ${SCAN}</div>
+  <div>fiuto.sh - $(L "generato il" "generated on") ${SCAN}</div>
   <div>$(L "Sorgente:" "Source:") <span>${SRC}</span></div>
 </footer>
 HTMLEOF
@@ -219,7 +219,7 @@ HTMLEOF
       var card=node.closest ? node.closest('.card') : null, label='';
       if(card){
         var u=card.querySelector('.uname'), p=card.querySelector('.upath');
-        label=[u&&u.textContent.trim(), p&&p.textContent.trim()].filter(Boolean).join(' — ');
+        label=[u&&u.textContent.trim(), p&&p.textContent.trim()].filter(Boolean).join(' - ');
       }
       if(label && label!==lastLabel){ lines.push('# '+csvCell(label)); lastLabel=label; }
       if(node.tagName==='TABLE'){
@@ -238,7 +238,7 @@ HTMLEOF
     });
     if(!lines.length){ return; }
     var blob=new Blob(['\ufeff'+lines.join('\r\n')], {type:'text/csv;charset=utf-8'});
-    var name=(document.title||'fiuto_report').replace(/\s*—.*$/,'').replace(/[^\w.-]+/g,'_').replace(/^_+|_+$/g,'').slice(0,80)||'fiuto_report';
+    var name=(document.title||'fiuto_report').replace(/\s*-.*$/,'').replace(/[^\w.-]+/g,'_').replace(/^_+|_+$/g,'').slice(0,80)||'fiuto_report';
     var a=document.createElement('a');
     a.href=URL.createObjectURL(blob); a.download=name+'.csv';
     document.body.appendChild(a); a.click();

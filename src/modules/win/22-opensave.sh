@@ -3,7 +3,7 @@
 #  MODULO 22 — OpenSaveMRU / LastVisitedMRU (dialoghi file)
 # ================================================================
 module_opensave() {
-    section_header "$(L "OpenSaveMRU / LastVisitedMRU — Dialoghi File" "OpenSaveMRU / LastVisitedMRU — File Dialogs")" "$GREEN"
+    section_header "$(L "OpenSaveMRU / LastVisitedMRU - Dialoghi File" "OpenSaveMRU / LastVisitedMRU - File Dialogs")" "$GREEN"
     check_win_root || return 1
 
     if ! check_regipy; then
@@ -173,12 +173,12 @@ PYEOF
           <div class='stat'><div class='label'>File aperti/salvati</div><div class='value'>${TOTAL_OS}</div></div>
           <div class='stat info'><div class='label'>App + cartelle</div><div class='value'>${TOTAL_LV}</div></div>
         </div><main>
-        <div class='stitle'>OpenSaveMRU — File aperti o salvati tramite dialogo di Windows</div>
+        <div class='stitle'>OpenSaveMRU - File aperti o salvati tramite dialogo di Windows</div>
         <div class='card'><table>
           <thead><tr><th style='width:12%'>$(L "Utente" "User")</th><th style='width:8%'>$(L "Estensione" "Extension")</th><th>Path</th></tr></thead>
           <tbody>${OS_ROWS:-<tr><td colspan='3' class='dim' style='padding:1rem'>$(L "Nessun dato" "No data")</td></tr>}</tbody>
         </table></div>
-        <div class='stitle' style='margin-top:2rem'>LastVisitedMRU — Ultima cartella visitata per applicazione</div>
+        <div class='stitle' style='margin-top:2rem'>LastVisitedMRU - Ultima cartella visitata per applicazione</div>
         <div class='card'><table>
           <thead><tr><th style='width:12%'>$(L "Utente" "User")</th><th style='width:20%'>Applicazione</th><th>$(L "Ultima cartella" "Last folder")</th></tr></thead>
           <tbody>${LV_ROWS:-<tr><td colspan='3' class='dim' style='padding:1rem'>$(L "Nessun dato" "No data")</td></tr>}</tbody>

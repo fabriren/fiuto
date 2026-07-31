@@ -3,7 +3,7 @@
 #  MODULO 7 — Notepad TabState
 # ================================================================
 module_notepad_tabstate() {
-    section_header "$(L "Notepad TabState — Tab Rimasti Aperti" "Notepad TabState — Open Tabs")" "$MAGENTA"
+    section_header "$(L "Notepad TabState - Tab Rimasti Aperti" "Notepad TabState - Open Tabs")" "$MAGENTA"
     check_win_root || return 1
 
     local NOTEPAD_PKG="Microsoft.WindowsNotepad_8wekyb3d8bbwe"
@@ -100,21 +100,21 @@ PYEOF
         local USERNAME; USERNAME=$(basename "$USER_DIR")
         local PACKAGES_DIR
         PACKAGES_DIR=$(ci_find_dir "$USER_DIR" "AppData/Local/Packages")
-        [[ -z "$PACKAGES_DIR" ]] && { dim_msg "$USERNAME — $(L "AppData\\Local\\Packages non trovata" "AppData\\Local\\Packages not found")"; continue; }
+        [[ -z "$PACKAGES_DIR" ]] && { dim_msg "$USERNAME - $(L "AppData\\Local\\Packages non trovata" "AppData\\Local\\Packages not found")"; continue; }
         local NOTEPAD_DIR
         NOTEPAD_DIR=$(find "$PACKAGES_DIR" -maxdepth 1 -iname "${NOTEPAD_PKG}*" -type d 2>/dev/null | head -1)
-        [[ -z "$NOTEPAD_DIR" ]] && { dim_msg "$USERNAME — $(L "Notepad UWP non installato" "Notepad UWP not installed")"; continue; }
+        [[ -z "$NOTEPAD_DIR" ]] && { dim_msg "$USERNAME - $(L "Notepad UWP non installato" "Notepad UWP not installed")"; continue; }
         local TABSTATE_DIR
         TABSTATE_DIR=$(ci_find_dir "$NOTEPAD_DIR" "LocalState/TabState")
-        [[ -z "$TABSTATE_DIR" || ! -d "$TABSTATE_DIR" ]] && { warn "$USERNAME — $(L "TabState non trovata" "TabState not found")"; continue; }
+        [[ -z "$TABSTATE_DIR" || ! -d "$TABSTATE_DIR" ]] && { warn "$USERNAME - $(L "TabState non trovata" "TabState not found")"; continue; }
         mapfile -t BIN_FILES < <(find "$TABSTATE_DIR" -maxdepth 1 -iname "*.bin" -type f -printf "%T@ %p\n" 2>/dev/null | sort -rn | cut -d' ' -f2-)
         if [[ ${#BIN_FILES[@]} -eq 0 ]]; then
             # Fallback se printf %T@ non è supportato (BSD/macOS)
             mapfile -t BIN_FILES < <(find "$TABSTATE_DIR" -maxdepth 1 -iname "*.bin" -type f -print0 2>/dev/null | xargs -0 ls -t 2>/dev/null)
         fi
         local COUNT=${#BIN_FILES[@]}
-        [[ $COUNT -eq 0 ]] && { warn "$USERNAME — $(L "TabState vuota" "TabState empty")"; continue; }
-        ok "$USERNAME — $COUNT $(L "file .bin trovati" ".bin files found")"
+        [[ $COUNT -eq 0 ]] && { warn "$USERNAME - $(L "TabState vuota" "TabState empty")"; continue; }
+        ok "$USERNAME - $COUNT $(L "file .bin trovati" ".bin files found")"
         local FILE_NAMES="" FILE_SIZES="" FILE_MTIMES="" FILE_CTIMES=""
         for BIN in "${BIN_FILES[@]}"; do
             local FNAME; FNAME=$(basename "$BIN")
@@ -138,7 +138,7 @@ PYEOF
                         printf "        ${DIM}%4d${RESET}  %s\n" "$LN" "$LINE"
                     done <<< "$TERM_TEXT"
                 else
-                    echo -e "      ${DIM}• $FNAME  ($FSIZE bytes — nessun testo)${RESET}"
+                    echo -e "      ${DIM}• $FNAME  ($FSIZE bytes - nessun testo)${RESET}"
                 fi
             fi
             FILE_NAMES="${FILE_NAMES}${FNAME}|"

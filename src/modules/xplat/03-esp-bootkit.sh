@@ -16,7 +16,7 @@
 #  Vale per tutti e tre i sistemi: la ESP e' condivisa fra gli OS installati.
 # ================================================================
 module_xplat_esp_bootkit() {
-    section_header "EFI System Partition — bootkit" "$RED"
+    section_header "EFI System Partition - bootkit" "$RED"
     check_target_root || return 1
 
     # La ESP puo' essere il volume stesso (montata a parte) oppure trovarsi

@@ -15,7 +15,7 @@
 #  estraggono solo i nomi di file leggibili, e il report lo dichiara.
 # ================================================================
 module_cloud_sync() {
-    section_header "Cloud Sync — $(L "Provider e file sincronizzati" "Providers and synced files")" "$BLUE"
+    section_header "Cloud Sync - $(L "Provider e file sincronizzati" "Providers and synced files")" "$BLUE"
     check_win_root || return 1
 
     local BODY="" NPROV=0 NFILES=0 NACC=0
@@ -50,7 +50,7 @@ module_cloud_sync() {
             if [[ -n "$ODLDIR" ]]; then
                 local NODL; NODL=$(find "$ODLDIR" -type f \( -iname '*.odl' -o -iname '*.odlgz' -o -iname '*.aodl' \) 2>/dev/null | wc -l)
                 if [[ "$NODL" -gt 0 ]]; then
-                    info "OneDrive ($U) — ${BOLD}${NODL}${RESET} $(L "file di log" "log files")"
+                    info "OneDrive ($U) - ${BOLD}${NODL}${RESET} $(L "file di log" "log files")"
                     local NAMES
                     NAMES=$(find "$ODLDIR" -type f \( -iname '*.odl' -o -iname '*.aodl' \) -print0 2>/dev/null \
                             | xargs -0 strings -n 6 2>/dev/null \
@@ -106,7 +106,7 @@ except Exception:
                 [[ -z "$ROWS" || "$ROWS" == ERROR* ]] && continue
                 local N; N=$(printf '%s\n' "$ROWS" | grep -c . || true)
                 NFILES=$((NFILES + N))
-                info "Google Drive ($U) — ${BOLD}${N}${RESET} $(L "elementi" "items")"
+                info "Google Drive ($U) - ${BOLD}${N}${RESET} $(L "elementi" "items")"
                 while IFS=$'\t' read -r T D S; do
                     [[ -n "$T" ]] && FILEROWS+="Google Drive	${U}	${T}  (${D:-?}, ${S:-?} B)
 "
@@ -139,8 +139,8 @@ except Exception:
     BODY+="$(L "Un file trascinato in una cartella sincronizzata esce dal perimetro senza toccare nessun artefatto USB e senza generare traffico riconoscibile come esfiltrazione. Questi elenchi vanno confrontati con i dati che l'organizzazione considera riservati." \
         "A file dropped into a synced folder leaves the perimeter without touching any USB artefact and without generating traffic recognisable as exfiltration. Cross-check these lists against the data the organisation treats as confidential.")<br><br>"
     BODY+="<b>$(L "Attendibilita' delle fonti" "Source reliability")</b><br>"
-    BODY+="$(L "Google Drive: database SQLite, elenco completo e datato. Dropbox: configurazione JSON, account e percorsi. OneDrive: i log .odl sono binari con stringhe offuscate, qui se ne estraggono solo i nomi leggibili — sono indizi, non un inventario completo, e non hanno data." \
-        "Google Drive: SQLite database, complete and dated listing. Dropbox: JSON configuration, accounts and paths. OneDrive: .odl logs are binary with obfuscated strings; only readable names are extracted here — these are leads, not a complete inventory, and carry no timestamp.")"
+    BODY+="$(L "Google Drive: database SQLite, elenco completo e datato. Dropbox: configurazione JSON, account e percorsi. OneDrive: i log .odl sono binari con stringhe offuscate, qui se ne estraggono solo i nomi leggibili - sono indizi, non un inventario completo, e non hanno data." \
+        "Google Drive: SQLite database, complete and dated listing. Dropbox: JSON configuration, accounts and paths. OneDrive: .odl logs are binary with obfuscated strings; only readable names are extracted here - these are leads, not a complete inventory, and carry no timestamp.")"
     BODY+="</div></div>"
 
     if [[ -n "$ACCROWS" ]]; then

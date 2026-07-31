@@ -3,7 +3,7 @@
 #  MODULO 35 — JumpLists (AutomaticDestinations + CustomDestinations)
 # ================================================================
 module_jumplists() {
-    section_header "JumpLists — AutomaticDestinations & CustomDestinations" "$GREEN"
+    section_header "JumpLists - AutomaticDestinations & CustomDestinations" "$GREEN"
     check_win_root || return 1
 
     declare -a ALL_ENTRIES=()
@@ -67,13 +67,13 @@ module_jumplists() {
     done
     {
         html_header "JumpLists"
-        html_page_header "JL" "JumpLists — <span>AutomaticDestinations · CustomDestinations</span>" \
+        html_page_header "JL" "JumpLists - <span>AutomaticDestinations · CustomDestinations</span>" \
             "AppData\\Roaming\\Microsoft\\Windows\\Recent\\*Destinations" "$SCAN" "$WIN_ROOT"
         echo "<div class='statsbar'>
           <div class='stat'><div class='label'>Entries</div><div class='value'>${TOTAL}</div></div>
           <div class='stat'><div class='label'>Sospette</div><div class='value' style='color:var(--accent2)'>${SUSP}</div></div>
         </div><main>
-        <div class='stitle'>$(L "JumpLists — Utente · Tipo · Timestamp · File · Percorsi estratti (strings)" "JumpLists — User · Type · Timestamp · File · Extracted paths (strings)")</div>
+        <div class='stitle'>$(L "JumpLists - Utente · Tipo · Timestamp · File · Percorsi estratti (strings)" "JumpLists - User · Type · Timestamp · File · Extracted paths (strings)")</div>
         <div class='card'><table>
           <thead><tr><th style='width:10%'>$(L "Utente" "User")</th><th style='width:7%'>$(L "Tipo" "Type")</th><th style='width:14%'>Modificato</th><th style='width:14%'>File JL</th><th>Percorsi estratti</th></tr></thead>
           <tbody>${ROWS}</tbody>

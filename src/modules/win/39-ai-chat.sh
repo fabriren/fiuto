@@ -83,10 +83,10 @@ module_ai_chat() {
         _ai_collect "Continue.dev" json "$USERNAME" < <(find "$USER_DIR" -maxdepth 4 -ipath '*/.continue/sessions/*' -iname '*.json' -type f 2>/dev/null)
 
         if [[ $_USER_FOUND -gt 0 ]]; then
-            ok "$USERNAME — ${BOLD}${_USER_FOUND}${RESET} $(L "artefatti AI" "AI artifacts")"
+            ok "$USERNAME - ${BOLD}${_USER_FOUND}${RESET} $(L "artefatti AI" "AI artifacts")"
             TOTAL_USERS=$((TOTAL_USERS+1))
         else
-            dim_msg "$USERNAME — $(L "nessun artefatto AI" "no AI artifacts")"
+            dim_msg "$USERNAME - $(L "nessun artefatto AI" "no AI artifacts")"
         fi
     done < <(get_user_homes)
     unset -f _ai_collect
@@ -378,9 +378,9 @@ def render(msgs, ai='AI'):
         if rc == 'r-user':
             label = 'UTENTE'
         elif rc == 'r-ai':
-            label = 'AI — ' + html.escape(ai)
+            label = 'AI - ' + html.escape(ai)
         else:
-            label = html.escape(role) if role else '—'
+            label = html.escape(role) if role else '-'
         nts   = norm_ts(ts)
         meta  = html.escape(nts) if nts else ''
         tag   = ''
@@ -440,11 +440,11 @@ for user, tools in data.items():
                 if kind == 'leveldb':
                     note = ("<div class='inv'>%s</div>" % html.escape(
                         "Contenuto ricavato per string-carving dal LevelDB "
-                        "(best-effort, non strutturato — verificare manualmente)."))
+                        "(best-effort, non strutturato - verificare manualmente)."))
                 body = note + "<div class='thread'>%s</div>" % ''.join(rows)
             elif kind in ('inventory', 'pb_inventory'):
                 body = ("<div class='inv'>%s</div>" %
-                        html.escape("Solo inventario — contenuto cifrato/proprietario non decodificato "
+                        html.escape("Solo inventario - contenuto cifrato/proprietario non decodificato "
                                     "(LevelDB / bundle conversations-v2 / protobuf Cascade)."))
             else:
                 body = "<div class='inv'>%s</div>" % html.escape("Nessun messaggio estratto.")

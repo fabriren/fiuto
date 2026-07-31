@@ -3,7 +3,7 @@
 #  MODULO 33 — Defender Quarantine
 # ================================================================
 module_defender_quarantine() {
-    section_header "$(L "Defender Quarantine — File in Quarantena" "Defender Quarantine — Quarantined Files")" "$RED"
+    section_header "$(L "Defender Quarantine - File in Quarantena" "Defender Quarantine - Quarantined Files")" "$RED"
     check_win_root || return 1
 
 
@@ -95,12 +95,12 @@ PYEOF
     done
     {
         html_header "Defender Quarantine"
-        html_page_header "DQ" "Defender — <span>Quarantine</span>" \
+        html_page_header "DQ" "Defender - <span>Quarantine</span>" \
             "ProgramData\\Microsoft\\Windows Defender\\Quarantine" "$SCAN" "$WIN_ROOT"
         echo "<div class='statsbar'>
           <div class='stat'><div class='label'>In quarantena</div><div class='value'>${TOTAL}</div></div>
         </div><main>
-        <div class='stitle'>$(L "File in quarantena — recuperabili offline da ResourceData/ (cifrati XOR)" "Quarantined files — recoverable offline from ResourceData/ (XOR-encrypted)")</div>
+        <div class='stitle'>$(L "File in quarantena - recuperabili offline da ResourceData/ (cifrati XOR)" "Quarantined files - recoverable offline from ResourceData/ (XOR-encrypted)")</div>
         <div class='card'><table>
           <thead><tr><th style='width:14%'>$(L "Rilevato" "Detected")</th><th style='width:22%'>$(L "Minaccia" "Threat")</th><th>$(L "Path originale" "Original path")</th><th style='width:18%'>SHA256</th><th style='width:6%'>Dim.</th></tr></thead>
           <tbody>${ROWS}</tbody>
@@ -108,7 +108,7 @@ PYEOF
         <div style='margin-top:1.5rem;padding:1rem 1.5rem;background:var(--bg3);border:1px solid var(--border);border-radius:6px;font-size:.8rem'>
           <div style='font-family:var(--mono);color:var(--accent);margin-bottom:.5rem'>Analisi payload (ambiente isolato)</div>
           <div style='font-family:var(--mono);font-size:.72rem;color:var(--text-dim)'>
-            I file in ResourceData/ sono cifrati con RC4 (key: hardcoded Defender) — tool: defender-un-quarantine.py<br>
+            I file in ResourceData/ sono cifrati con RC4 (key: hardcoded Defender) - tool: defender-un-quarantine.py<br>
             Ripristino: MpCmdRun.exe -Restore -FilePath &lt;path&gt;
           </div>
         </div></main>"

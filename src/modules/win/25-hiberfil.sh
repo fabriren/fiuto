@@ -4,7 +4,7 @@
 #  MODULO 25 — Hibernation / Pagefile (artefatti memoria)
 # ================================================================
 module_hiberfil() {
-    section_header "$(L "Hibernation / Pagefile — Artefatti Memoria" "Hibernation / Pagefile — Memory Artifacts")" "$BLUE"
+    section_header "$(L "Hibernation / Pagefile - Artefatti Memoria" "Hibernation / Pagefile - Memory Artifacts")" "$BLUE"
     check_win_root || return 1
 
 
@@ -126,7 +126,7 @@ PYEOF
           <div class='stat info'><div class='label'>Stringhe estratte</div><div class='value'>${TOTAL_STRINGS}</div></div>
         </div><main>
         <style>.fld{word-break:break-all;overflow-wrap:anywhere;white-space:pre-wrap}</style>
-        <div class='stitle'>Artefatti in memoria — analisi tramite strings (parziale)</div>
+        <div class='stitle'>Artefatti in memoria - analisi tramite strings (parziale)</div>
         <div class='cards'>${CARDS_HTML}</div></main>"
         html_footer "$SCAN" "$WIN_ROOT"
     } > "$REPORT_HTML"

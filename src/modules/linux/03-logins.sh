@@ -1,7 +1,7 @@
 
 # --- LINUX 3 — Login History (wtmp/btmp/lastlog) ---
 module_linux_logins() {
-    section_header "Linux — Login History" "$CYAN"
+    section_header "Linux - Login History" "$CYAN"
     check_target_root || return 1
     local LOGDIR; LOGDIR=$(ci_find_dir "$WIN_ROOT" "var/log")
     local VARRUN; VARRUN=$(ci_find_dir "$WIN_ROOT" "var/run")

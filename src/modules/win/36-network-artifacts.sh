@@ -3,7 +3,7 @@
 #  MODULO 36 — Network Artifacts (DNS Cache, Interfacce, NetworkList)
 # ================================================================
 module_network_artifacts() {
-    section_header "$(L "Network Artifacts — DNS · Interfacce · NetworkList" "Network Artifacts — DNS · Interfaces · NetworkList")" "$CYAN"
+    section_header "$(L "Network Artifacts - DNS · Interfacce · NetworkList" "Network Artifacts - DNS · Interfaces · NetworkList")" "$CYAN"
     check_win_root || return 1
 
     if ! check_regipy; then
@@ -137,7 +137,7 @@ PYEOF
     done
     {
         html_header "Network Artifacts"
-        html_page_header "NET" "Network Artifacts — <span>Profili · Firme · Interfacce</span>" \
+        html_page_header "NET" "Network Artifacts - <span>Profili · Firme · Interfacce</span>" \
             "SOFTWARE · SYSTEM hive" "$SCAN" "$WIN_ROOT" "$HIVE_HASH"
         echo "<div class='statsbar'>
           <div class='stat info'><div class='label'>Profili rete</div><div class='value'>${TOTAL_P}</div></div>

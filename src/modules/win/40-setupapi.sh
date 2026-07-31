@@ -13,7 +13,7 @@
 #  solo con questo log.
 # ================================================================
 module_setupapi() {
-    section_header "SetupAPI — $(L "Prima installazione dispositivi" "Device First Install")" "$BLUE"
+    section_header "SetupAPI - $(L "Prima installazione dispositivi" "Device First Install")" "$BLUE"
     check_win_root || return 1
 
     local -a LOGS=()

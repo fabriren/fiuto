@@ -1,7 +1,7 @@
 
 # --- macOS 3 — Persistence (LaunchAgents/Daemons/cron) ---
 module_macos_persistence() {
-    section_header "macOS — Persistence" "$ORANGE"
+    section_header "macOS - Persistence" "$ORANGE"
     check_target_root || return 1
     local KW="curl|wget|/tmp/|/var/tmp|base64|python|bash -i|nc |/dev/tcp|RunAtLoad|KeepAlive|http"
     local BODY="" FOUND=0
@@ -20,7 +20,7 @@ module_macos_persistence() {
                 BODY+=$(file_card_html "$F" "$KW" "⟳")
             fi
         done < <(find "$D" -maxdepth 1 -type f \( -iname "*.plist" -o -iname "*.conf" \) 2>/dev/null)
-        [[ $n -gt 0 ]] && ok "$LABEL — $n plist ($D)"
+        [[ $n -gt 0 ]] && ok "$LABEL - $n plist ($D)"
     }
     _mac_persist_dir "LaunchDaemons" "$(ci_find_dir "$WIN_ROOT" "Library/LaunchDaemons")"
     _mac_persist_dir "LaunchAgents"  "$(ci_find_dir "$WIN_ROOT" "Library/LaunchAgents")"

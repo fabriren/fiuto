@@ -12,7 +12,7 @@
 #  appartengono a nessun pacchetto.
 # ================================================================
 module_linux_kernel_modules() {
-    section_header "Linux — $(L "Moduli kernel e rootkit" "Kernel modules and rootkits")" "$RED"
+    section_header "Linux - $(L "Moduli kernel e rootkit" "Kernel modules and rootkits")" "$RED"
     check_target_root || return 1
 
     local BODY="" ROWS="" NCFG=0 NSUSP=0

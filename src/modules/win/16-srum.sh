@@ -3,7 +3,7 @@
 #  MODULO 16 — SRUM (System Resource Usage Monitor)
 # ================================================================
 module_srum() {
-    section_header "SRUM — System Resource Usage Monitor" "$BLUE"
+    section_header "SRUM - System Resource Usage Monitor" "$BLUE"
     check_win_root || return 1
 
     local SRUM_PATH
@@ -25,7 +25,7 @@ module_srum() {
     "$PY3" -c "import pyesedb" 2>/dev/null && HAS_ESE=true
 
     if ! $HAS_ESE; then
-        warn "pyesedb non disponibile — parsing tramite strings (risultati parziali)"
+        warn "pyesedb non disponibile - parsing tramite strings (risultati parziali)"
         warn "Per parsing completo: pip install pyesedb  (richiede libesedb)"
         echo ""
         # Fallback strings: cerca nomi applicazione e byte trasferiti

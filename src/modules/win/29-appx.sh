@@ -3,7 +3,7 @@
 #  MODULO 29 — AppX / UWP Packages
 # ================================================================
 module_appx() {
-    section_header "$(L "AppX / UWP — Pacchetti Store Installati" "AppX / UWP — Installed Store Packages")" "$GREEN"
+    section_header "$(L "AppX / UWP - Pacchetti Store Installati" "AppX / UWP - Installed Store Packages")" "$GREEN"
     check_win_root || return 1
 
     if ! check_regipy; then
@@ -114,13 +114,13 @@ PYEOF
     done
     {
         html_header "AppX"
-        html_page_header "AX" "AppX / UWP — <span>Pacchetti Store</span>" \
+        html_page_header "AX" "AppX / UWP - <span>Pacchetti Store</span>" \
             "AppModel\\Repository\\Packages" "$SCAN" "$WIN_ROOT"
         echo "<div class='statsbar'>
           <div class='stat'><div class='label'>Pacchetti</div><div class='value'>${TOTAL}</div></div>
           <div class='stat'><div class='label'>Sospetti</div><div class='value' style='color:var(--accent2)'>${SUSP_COUNT}</div></div>
         </div><main>
-        <div class='stitle'>Pacchetti UWP installati — path fuori Windows Apps = potenziale sideload</div>
+        <div class='stitle'>Pacchetti UWP installati - path fuori Windows Apps = potenziale sideload</div>
         <div class='card'><table>
           <thead><tr><th style='width:10%'>Scope</th><th>Package Name</th><th style='width:20%'>Publisher</th><th>Install Path</th></tr></thead>
           <tbody>${ROWS}</tbody>

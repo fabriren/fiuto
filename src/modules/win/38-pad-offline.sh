@@ -3,7 +3,7 @@
 #  MODULO 38 — PAD Offline (Active Directory Analysis)
 # ================================================================
 module_pad_offline() {
-    section_header "PAD Offline — Active Directory Analysis (NTDS.dit)" "$CYAN"
+    section_header "PAD Offline - Active Directory Analysis (NTDS.dit)" "$CYAN"
     check_win_root || return 1
 
     # ── Trova NTDS.dit ────────────────────────────────────────────
@@ -34,7 +34,7 @@ module_pad_offline() {
     if [[ -n "$SYSTEM_HIVE" ]]; then
         info "SYSTEM hive: $SYSTEM_HIVE"
     else
-        warn "$(L "SYSTEM hive non trovato — attributi cifrati (hash) non disponibili; tutti gli altri OK" "SYSTEM hive not found — encrypted attributes (hashes) unavailable; all others OK")"
+        warn "$(L "SYSTEM hive non trovato - attributi cifrati (hash) non disponibili; tutti gli altri OK" "SYSTEM hive not found - encrypted attributes (hashes) unavailable; all others OK")"
         SYSTEM_HIVE=""
     fi
 
@@ -65,9 +65,9 @@ module_pad_offline() {
     if portable_timeout 180 cp "$NTDS_PATH" "$TMP_NTDS" 2>/dev/null; then
         chmod 600 "$TMP_NTDS" 2>/dev/null || true
         NTDS_TO_USE="$TMP_NTDS"
-        info "$(L "Copia completata — uso copia locale." "Copy completed — using local copy.")"
+        info "$(L "Copia completata - uso copia locale." "Copy completed - using local copy.")"
     else
-        warn "$(L "Copia non riuscita (file bloccato da Windows o rete lenta) — uso path originale." "Copy failed (file locked by Windows or slow network) — using original path.")"
+        warn "$(L "Copia non riuscita (file bloccato da Windows o rete lenta) - uso path originale." "Copy failed (file locked by Windows or slow network) - using original path.")"
         info "$(L "Il dirty state verrà corretto in memoria (patch in-memory, senza write access)." "Dirty state will be corrected in memory (in-memory patch, no write access).")"
     fi
 
@@ -125,9 +125,9 @@ for _log_src_dir in _log_search_dirs:
         break
 
 if _has_ese_logs:
-    sys.stderr.write("INFO: log ESE trovati e copiati in tmp — impacket tenterà soft-recovery\n")
+    sys.stderr.write("INFO: log ESE trovati e copiati in tmp - impacket tenterà soft-recovery\n")
 else:
-    sys.stderr.write("INFO: no ESE log found — only dirty state patch will be applied\n")
+    sys.stderr.write("INFO: no ESE log found - only dirty state patch will be applied\n")
 
 try:
     from impacket.ese import ESENT_DB as _ESENT_DB_CLS
@@ -342,7 +342,7 @@ def _patch_ese_state(path):
                 break
 
         if magic_off == -1:
-            sys.stderr.write("INFO: ESE magic NON trovato nei primi 64 byte — patch impossibile\n")
+            sys.stderr.write("INFO: ESE magic NON trovato nei primi 64 byte - patch impossibile\n")
             return False, -1
 
         # dbstate si trova tipicamente a +28 o +48 bytes dal magic
@@ -362,7 +362,7 @@ def _patch_ese_state(path):
                     break
 
         if state_off == -1:
-            sys.stderr.write("INFO: dbstate non trovato con offset standard — skip patch\n")
+            sys.stderr.write("INFO: dbstate non trovato con offset standard - skip patch\n")
             return False, 0
 
         sys.stderr.write(f"INFO: ESE dbstate = {state_val} (2=Clean, 3=DirtyShutdown) @ offset {state_off}\n")
@@ -387,7 +387,7 @@ def _open_esent_db(path, skip_patch=False):
     # che deve applicare il soft-recovery. Se patchiamo a CleanShutdown, non lo fa.
     if skip_patch:
         patched, state = False, -1
-        sys.stderr.write("INFO: skip patch dirty state — log ESE disponibili per soft-recovery\n")
+        sys.stderr.write("INFO: skip patch dirty state - log ESE disponibili per soft-recovery\n")
     else:
         patched, state = _patch_ese_state(path)
         if state == -1:
@@ -531,7 +531,7 @@ try:
         avail.update(_r.keys())
         if _KEY_COLS.issubset(avail): break   # colonne chiave trovate, stop anticipato
     db.closeTable(cur)
-    sys.stderr.write(f"INFO: schema discovery — {len(avail)} colonne trovate in datatable\n")
+    sys.stderr.write(f"INFO: schema discovery - {len(avail)} colonne trovate in datatable\n")
     sys.stderr.write(f"INFO: COL_SAM={'ATTm590045' in avail} COL_STYPE={'ATTj590014' in avail or 'ATTi590014' in avail} COL_UAC={'ATTi590126' in avail}\n")
 except Exception as e:
     sys.stderr.write(f"FATAL cannot read datatable schema: {e}\n"); sys.exit(1)
@@ -560,7 +560,7 @@ COL_OPTF  = find_col(['ATTb591520','ATTm591520'], avail)
 _catalog_corrupt = (not COL_SAM or not COL_STYPE or not COL_UAC)
 if _catalog_corrupt:
     _sample = sorted(c for c in list(avail)[:20] if c.startswith('ATT'))
-    sys.stderr.write(f"WARNING: catalogo ESE parzialmente corrotto — colonne chiave non trovate\n")
+    sys.stderr.write(f"WARNING: catalogo ESE parzialmente corrotto - colonne chiave non trovate\n")
     sys.stderr.write(f"WARNING: COL_SAM={COL_SAM} COL_STYPE={COL_STYPE} COL_UAC={COL_UAC}\n")
     sys.stderr.write(f"WARNING: campione colonne ATT trovate: {_sample[:10]}\n")
     sys.stderr.write(f"CATALOG_CORRUPT:1\n")
@@ -815,7 +815,7 @@ domain_fl = 'N/A'; domain_root_dnt = None
 for dnt, o in objects.items():
     if o.get('behavior') is not None:
         fv = o['behavior']
-        domain_fl = f"{fv} — {FL_MAP.get(fv, 'Unknown')}"
+        domain_fl = f"{fv} - {FL_MAP.get(fv, 'Unknown')}"
         domain_root_dnt = dnt
         break
 
@@ -1127,12 +1127,12 @@ if _catalog_corrupt:
 html_out = f"""<!DOCTYPE html>
 <html lang="{L("it", "en")}"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>PAD Offline — DFIR Report</title>
+<title>PAD Offline - DFIR Report</title>
 <style>{CSS}</style></head><body>
 <header>
   <div class="hicon">AD</div>
   <div class="htxt">
-    <h1>PAD Offline — <span>{L("Panoramica Active Directory", "Active Directory Overview")}</span></h1>
+    <h1>PAD Offline - <span>{L("Panoramica Active Directory", "Active Directory Overview")}</span></h1>
     <div class="sub">NTDS.dit offline forensic analysis</div>
   </div>
   <div class="hmeta">
@@ -1168,31 +1168,31 @@ html_out = f"""<!DOCTYPE html>
 </tbody></table></div>
 
 {_catalog_corrupt_html}
-<div class="stitle">{L("Utenti Privilegiati", "Privileged Users")} — {total_priv} account ({len(PRIV_GROUPS)} gruppi monitorati)</div>
+<div class="stitle">{L("Utenti Privilegiati", "Privileged Users")} - {total_priv} account ({len(PRIV_GROUPS)} gruppi monitorati)</div>
 <div class="card"><table>
 <thead><tr><th>sAMAccountName</th><th>{L("Gruppi (Direct/Nested)", "Groups (Direct/Nested)")}</th><th>pwdLastSet</th><th>lastLogon</th><th>Flags</th><th>SID</th></tr></thead>
 <tbody>{rows_priv if rows_priv else _no_priv_row}</tbody>
 </table></div>
 
-<div class="stitle">{L("ACL Domain Root — ACE con diritti pericolosi", "ACL Domain Root — Dangerous ACE rights")}</div>
+<div class="stitle">{L("ACL Domain Root - ACE con diritti pericolosi", "ACL Domain Root - Dangerous ACE rights")}</div>
 <div class="card"><table>
 <thead><tr><th>Trustee</th><th>SID</th><th>{L("Diritti", "Rights")}</th><th>Access Mask</th><th>Flags</th></tr></thead>
 <tbody>{ace_rows(root_aces)}</tbody>
 </table></div>
 
-<div class="stitle">{L("ACL OU Domain Controllers — ACE con diritti pericolosi", "ACL OU Domain Controllers — Dangerous ACE rights")}</div>
+<div class="stitle">{L("ACL OU Domain Controllers - ACE con diritti pericolosi", "ACL OU Domain Controllers - Dangerous ACE rights")}</div>
 <div class="card"><table>
 <thead><tr><th>Trustee</th><th>SID</th><th>{L("Diritti", "Rights")}</th><th>Access Mask</th><th>Flags</th></tr></thead>
 <tbody>{ace_rows(dc_ou_aces)}</tbody>
 </table></div>
 
-<div class="stitle">Group Policy Objects — {total_gpo} {L("GPO totali", "total GPOs")}</div>
+<div class="stitle">Group Policy Objects - {total_gpo} {L("GPO totali", "total GPOs")}</div>
 <div class="card"><table>
 <thead><tr><th>Display Name</th><th>{L("Ultima Modifica", "Last Modified")}</th><th>Path SYSVOL</th></tr></thead>
 <tbody>{rows_gpo if rows_gpo else _no_gpo_row}</tbody>
 </table></div>
 
-<div class="stitle">{L("Computer nel Dominio", "Domain Computers")} — {total_comp} oggetti</div>
+<div class="stitle">{L("Computer nel Dominio", "Domain Computers")} - {total_comp} oggetti</div>
 <div class="card"><table>
 <thead><tr><th>Computer Name</th><th>Operating System</th><th>Distinguished Name</th></tr></thead>
 <tbody>{rows_comp if rows_comp else _no_comp_row}</tbody>
@@ -1201,7 +1201,7 @@ html_out = f"""<!DOCTYPE html>
 </main>
 <footer>
   <span>PAD Offline</span>
-  <span>fiuto.sh — DFIR Toolkit</span>
+  <span>fiuto.sh - DFIR Toolkit</span>
 </footer>
 </body></html>"""
 
@@ -1224,10 +1224,10 @@ PYEOF
         # Avviso catalogo corrotto
         if grep -q '^CATALOG_CORRUPT:1' "$PYERR_FILE" 2>/dev/null; then
             echo ""
-            warn "$(L "NTDS.dit con catalogo ESE parzialmente corrotto — dati utente non disponibili." "NTDS.dit with partially corrupted ESE catalog — user data unavailable.")"
+            warn "$(L "NTDS.dit con catalogo ESE parzialmente corrotto - dati utente non disponibili." "NTDS.dit with partially corrupted ESE catalog - user data unavailable.")"
             info "$(L "Le colonne sAMAccountName/samAccountType sono su pagine di catalogo non leggibili." "Columns sAMAccountName/samAccountType are on unreadable catalog pages.")"
             echo ""
-            echo -e "  ${BOLD}${YELLOW}Recupero necessario — scegli una delle opzioni:${RESET}"
+            echo -e "  ${BOLD}${YELLOW}Recupero necessario - scegli una delle opzioni:${RESET}"
             echo -e "  ${CYAN}1) Soft-recovery Linux${RESET} (richiede i log .jrs nella stessa dir di ntds.dit)"
             echo -e "     Copia ntds.dit + edb*.jrs + edb.chk in una cartella, poi rilancia."
             echo ""
@@ -1268,7 +1268,7 @@ PYEOF
             echo -e "  ${CYAN}$(L "3) Se hai già un'immagine disco (VHDX/E01) del DC:" "3) If you already have a disk image (VHDX/E01) of the DC:")${RESET}"
             echo -e "     $(L "Monta offline con" "Mount offline with") ${BOLD}./mount_image.sh${RESET} $(L "e rilancia il modulo su quel mount point." "and relaunch the module on that mount point.")"
         elif echo "${_PYERR}" | grep -qiE 'dirty|state|DirtyShutdown|Unknown state'; then
-            err "$(L "Generazione report fallita — database ESE in stato dirty non recuperabile." "Report generation failed — ESE database in unrecoverable dirty state.")"
+            err "$(L "Generazione report fallita - database ESE in stato dirty non recuperabile." "Report generation failed - ESE database in unrecoverable dirty state.")"
             info "$(L "Suggerimento: copia il file e prova 'esentutl /r edb /l .' in un ambiente Windows" "Hint: copy the file and try 'esentutl /r edb /l .' in a Windows environment")"
         else
             err "$(L "Generazione report fallita. Verifica che ntds.dit sia leggibile e non corrotto." "Report generation failed. Verify ntds.dit is readable and not corrupted.")"

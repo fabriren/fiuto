@@ -16,7 +16,7 @@
 #  spazio non allocato. Vale per tutti e tre i sistemi operativi.
 # ================================================================
 module_xplat_sqlite_recovery() {
-    section_header "$(L "Recupero record cancellati — SQLite" "Deleted record recovery — SQLite")" "$MAGENTA"
+    section_header "$(L "Recupero record cancellati - SQLite" "Deleted record recovery - SQLite")" "$MAGENTA"
     check_target_root || return 1
 
     # Database che valgono la pena in un'indagine, per OS.
@@ -180,8 +180,8 @@ PYEOF
     NOTE+="<b>$(L "Le categorie" "The categories")</b><br>"
     NOTE+="$(L "Le stringhe sono classificate per tipo e ordinate mettendo per prime le categorie rare. Gli URL sono deliberatamente in fondo: recuperare una cronologia cancellata produce migliaia di URL, quindi marcarli tutti come rilevanti non aiuterebbe a decidere da dove iniziare." \
         "Strings are classified by type and ordered with the rare categories first. URLs are deliberately last: recovering a deleted history yields thousands of URLs, so flagging them all as notable would not help decide where to start.")<br><br>"
-    NOTE+="$(L "Non trovare nulla non significa che l'utente non abbia cancellato: significa che lo spazio e' stato riutilizzato, o che il database e' stato compattato con VACUUM — operazione che azzera proprio questo tipo di recupero ed e' essa stessa degna di nota." \
-        "Finding nothing does not mean the user deleted nothing: it means the space was reused, or the database was compacted with VACUUM — an operation that wipes exactly this kind of recovery and is itself worth noting.")"
+    NOTE+="$(L "Non trovare nulla non significa che l'utente non abbia cancellato: significa che lo spazio e' stato riutilizzato, o che il database e' stato compattato con VACUUM - operazione che azzera proprio questo tipo di recupero ed e' essa stessa degna di nota." \
+        "Finding nothing does not mean the user deleted nothing: it means the space was reused, or the database was compacted with VACUUM - an operation that wipes exactly this kind of recovery and is itself worth noting.")"
     NOTE+="</div></div>"
 
     local STATS
@@ -189,7 +189,7 @@ PYEOF
     STATS+="$(stat_box "$(L "Prioritarie" "Priority")" "$NNOT" "$([[ "$NNOT" -gt 0 ]] && echo warn || echo info)")"
     STATS+="$(stat_box "Database" "${NDBHIT}/${NDB}" "info")"
     STATS+="$(stat_box "IoC" "$NIOC" "$([[ "$NIOC" -gt 0 ]] && echo warn || echo info)")"
-    finish_report "xplat_sqlite_recovery" "SQLite — $(L "record cancellati" "deleted records")" "SQL" \
+    finish_report "xplat_sqlite_recovery" "SQLite - $(L "record cancellati" "deleted records")" "SQL" \
         "$(L "freelist e spazio non allocato" "freelist and unallocated space")" "$STATS" \
         "${NOTE}<div class='cards'>$(generic_card_html "$(L "Resa per database" "Yield per database")" "$(L "riepilogo" "summary")" "$NDBHIT" "$STABLE" "∑")</div><div class='cards'>$(generic_card_html "$(L "Contenuto recuperato" "Recovered content")" "$(L "segnalati in testa" "flagged first")" "$TOTAL" "$TABLE" "♺")</div>"
 }

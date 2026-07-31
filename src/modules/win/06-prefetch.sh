@@ -3,7 +3,7 @@
 #  MODULO 6 — Prefetch
 # ================================================================
 module_prefetch() {
-    section_header "$(L "Prefetch — Eseguibili Tracciati" "Prefetch — Execution History")" "$GREEN"
+    section_header "$(L "Prefetch - Eseguibili Tracciati" "Prefetch - Execution History")" "$GREEN"
     check_win_root || return 1
 
     local PREF_DIR

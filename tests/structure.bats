@@ -275,3 +275,11 @@ setup() {
     done
     [ "$fail" -eq 0 ] || { echo "larghezze: ${larghezze[*]}"; false; }
 }
+
+@test "nessun trattino lungo nell'output verso l'utente" {
+    # I report e i messaggi usano il trattino semplice. Restano ammessi nei
+    # commenti del codice, che non finiscono in nessun documento.
+    residui=$(grep -rn '—' "$REPO_ROOT/src" --include='*.sh' \
+        | grep -vE ':[0-9]+: *#' || true)
+    [ -z "$residui" ] || { echo "$residui" | head -10; false; }
+}

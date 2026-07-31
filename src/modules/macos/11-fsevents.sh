@@ -14,7 +14,7 @@
 # file che li contiene, quindi le date qui sono un LIMITE SUPERIORE approssimato
 # (mtime del file di log), non l'istante dell'evento. Il report lo dichiara.
 module_macos_fsevents() {
-    section_header "macOS — FSEvents" "$MAGENTA"
+    section_header "macOS - FSEvents" "$MAGENTA"
     check_target_root || return 1
 
     local FSEDIR; FSEDIR=$(ci_find_dir "$WIN_ROOT" ".fseventsd")
@@ -141,8 +141,8 @@ PYEOF
     local NOTE
     NOTE="<div class='card' style='margin-bottom:1rem'><div style='padding:1rem 1.5rem;font-size:.8rem;line-height:1.7'>"
     NOTE+="<b>$(L "Nota sui tempi" "Note on timestamps")</b><br>"
-    NOTE+="$(L "I record FSEvents non contengono un timestamp: l'event ID e' un contatore monotono. La colonna data riporta il mtime del file di log che contiene il record, cioe' un LIMITE SUPERIORE approssimato dell'istante dell'evento — non la sua ora esatta. Per una datazione precisa va correlato con altri artefatti." \
-        "FSEvents records carry no timestamp: the event ID is a monotonic counter. The date column shows the mtime of the log file containing the record, i.e. an approximate UPPER BOUND of when the event happened — not its exact time. Precise dating requires correlation with other artefacts.")"
+    NOTE+="$(L "I record FSEvents non contengono un timestamp: l'event ID e' un contatore monotono. La colonna data riporta il mtime del file di log che contiene il record, cioe' un LIMITE SUPERIORE approssimato dell'istante dell'evento - non la sua ora esatta. Per una datazione precisa va correlato con altri artefatti." \
+        "FSEvents records carry no timestamp: the event ID is a monotonic counter. The date column shows the mtime of the log file containing the record, i.e. an approximate UPPER BOUND of when the event happened - not its exact time. Precise dating requires correlation with other artefacts.")"
     NOTE+="</div></div>"
 
     local STATS

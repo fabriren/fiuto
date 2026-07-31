@@ -1,7 +1,7 @@
 
 # --- macOS 4 — Login Items (BTM) ---
 module_macos_loginitems() {
-    section_header "macOS — Login Items (BTM)" "$RED"
+    section_header "macOS - Login Items (BTM)" "$RED"
     check_target_root || return 1
     local BODY="" FOUND=0
     # backgrounditems.btm (vari percorsi a seconda della versione)

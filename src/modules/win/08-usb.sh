@@ -3,7 +3,7 @@
 #  MODULO 9 — USB / Dispositivi Rimovibili
 # ================================================================
 module_usb() {
-    section_header "$(L "USB — Dispositivi Rimovibili" "USB — Removable Devices")" "$BLUE"
+    section_header "$(L "USB - Dispositivi Rimovibili" "USB - Removable Devices")" "$BLUE"
     check_win_root || return 1
 
     if ! check_regipy; then

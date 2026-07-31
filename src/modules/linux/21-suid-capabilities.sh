@@ -14,7 +14,7 @@
 #  compromessa find puo' essere sostituito o un rootkit puo' nascondere i file.
 # ================================================================
 module_linux_suid_caps() {
-    section_header "Linux — SUID/SGID $(L "e capabilities" "and capabilities")" "$ORANGE"
+    section_header "Linux - SUID/SGID $(L "e capabilities" "and capabilities")" "$ORANGE"
     check_target_root || return 1
 
     info "$(L "Scansione del filesystem in corso..." "Scanning the filesystem...")"
@@ -80,8 +80,8 @@ module_linux_suid_caps() {
     local BODY=""
     BODY+="<div class='card' style='margin-bottom:1rem'><div style='padding:1rem 1.5rem;font-size:.8rem;line-height:1.7'>"
     BODY+="<b>$(L "Come leggere l'elenco atteso" "How to read the expected set")</b><br>"
-    BODY+="$(L "I binari SUID di sistema (passwd, sudo, mount...) sono separati dagli altri solo per ridurre il rumore. Non sono dichiarati sicuri: un /usr/bin/passwd sostituito resta nell'elenco atteso, e va confrontato con l'hash del pacchetto. Il segnale forte e' un SUID FUORI dall'elenco — soprattutto una shell, un interprete o un binario in /tmp, /home o /var." \
-        "System SUID binaries (passwd, sudo, mount...) are separated from the rest only to cut noise. They are not declared safe: a replaced /usr/bin/passwd still sits in the expected set and must be checked against the package hash. The strong signal is a SUID OUTSIDE the set — especially a shell, an interpreter, or a binary under /tmp, /home or /var.")<br><br>"
+    BODY+="$(L "I binari SUID di sistema (passwd, sudo, mount...) sono separati dagli altri solo per ridurre il rumore. Non sono dichiarati sicuri: un /usr/bin/passwd sostituito resta nell'elenco atteso, e va confrontato con l'hash del pacchetto. Il segnale forte e' un SUID FUORI dall'elenco - soprattutto una shell, un interprete o un binario in /tmp, /home o /var." \
+        "System SUID binaries (passwd, sudo, mount...) are separated from the rest only to cut noise. They are not declared safe: a replaced /usr/bin/passwd still sits in the expected set and must be checked against the package hash. The strong signal is a SUID OUTSIDE the set - especially a shell, an interpreter, or a binary under /tmp, /home or /var.")<br><br>"
     BODY+="$(L "Le capabilities sono l'alternativa moderna al SUID e vengono spesso dimenticate in fase di audit: CAP_SETUID, CAP_SYS_ADMIN e CAP_DAC_OVERRIDE su un binario arbitrario equivalgono di fatto a root." \
         "Capabilities are the modern alternative to SUID and are often overlooked during audits: CAP_SETUID, CAP_SYS_ADMIN and CAP_DAC_OVERRIDE on an arbitrary binary are effectively root.")"
     if ! $CAPS_OK; then

@@ -3,7 +3,7 @@
 #  MODULO 21 — MFT Timeline (Master File Table)
 # ================================================================
 module_mft() {
-    section_header "MFT — Master File Table Timeline" "$YELLOW"
+    section_header "MFT - Master File Table Timeline" "$YELLOW"
     check_win_root || return 1
 
     local MFT_FILE=""
@@ -35,26 +35,26 @@ module_mft() {
         fi
 
         if [[ -z "$MFT_FILE" ]]; then
-            warn "$(L "\$MFT non accessibile — il volume è montato con ntfs3 (driver kernel)" "\$MFT not accessible — volume mounted with ntfs3 (kernel driver)")"
+            warn "$(L "\$MFT non accessibile - il volume è montato con ntfs3 (driver kernel)" "\$MFT not accessible - volume mounted with ntfs3 (kernel driver)")"
             echo ""
             info "$(L "Il driver ntfs3 non espone i file di sistema (\$MFT, \$LogFile, ecc.)." "The ntfs3 driver does not expose system files (\$MFT, \$LogFile, etc.).")"
             info "$(L "Per accedere all'\$MFT hai due opzioni:" "To access \$MFT you have two options:")"
             echo ""
             if [[ -n "$DEV" ]]; then
-                echo -e "  ${CYAN}Opzione A${RESET} — rimonta con ntfs-3g (supporta file di sistema):"
+                echo -e "  ${CYAN}Opzione A${RESET} - rimonta con ntfs-3g (supporta file di sistema):"
                 echo -e "  ${DIM}sudo umount \"$WIN_ROOT\"${RESET}"
                 echo -e "  ${DIM}sudo mount -t ntfs-3g -o ro,noload,show_sys_files \"$DEV\" \"$WIN_ROOT\"${RESET}"
                 echo ""
-                echo -e "  ${CYAN}Opzione B${RESET} — estrai \$MFT senza rimontare (richiede ntfs-3g-tools):"
+                echo -e "  ${CYAN}Opzione B${RESET} - estrai \$MFT senza rimontare (richiede ntfs-3g-tools):"
                 echo -e "  ${DIM}sudo apt install ntfs-3g${RESET}"
                 echo -e "  ${DIM}ntfscat -f \"$DEV\" '\$MFT' > /tmp/MFT && sudo chmod a+r /tmp/MFT${RESET}"
                 echo -e "  ${DIM}# poi imposta WIN_ROOT e riavvia il modulo${RESET}"
             else
-                echo -e "  ${CYAN}Opzione A${RESET} — rimonta con ntfs-3g:"
+                echo -e "  ${CYAN}Opzione A${RESET} - rimonta con ntfs-3g:"
                 echo -e "  ${DIM}sudo umount \"$WIN_ROOT\"${RESET}"
                 echo -e "  ${DIM}sudo mount -t ntfs-3g -o ro,noload,show_sys_files /dev/DEVICE \"$WIN_ROOT\"${RESET}"
                 echo ""
-                echo -e "  ${CYAN}Opzione B${RESET} — estrai direttamente:"
+                echo -e "  ${CYAN}Opzione B${RESET} - estrai direttamente:"
                 echo -e "  ${DIM}ntfscat -f /dev/DEVICE '\$MFT' > /tmp/MFT${RESET}"
             fi
             echo ""
@@ -235,8 +235,8 @@ PYEOF
 
     {
         html_header "MFT"
-        html_page_header "MF" "MFT — <span>Master File Table</span> Timeline" \
-            "\$MFT — radice volume NTFS" "$SCAN" "$WIN_ROOT"
+        html_page_header "MF" "MFT - <span>Master File Table</span> Timeline" \
+            "\$MFT - radice volume NTFS" "$SCAN" "$WIN_ROOT"
         echo "<div class='statsbar'>
           <div class='stat'><div class='label'>File analizzati</div><div class='value'>${TOTAL_LINES}</div></div>
           <div class='stat'><div class='label'>Sospetti</div><div class='value' style='color:var(--accent2)'>${SUSP_COUNT}</div></div>

@@ -3,7 +3,7 @@
 #  MODULO 3 — BAM (Background Activity Moderator)
 # ================================================================
 module_bam() {
-    section_header "BAM — Background Activity Moderator" "$BLUE"
+    section_header "BAM - Background Activity Moderator" "$BLUE"
     check_win_root || return 1
 
     if ! check_regipy; then
@@ -151,7 +151,7 @@ PYEOF
 
     {
         html_header "BAM"
-        html_page_header "BA" "BAM — <span>Background Activity</span> Moderator" \
+        html_page_header "BA" "BAM - <span>Background Activity</span> Moderator" \
             "SYSTEM\\ControlSet001\\Services\\bam\\State\\UserSettings" "$SCAN" "$WIN_ROOT"
         echo "<div class='statsbar'>
           <div class='stat'><div class='label'>Eseguibili</div><div class='value'>${TOTAL}</div></div>

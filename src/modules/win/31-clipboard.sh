@@ -4,7 +4,7 @@
 #  MODULO 31 — Clipboard History (Win10+)
 # ================================================================
 module_clipboard() {
-    section_header "$(L "Clipboard History — Cronologia Appunti" "Clipboard History")" "$YELLOW"
+    section_header "$(L "Clipboard History - Cronologia Appunti" "Clipboard History")" "$YELLOW"
     check_win_root || return 1
 
 
@@ -79,13 +79,13 @@ PYEOF
     done
     {
         html_header "Clipboard History"
-        html_page_header "CB" "Clipboard History — <span>Cronologia Appunti</span>" \
+        html_page_header "CB" "Clipboard History - <span>Cronologia Appunti</span>" \
             "AppData\\Local\\Microsoft\\Windows\\Clipboard" "$SCAN" "$WIN_ROOT"
         echo "<div class='statsbar'>
           <div class='stat'><div class='label'>Voci</div><div class='value'>${TOTAL}</div></div>
           <div class='stat'><div class='label'>Sospette</div><div class='value' style='color:var(--accent2)'>${SUSP_COUNT}</div></div>
         </div><main>
-        <div class='stitle'>$(L "Clipboard History — Utente · Timestamp · Contenuto (troncato a 300 char)" "Clipboard History — User · Timestamp · Content (truncated to 300 chars)")</div>
+        <div class='stitle'>$(L "Clipboard History - Utente · Timestamp · Contenuto (troncato a 300 char)" "Clipboard History - User · Timestamp · Content (truncated to 300 chars)")</div>
         <div class='card'><table>
           <thead><tr><th style='width:12%'>$(L "Utente" "User")</th><th style='width:14%'>Timestamp</th><th>$(L "Contenuto" "Content")</th></tr></thead>
           <tbody>${ROWS}</tbody>

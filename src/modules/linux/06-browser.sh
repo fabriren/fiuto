@@ -1,7 +1,7 @@
 
 # --- LINUX 6 — Browser History ---
 module_linux_browser() {
-    section_header "Linux — Browser History" "$CYAN"
+    section_header "Linux - Browser History" "$CYAN"
     check_target_root || return 1
     local BODY="" TOTAL=0 USERS=0
     while IFS= read -r HOME_DIR; do
@@ -18,7 +18,7 @@ module_linux_browser() {
                 local ROWS; ROWS=$(query_sqlite "$HISTDB" "SELECT datetime(last_visit_time/1000000-11644473600,'unixepoch'), url, title FROM urls ORDER BY last_visit_time DESC LIMIT 100000")
                 [[ -z "$ROWS" || "$ROWS" == ERROR* ]] && continue
                 UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + 1))
-                ok "$UNAME — $(basename "$(dirname "$HISTDB")") (Chromium)"
+                ok "$UNAME - $(basename "$(dirname "$HISTDB")") (Chromium)"
                 CARDS+=$(_browser_table_card "$HISTDB" "$ROWS")
             done < <(find "$BASE" -maxdepth 2 -name "History" -type f 2>/dev/null)
         done
@@ -29,7 +29,7 @@ module_linux_browser() {
                 local ROWS; ROWS=$(query_sqlite "$PLACES" "SELECT datetime(last_visit_date/1000000,'unixepoch'), url, title FROM moz_places WHERE last_visit_date IS NOT NULL ORDER BY last_visit_date DESC LIMIT 100000")
                 [[ -z "$ROWS" || "$ROWS" == ERROR* ]] && continue
                 UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + 1))
-                ok "$UNAME — $(basename "$(dirname "$PLACES")") (Firefox)"
+                ok "$UNAME - $(basename "$(dirname "$PLACES")") (Firefox)"
                 CARDS+=$(_browser_table_card "$PLACES" "$ROWS")
             done < <(find "$FBASE" -maxdepth 2 -name "places.sqlite" -type f 2>/dev/null)
         done

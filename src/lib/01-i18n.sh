@@ -77,8 +77,8 @@ t() {
         "en:batch_report_dir") echo "Report base directory:" ;;
         "it:batch_report_dir") echo "Report base dir:" ;;
 
-        "en:batch_started") echo "=== FIUTO started in batch mode — WIN_ROOT=" ;;
-        "it:batch_started") echo "=== FIUTO avviato in modalità batch — WIN_ROOT=" ;;
+        "en:batch_started") echo "=== FIUTO started in batch mode - WIN_ROOT=" ;;
+        "it:batch_started") echo "=== FIUTO avviato in modalità batch - WIN_ROOT=" ;;
 
         "en:specify_root_all") echo "Specify the root: $0 /mnt/windows --all" ;;
         "it:specify_root_all") echo "Specifica la root: $0 /mnt/windows --all" ;;

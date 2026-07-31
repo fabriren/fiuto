@@ -72,7 +72,7 @@ module_ps_transcripts() {
             "${ST:-?}" "${U:-?}" "${P:-?}" "$N" "${H:0:120}" "$F" >> "$META"
 
         if [[ "$N" -gt 0 ]]; then
-            ok "$(basename "$F") — ${BOLD}${N}$(L " righe sospette" " suspicious lines")"
+            ok "$(basename "$F") - ${BOLD}${N}$(L " righe sospette" " suspicious lines")"
         else
             dim_msg "$(basename "$F")"
         fi

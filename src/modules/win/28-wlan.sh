@@ -3,7 +3,7 @@
 #  MODULO 28 — WLAN & VPN Profiles
 # ================================================================
 module_wlan() {
-    section_header "$(L "WLAN & VPN — Profili di Rete" "WLAN & VPN — Network Profiles")" "$CYAN"
+    section_header "$(L "WLAN & VPN - Profili di Rete" "WLAN & VPN - Network Profiles")" "$CYAN"
     check_win_root || return 1
 
 
@@ -107,7 +107,7 @@ PYEOF
     done
     {
         html_header "WLAN VPN"
-        html_page_header "WL" "WLAN / VPN — <span>Profili di Rete</span>" \
+        html_page_header "WL" "WLAN / VPN - <span>Profili di Rete</span>" \
             "ProgramData\\Microsoft\\Wlansvc + NetworkList" "$SCAN" "$WIN_ROOT"
         echo "<div class='statsbar'>
           <div class='stat'><div class='label'>Profili totali</div><div class='value'>${TOTAL_WLAN}</div></div>

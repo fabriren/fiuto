@@ -12,7 +12,7 @@
 #    quarantena, ma non tutti i download vi finiscono.
 # ================================================================
 module_macos_cookies_downloads() {
-    section_header "macOS — Cookie & Download" "$YELLOW"
+    section_header "macOS - Cookie & Download" "$YELLOW"
     check_target_root || return 1
 
     local -a COOKIES=() PLISTS=()
