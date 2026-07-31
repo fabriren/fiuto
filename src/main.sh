@@ -58,6 +58,7 @@ main() {
                     echo -e "    ./fiuto.sh --image disco.E01 --list-partitions # elenca le partizioni (senza root)"
                     echo -e "    sudo ./fiuto.sh --image disco.E01 --partition 2 --all"
                     echo -e "    sudo ./fiuto.sh --image disco.raw --unlock chiave.txt --all  # BitLocker/LUKS"
+                    echo -e "    sudo ./fiuto.sh / --all --report-dir /tmp/analisi  # sistema vivo, report fuori dal volume"
                     echo ""
                     echo -e "  ${DIM}--yara non scansiona l'intero volume: si limita alle posizioni"
                     echo -e "    scrivibili senza privilegi e le ELENCA nel report. Usa --yara-scan"
@@ -96,6 +97,7 @@ main() {
                     echo -e "    ./fiuto.sh --image disk.E01 --list-partitions  # list partitions (no root needed)"
                     echo -e "    sudo ./fiuto.sh --image disk.E01 --partition 2 --all"
                     echo -e "    sudo ./fiuto.sh --image disk.raw --unlock key.txt --all      # BitLocker/LUKS"
+                    echo -e "    sudo ./fiuto.sh / --all --report-dir /tmp/case  # live system, reports outside the volume"
                     echo ""
                     echo -e "  ${DIM}--yara does not scan the whole volume: it covers the locations"
                     echo -e "    writable without privileges and LISTS them in the report. Use"
@@ -136,6 +138,7 @@ main() {
             --partition)   IMAGE_PARTITION="${2:-}"; shift ;;
             --unlock)      IMAGE_UNLOCK="${2:-}"; shift ;;
             --list-partitions) IMAGE_LIST_ONLY=true ;;
+            --report-dir)  REPORT_DIR_FIXED="${2:-}"; shift ;;
             --redact)      REDACT=true ;;
             --defang)      REDACT=true; REDACT_DEFANG=true ;;
             --jobs)
@@ -165,6 +168,22 @@ main() {
         esac
         shift
     done
+
+    # La cartella dei report si valida SUBITO, prima di leggere qualunque cosa:
+    # scoprire a fine analisi che non era scrivibile significa aver letto un
+    # disco per niente. Un percorso indicato e non utilizzabile e' un errore,
+    # non un motivo per ripiegare in silenzio sul default.
+    if [[ -n "$REPORT_DIR_FIXED" ]]; then
+        REPORT_DIR_FIXED=$(realpath -m "$REPORT_DIR_FIXED" 2>/dev/null || echo "$REPORT_DIR_FIXED")
+        if ! mkdir -p "$REPORT_DIR_FIXED" 2>/dev/null; then
+            err "$(L "Impossibile creare la cartella dei report:" "Cannot create the report directory:") $REPORT_DIR_FIXED"
+            exit 1
+        fi
+        if [[ ! -w "$REPORT_DIR_FIXED" ]]; then
+            err "$(L "Cartella dei report non scrivibile:" "Report directory is not writable:") $REPORT_DIR_FIXED"
+            exit 1
+        fi
+    fi
 
     if [[ -n "$TIME_SINCE" && -n "$TIME_UNTIL" && "$TIME_SINCE" > "$TIME_UNTIL" ]]; then
         err "$(L "Finestra temporale vuota:" "Empty time window:") --since ${TIME_SINCE/T/ } > --until ${TIME_UNTIL/T/ }"

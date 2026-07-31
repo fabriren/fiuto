@@ -12,7 +12,11 @@ module_macos_shell_ai_history() {
         for HF in "${FILES[@]}"; do
             local P="$HOME_DIR/$HF"
             if [[ -f "$P" && -s "$P" ]]; then
-                UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + 1)); CARDS+=$(file_card_html "$P" "$KW" "\$" "histts")
+                local MODE="histts"
+                case "$(basename "$P")" in
+                    .python_history|.node_repl_history|.psql_history|.mysql_history) MODE="histrl" ;;
+                esac
+                UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + 1)); CARDS+=$(file_card_html "$P" "$KW" "\$" "$MODE")
             elif [[ -d "$P" ]]; then
                 while IFS= read -r AF; do
                     [[ -s "$AF" ]] || continue; UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + 1)); CARDS+=$(file_card_html "$AF" "$KW" "◈")

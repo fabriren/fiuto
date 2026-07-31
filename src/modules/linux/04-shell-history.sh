@@ -13,7 +13,14 @@ module_linux_shell_history() {
             local F="$HOME_DIR/$HF"
             [[ -f "$F" && -s "$F" ]] || continue
             UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + 1))
-            CARDS+=$(file_card_html "$F" "$KW" "\$" "histts")
+            # I REPL readline (python3, node, psql, mysql) codificano spazi e
+            # backslash in ottale: senza decodifica il report mostra
+            # "\040\040value = ..." al posto del codice.
+            local MODE="histts"
+            case "$HF" in
+                .python_history|.node_repl_history|.psql_history|.mysql_history) MODE="histrl" ;;
+            esac
+            CARDS+=$(file_card_html "$F" "$KW" "\$" "$MODE")
         done
         # fish history
         local FISH; FISH=$(ci_find_dir "$HOME_DIR" ".local/share/fish")

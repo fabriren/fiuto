@@ -388,6 +388,20 @@ def _line_in_window(line):
 # bash con HISTTIMEFORMAT: una riga "#<epoch>" prima del comando
 _ZSH = re.compile(r'^: (\d{9,12}):(\d+);(.*)$', re.S)
 _BASH = re.compile(r'^#(\d{9,12})$')
+
+# I REPL basati su GNU readline (python3, node, psql) scrivono le voci
+# multi-riga con gli spazi e i backslash codificati in ottale: una riga di
+# codice indentata diventa "\040\040\040\040value = ..." e il report la
+# mostrerebbe cosi', illeggibile. Qui si decodifica.
+#
+# La sostituzione e' UNA sola passata con callback e non una catena di
+# replace: decodificando prima \134 (backslash) e poi gli altri si
+# reinterpreterebbero come escape i backslash appena prodotti.
+_OCTAL = re.compile(r'\\([0-7]{3})')
+
+
+def decode_readline(line):
+    return _OCTAL.sub(lambda m: chr(int(m.group(1), 8)), line)
 def fmt(ep):
     try:
         return datetime.datetime.utcfromtimestamp(int(ep)).strftime('%Y-%m-%d %H:%M:%S')
@@ -411,6 +425,8 @@ try:
     for i, line in enumerate(text.split('\n'), 1):
         if mode == 'histts':
             line = decode_histts(line)
+        elif mode == 'histrl':
+            line = decode_readline(line)
         if (since or until) and _line_in_window(line) is False:
             # Il numero di riga resta quello del file: i salti nella
             # numerazione rendono visibile che qualcosa e' stato tolto.

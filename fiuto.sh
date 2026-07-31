@@ -99,6 +99,7 @@ YARA_MAX_FILES=200000        # tetto complessivo: oltre, la scansione si dichiar
 SIGMA_RULES=""               # file o directory di regole Sigma (--sigma)
 SIGMA_MAX_RECORDS=300000     # tetto sui record EVTX letti: oltre, valutazione parziale dichiarata
 JOBS=1                       # moduli eseguiti in parallelo con --all (--jobs N)
+REPORT_DIR_FIXED=""          # --report-dir: cartella dei report scelta da riga di comando
 # Lo stato del replay (cache, esiti, avvisi gia' emessi) vive su disco in
 # ${TMPDIR:-/tmp}/fiuto_hives_$$ e non in variabili: recover_hive gira quasi
 # sempre dentro una command substitution, quindi in subshell.
@@ -2795,6 +2796,20 @@ def _line_in_window(line):
 # bash con HISTTIMEFORMAT: una riga "#<epoch>" prima del comando
 _ZSH = re.compile(r'^: (\d{9,12}):(\d+);(.*)$', re.S)
 _BASH = re.compile(r'^#(\d{9,12})$')
+
+# I REPL basati su GNU readline (python3, node, psql) scrivono le voci
+# multi-riga con gli spazi e i backslash codificati in ottale: una riga di
+# codice indentata diventa "\040\040\040\040value = ..." e il report la
+# mostrerebbe cosi', illeggibile. Qui si decodifica.
+#
+# La sostituzione e' UNA sola passata con callback e non una catena di
+# replace: decodificando prima \134 (backslash) e poi gli altri si
+# reinterpreterebbero come escape i backslash appena prodotti.
+_OCTAL = re.compile(r'\\([0-7]{3})')
+
+
+def decode_readline(line):
+    return _OCTAL.sub(lambda m: chr(int(m.group(1), 8)), line)
 def fmt(ep):
     try:
         return datetime.datetime.utcfromtimestamp(int(ep)).strftime('%Y-%m-%d %H:%M:%S')
@@ -2818,6 +2833,8 @@ try:
     for i, line in enumerate(text.split('\n'), 1):
         if mode == 'histts':
             line = decode_histts(line)
+        elif mode == 'histrl':
+            line = decode_readline(line)
         if (since or until) and _line_in_window(line) is False:
             # Il numero di riga resta quello del file: i salti nella
             # numerazione rendono visibile che qualcosa e' stato tolto.
@@ -3300,6 +3317,19 @@ set_win_root() {
 # e aggiorna REPORT_BASE_DIR.
 setup_report_dir() {
     local TS; TS=$(date +%Y%m%d_%H%M)
+
+    # --report-dir salta l'intera interazione. Serve a due casi in cui il
+    # prompt e' un ostacolo e non un aiuto: l'uso scriptato, e l'analisi di un
+    # sistema vivo, dove il default (la directory di invocazione) finirebbe
+    # DENTRO il volume analizzato.
+    if [[ -n "${REPORT_DIR_FIXED:-}" ]]; then
+        REPORT_BASE_DIR="$REPORT_DIR_FIXED"
+        LOG_FILE="${REPORT_BASE_DIR}/fiuto_session_$(date +%Y%m%d_%H%M%S).log"
+        log_msg "=== Log sessione inizializzato (--report-dir) ==="
+        ok "$(L "Report dir (--report-dir):" "Report directory (--report-dir):") ${BOLD}$REPORT_BASE_DIR"
+        return 0
+    fi
+
     local SUGGESTED_DEFAULT="${INVOCATION_DIR}/${HOST_NAME:-CASE}_fiuto_${TS}"
     echo ""
     echo -e "  ${CYAN}${BOLD}╔══════════════════════════════════════════════════════╗${RESET}"
@@ -14735,7 +14765,14 @@ module_linux_shell_history() {
             local F="$HOME_DIR/$HF"
             [[ -f "$F" && -s "$F" ]] || continue
             UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + 1))
-            CARDS+=$(file_card_html "$F" "$KW" "\$" "histts")
+            # I REPL readline (python3, node, psql, mysql) codificano spazi e
+            # backslash in ottale: senza decodifica il report mostra
+            # "\040\040value = ..." al posto del codice.
+            local MODE="histts"
+            case "$HF" in
+                .python_history|.node_repl_history|.psql_history|.mysql_history) MODE="histrl" ;;
+            esac
+            CARDS+=$(file_card_html "$F" "$KW" "\$" "$MODE")
         done
         # fish history
         local FISH; FISH=$(ci_find_dir "$HOME_DIR" ".local/share/fish")
@@ -16473,7 +16510,11 @@ module_macos_shell_ai_history() {
         for HF in "${FILES[@]}"; do
             local P="$HOME_DIR/$HF"
             if [[ -f "$P" && -s "$P" ]]; then
-                UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + 1)); CARDS+=$(file_card_html "$P" "$KW" "\$" "histts")
+                local MODE="histts"
+                case "$(basename "$P")" in
+                    .python_history|.node_repl_history|.psql_history|.mysql_history) MODE="histrl" ;;
+                esac
+                UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + 1)); CARDS+=$(file_card_html "$P" "$KW" "\$" "$MODE")
             elif [[ -d "$P" ]]; then
                 while IFS= read -r AF; do
                     [[ -s "$AF" ]] || continue; UCOUNT=$((UCOUNT + 1)); TOTAL=$((TOTAL + 1)); CARDS+=$(file_card_html "$AF" "$KW" "◈")
@@ -19621,6 +19662,7 @@ main() {
                     echo -e "    ./fiuto.sh --image disco.E01 --list-partitions # elenca le partizioni (senza root)"
                     echo -e "    sudo ./fiuto.sh --image disco.E01 --partition 2 --all"
                     echo -e "    sudo ./fiuto.sh --image disco.raw --unlock chiave.txt --all  # BitLocker/LUKS"
+                    echo -e "    sudo ./fiuto.sh / --all --report-dir /tmp/analisi  # sistema vivo, report fuori dal volume"
                     echo ""
                     echo -e "  ${DIM}--yara non scansiona l'intero volume: si limita alle posizioni"
                     echo -e "    scrivibili senza privilegi e le ELENCA nel report. Usa --yara-scan"
@@ -19659,6 +19701,7 @@ main() {
                     echo -e "    ./fiuto.sh --image disk.E01 --list-partitions  # list partitions (no root needed)"
                     echo -e "    sudo ./fiuto.sh --image disk.E01 --partition 2 --all"
                     echo -e "    sudo ./fiuto.sh --image disk.raw --unlock key.txt --all      # BitLocker/LUKS"
+                    echo -e "    sudo ./fiuto.sh / --all --report-dir /tmp/case  # live system, reports outside the volume"
                     echo ""
                     echo -e "  ${DIM}--yara does not scan the whole volume: it covers the locations"
                     echo -e "    writable without privileges and LISTS them in the report. Use"
@@ -19699,6 +19742,7 @@ main() {
             --partition)   IMAGE_PARTITION="${2:-}"; shift ;;
             --unlock)      IMAGE_UNLOCK="${2:-}"; shift ;;
             --list-partitions) IMAGE_LIST_ONLY=true ;;
+            --report-dir)  REPORT_DIR_FIXED="${2:-}"; shift ;;
             --redact)      REDACT=true ;;
             --defang)      REDACT=true; REDACT_DEFANG=true ;;
             --jobs)
@@ -19728,6 +19772,22 @@ main() {
         esac
         shift
     done
+
+    # La cartella dei report si valida SUBITO, prima di leggere qualunque cosa:
+    # scoprire a fine analisi che non era scrivibile significa aver letto un
+    # disco per niente. Un percorso indicato e non utilizzabile e' un errore,
+    # non un motivo per ripiegare in silenzio sul default.
+    if [[ -n "$REPORT_DIR_FIXED" ]]; then
+        REPORT_DIR_FIXED=$(realpath -m "$REPORT_DIR_FIXED" 2>/dev/null || echo "$REPORT_DIR_FIXED")
+        if ! mkdir -p "$REPORT_DIR_FIXED" 2>/dev/null; then
+            err "$(L "Impossibile creare la cartella dei report:" "Cannot create the report directory:") $REPORT_DIR_FIXED"
+            exit 1
+        fi
+        if [[ ! -w "$REPORT_DIR_FIXED" ]]; then
+            err "$(L "Cartella dei report non scrivibile:" "Report directory is not writable:") $REPORT_DIR_FIXED"
+            exit 1
+        fi
+    fi
 
     if [[ -n "$TIME_SINCE" && -n "$TIME_UNTIL" && "$TIME_SINCE" > "$TIME_UNTIL" ]]; then
         err "$(L "Finestra temporale vuota:" "Empty time window:") --since ${TIME_SINCE/T/ } > --until ${TIME_UNTIL/T/ }"

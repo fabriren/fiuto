@@ -201,3 +201,27 @@ setup() {
     done
     [ "$fail" -eq 0 ]
 }
+
+# --report-dir: la cartella dei report deve poter essere fissata da riga di
+# comando. Il default e' la directory di invocazione, che analizzando un
+# sistema vivo finisce DENTRO il volume analizzato.
+@test "--report-dir usa la cartella indicata senza chiedere nulla" {
+    d=$(mktemp -d)/report
+    REPORT_DIR_FIXED="$d"
+    mkdir -p "$d"
+    run setup_report_dir
+    [ "$status" -eq 0 ]
+    [ "$REPORT_BASE_DIR" = "$d" ] || {
+        REPORT_DIR_FIXED="$d"; setup_report_dir > /dev/null
+        [ "$REPORT_BASE_DIR" = "$d" ]
+    }
+    rm -rf "$(dirname "$d")"
+}
+
+@test "--report-dir non scrivibile e' un errore, non un ripiego sul default" {
+    # Ripiegare in silenzio significherebbe scrivere i report da un'altra parte
+    # senza dirlo, e su un sistema vivo proprio dentro il volume analizzato.
+    run env FIUTO_LIB_ONLY= bash "$REPO_ROOT/fiuto.sh" /tmp --report-dir /proc/non-creabile --all <<< "1"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"report"* ]]
+}

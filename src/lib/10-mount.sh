@@ -222,6 +222,19 @@ set_win_root() {
 # e aggiorna REPORT_BASE_DIR.
 setup_report_dir() {
     local TS; TS=$(date +%Y%m%d_%H%M)
+
+    # --report-dir salta l'intera interazione. Serve a due casi in cui il
+    # prompt e' un ostacolo e non un aiuto: l'uso scriptato, e l'analisi di un
+    # sistema vivo, dove il default (la directory di invocazione) finirebbe
+    # DENTRO il volume analizzato.
+    if [[ -n "${REPORT_DIR_FIXED:-}" ]]; then
+        REPORT_BASE_DIR="$REPORT_DIR_FIXED"
+        LOG_FILE="${REPORT_BASE_DIR}/fiuto_session_$(date +%Y%m%d_%H%M%S).log"
+        log_msg "=== Log sessione inizializzato (--report-dir) ==="
+        ok "$(L "Report dir (--report-dir):" "Report directory (--report-dir):") ${BOLD}$REPORT_BASE_DIR"
+        return 0
+    fi
+
     local SUGGESTED_DEFAULT="${INVOCATION_DIR}/${HOST_NAME:-CASE}_fiuto_${TS}"
     echo ""
     echo -e "  ${CYAN}${BOLD}╔══════════════════════════════════════════════════════╗${RESET}"

@@ -163,3 +163,47 @@ _load_ioc() {
     [ "${#output}" -eq 64 ]
     [ "$output" = "$(sha256sum "$FIXTURE/f.bin" | awk '{print $1}')" ]
 }
+
+# ---------------------------------------------------------------- history
+
+# I REPL basati su readline (python3, node, psql) scrivono le voci multi-riga
+# con spazi e backslash codificati in ottale. Senza decodifica il report mostra
+# "\040\040value = ..." al posto del codice: illeggibile, e non e' un dato
+# dell'artefatto ma una codifica del formato.
+@test "gli escape ottali di readline vengono decodificati" {
+    f=$(mktemp)
+    printf '\\040\\040\\040\\040value = str(raw).strip()\n' > "$f"
+    out=$(render_pre_block "$f" "" "histrl")
+    [[ "$out" == *"    value = str(raw).strip()"* ]]
+    [[ "$out" != *'\040'* ]]
+    rm -f "$f"
+}
+
+@test "il backslash codificato non viene ri-interpretato come escape" {
+    # \134 e' il backslash: decodificarlo per primo trasformerebbe il risultato
+    # in un nuovo escape da interpretare. La decodifica e' una sola passata.
+    #
+    # printf '%s\n' e non printf '<formato>': serve che nel file finiscano i
+    # caratteri \134 e \040 letterali, non la loro espansione.
+    f=$(mktemp)
+    printf '%s\n' 're.sub(r"\134s+",\040"\040",\040key)' > "$f"
+    render_pre_block "$f" "" "histrl" > "$f.out"
+    # Le virgolette nel report sono entita' HTML, quindi si verifica il pezzo
+    # che conta: il backslash e' tornato UNO e non e' stato riletto come
+    # escape. grep -F perche' in un pattern di [[ == ]] il backslash e' a sua
+    # volta un escape, e \s diventerebbe s facendo passare il test per il
+    # motivo sbagliato.
+    grep -qF 'r&quot;\s+&quot;' "$f.out"
+    ! grep -qF '134' "$f.out"
+    rm -f "$f" "$f.out"
+}
+
+@test "senza la modalita' readline gli ottali restano come sono" {
+    # Una history di shell puo' contenere un \040 letterale in un printf: non
+    # va toccato.
+    f=$(mktemp)
+    printf 'printf "a\\040b"\n' > "$f"
+    out=$(render_pre_block "$f" "" "histts")
+    [[ "$out" == *'\040'* ]]
+    rm -f "$f"
+}
