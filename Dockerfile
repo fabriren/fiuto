@@ -37,12 +37,15 @@ ENV DEBIAN_FRONTEND=noninteractive \
 #   sqlite3           -> letture SQLite fuori da Python
 #   ntfs-3g           -> ntfscat, per leggere gli ADS e i file speciali NTFS
 #   ewf-tools         -> ewfmount, per le immagini E01
+#   dislocker         -> volumi BitLocker
+#   cryptsetup-bin    -> volumi LUKS
 #   util-linux        -> flock (append concorrente alla timeline), losetup
 #   sleuthkit         -> fls/icat/mmls, utili accanto ai moduli
 #   libyal runtime    -> dipendenze condivise dei binding Python libesedb/libpff
 RUN apt-get update && apt-get install -y --no-install-recommends \
         bash coreutils findutils grep sed gawk procps \
         file binutils sqlite3 ntfs-3g ewf-tools util-linux sleuthkit \
+        dislocker cryptsetup-bin fuse3 \
         libsnappy1v5 libbz2-1.0 liblzma5 zlib1g \
         ca-certificates \
     && rm -rf /var/lib/apt/lists/*

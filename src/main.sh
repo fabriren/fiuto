@@ -55,6 +55,9 @@ main() {
                     echo -e "    ./fiuto.sh /mnt/windows --all --sigma /sigma/rules/  # regole Sigma sugli EVTX"
                     echo -e "    ./fiuto.sh /mnt/disk --all --jobs 4            # 4 moduli in parallelo"
                     echo -e "    ./fiuto.sh /mnt/disk --all --redact            # copia condivisibile senza segreti"
+                    echo -e "    ./fiuto.sh --image disco.E01 --list-partitions # elenca le partizioni (senza root)"
+                    echo -e "    sudo ./fiuto.sh --image disco.E01 --partition 2 --all"
+                    echo -e "    sudo ./fiuto.sh --image disco.raw --unlock chiave.txt --all  # BitLocker/LUKS"
                     echo ""
                     echo -e "  ${DIM}--yara non scansiona l'intero volume: si limita alle posizioni"
                     echo -e "    scrivibili senza privilegi e le ELENCA nel report. Usa --yara-scan"
@@ -90,6 +93,9 @@ main() {
                     echo -e "    ./fiuto.sh /mnt/windows --all --sigma /sigma/rules/  # Sigma rules over EVTX"
                     echo -e "    ./fiuto.sh /mnt/disk --all --jobs 4            # 4 modules in parallel"
                     echo -e "    ./fiuto.sh /mnt/disk --all --redact            # shareable copy without secrets"
+                    echo -e "    ./fiuto.sh --image disk.E01 --list-partitions  # list partitions (no root needed)"
+                    echo -e "    sudo ./fiuto.sh --image disk.E01 --partition 2 --all"
+                    echo -e "    sudo ./fiuto.sh --image disk.raw --unlock key.txt --all      # BitLocker/LUKS"
                     echo ""
                     echo -e "  ${DIM}--yara does not scan the whole volume: it covers the locations"
                     echo -e "    writable without privileges and LISTS them in the report. Use"
@@ -142,6 +148,10 @@ main() {
             --yara-scan)   YARA_SCAN_PATH="${2:-}"; shift ;;
             --yara-max-mb) YARA_MAX_MB="${2:-64}"; shift ;;
             --sigma)       SIGMA_RULES="${2:-}"; shift ;;
+            --image)       IMAGE_PATH="${2:-}"; shift ;;
+            --partition)   IMAGE_PARTITION="${2:-}"; shift ;;
+            --unlock)      IMAGE_UNLOCK="${2:-}"; shift ;;
+            --list-partitions) IMAGE_LIST_ONLY=true ;;
             --redact)      REDACT=true ;;
             --defang)      REDACT=true; REDACT_DEFANG=true ;;
             --jobs)
@@ -180,6 +190,21 @@ main() {
         info "$(L "Finestra di analisi:" "Analysis window:") ${BOLD}$(time_window_label)"
         info "$(L "Le righe datate fuori dalla finestra saranno escluse dai report e dall'export." \
                  "Dated rows outside the window will be excluded from reports and export.")"
+    fi
+
+    # L'immagine si apre prima di tutto: da qui in poi e' una root come le
+    # altre, e nessun modulo deve sapere di stare leggendo dentro una E01.
+    if [[ -n "$IMAGE_PATH" ]]; then
+        register_tmp "${TMPDIR:-/tmp}/fiuto_image_$$"
+        local _MP _RC
+        _MP=$(image_open); _RC=$?
+        if [[ "$_RC" -eq 2 ]]; then
+            exit 0            # --list-partitions: elenco stampato, niente da montare
+        elif [[ "$_RC" -ne 0 || -z "$_MP" ]]; then
+            exit 1
+        fi
+        ARG_ROOT="$_MP"
+        evidence_note "$IMAGE_PATH" "immagine forense analizzata"
     fi
 
     if [[ -n "$ARG_ROOT" ]]; then

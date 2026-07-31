@@ -55,7 +55,7 @@ for name, what in MODS:
 PYEOF
     echo ""
     echo "  Binari di sistema:"
-    for b in file strings sqlite3 ntfscat ewfmount flock fls icat; do
+    for b in file strings sqlite3 ntfscat ewfmount dislocker cryptsetup mmls flock fls icat; do
         if command -v "$b" > /dev/null 2>&1; then
             printf '    presente  %s\n' "$b"
         else

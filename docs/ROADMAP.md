@@ -4,7 +4,7 @@ Documento di lavoro per portare FIUTO da 2.1 a 3.0. È pensato per essere
 ripreso a distanza di tempo, anche da un'altra sessione o da un'altra persona:
 ogni fase dichiara **cosa fare**, **dove**, **come verificarlo** e **perché**.
 
-Stato aggiornato al: **2026-07-31** (versione 2.2, Fasi 1-5 e 7 complete, Fase 6 quasi).
+Stato aggiornato al: **2026-07-31** (versione 2.2, **tutte le fasi complete**).
 
 ---
 
@@ -34,7 +34,7 @@ Stato aggiornato al: **2026-07-31** (versione 2.2, Fasi 1-5 e 7 complete, Fase 6
 | Area | Stato |
 |---|---|
 | CI (bash -n, ShellCheck, bats, parser Python su 3.9 + 3.12) | ✅ |
-| Suite di test — 216 test bats | ✅ |
+| Suite di test — 232 test bats | ✅ |
 | Replay transaction log registro (`.LOG1`/`.LOG2`) | ✅ |
 | Export JSONL / schema Timesketch (`--jsonl`) | ✅ |
 | macOS: FSEvents, Spotlight | ✅ |
@@ -54,6 +54,7 @@ Stato aggiornato al: **2026-07-31** (versione 2.2, Fasi 1-5 e 7 complete, Fase 6
 | Fase 6.6 — esecuzione parallela (`--jobs N`) con esito invariante | ✅ |
 | Fase 6.7 — motore IoC tipizzato, defanging, import STIX/MISP | ✅ |
 | Fase 6.8 — `--redact` / `--defang`, copie condivisibili | ✅ |
+| Fase 6.9 — immagini E01/raw e volumi cifrati (`--image`) | ✅ |
 | Fase 7 — immagine Docker con tutte le dipendenze + CI su GHCR | ✅ |
 | Libreria Python condivisa Sigma (`src/lib/19-pylib-sigma.sh`) | ✅ |
 | Libreria Python condivisa timeline (`src/lib/17-pylib-timeline.sh`) | ✅ |
@@ -463,8 +464,40 @@ Ordinati per rapporto valore/costo.
    Aggiunto anche un `flock` sull'append alla timeline unica: con `--jobs` le
    righe JSON superano PIPE_BUF e si intreccerebbero, producendo JSON non
    parsabile proprio nel file destinato a un altro strumento.
-8. **Immagini senza mount manuale.** `ewfmount` per E01, `losetup` per raw/dd,
-   volumi cifrati (BitLocker/`dislocker`, LUKS, FileVault).
+8. ~~**Immagini senza mount manuale.**~~ ✅ **Fatto (6.9)** —
+   `src/lib/21-image.sh`, flag `--image`, `--partition`, `--unlock`,
+   `--list-partitions`.
+
+   **L'invariante è la sola lettura per costruzione**: ogni anello riceve la
+   propria opzione (`ewfmount` lo è per natura, `losetup --read-only`,
+   `cryptsetup --readonly`, `dislocker -r`, `mount ro,noexec,nodev,nosuid`) e
+   c'è un test che rilegge il sorgente per verificarlo. Chi tocca questo file
+   non aggiunga un `mount` senza `ro`: è l'unica cosa che rende difendibile
+   l'intera funzione.
+
+   Decisioni:
+   - **la cifratura si rileva prima dei privilegi.** "È BitLocker e manca la
+     chiave" si sa da utente normale, ed evita di rilanciare con sudo per
+     scoprirlo solo allora;
+   - **su più partizioni senza `--partition` si rifiuta di scegliere.**
+     Prenderne una a caso significa analizzare quella sbagliata e non
+     accorgersene mai;
+   - **FileVault 2 riconosciuto e rifiutato**, VMDK/VHDX/QCOW2 rifiutati con il
+     comando di conversione. Leggerli come raw darebbe dati sbagliati senza
+     errori;
+   - `image_cleanup` **non propaga mai un errore**: gira dalla trap EXIT, spesso
+     quando qualcosa è già andato storto, e un suo fallimento nasconderebbe la
+     causa vera. (È anche il bug che i test hanno trovato: senza `|| true` la
+     funzione usciva non-zero e uccideva il test invece di farlo fallire.)
+
+   **Verificato per davvero**, non solo a fixture: E01 creata con `ewfacquire`,
+   aperta con `ewfmount` ed elencata senza privilegi; LUKS vero creato con
+   `cryptsetup luksFormat` e riconosciuto; catena completa raw → loop `-r` →
+   `mount ro` eseguita dentro il container `--privileged`, con verifica che
+   all'uscita non restino loop device orfani.
+
+   Resta fuori: le immagini segmentate multi-file oltre il primo `.E01` (le
+   gestisce `ewfmount` da sé, ma non è stato provato), e i container VeraCrypt.
 
 ---
 

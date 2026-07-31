@@ -70,6 +70,7 @@ write_evidence_manifest() {
     export CUSTODY_HASH CUSTODY_HASH_LIMIT_MB CUSTODY_START_UTC
     export CUSTODY_CMDLINE CUSTODY_OPERATOR CUSTODY_HOST
     export TIME_SINCE TIME_UNTIL VOLUME_TZ VOLUME_TZ_SOURCE
+    export IMAGE_PATH IMAGE_PARTITION
     FIUTO_TIME_DROPPED=$(time_filtered_total); export FIUTO_TIME_DROPPED
     local REPORTS; REPORTS=$(mktemp)
     printf '%s\n' "${GENERATED_REPORTS[@]:-}" > "$REPORTS"
@@ -179,6 +180,11 @@ manifest = {
         "report_directory": env.get('REPORT_BASE_DIR', ''),
     },
     "subject": {
+        # Se l'analisi e' partita da un'immagine, il reperto e' l'immagine e non
+        # il punto di mount: quest'ultimo e' una directory temporanea che non
+        # esistera' piu' quando qualcuno rileggera' il manifesto.
+        "source_image": env.get('IMAGE_PATH', '') or None,
+        "source_image_partition": env.get('IMAGE_PARTITION', '') or None,
         "volume_root": env.get('WIN_ROOT', ''),
         "detected_os": env.get('OS_TYPE', ''),
         "hostname_from_artefacts": env.get('HOST_NAME', ''),

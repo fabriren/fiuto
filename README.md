@@ -603,6 +603,60 @@ it reads as what it is.
 
 A rule file that does not compile is reported and skipped; the others still run.
 
+### Forensic images and encrypted volumes (`--image`)
+
+Mounting an E01 by hand is a four-command chain in which it is easy to get
+wrong exactly the part that matters: forgetting `-r` on `losetup`, or `ro` on
+`mount`, means the exhibit was mounted writable and nobody noticed.
+
+```bash
+./fiuto.sh --image disk.E01 --list-partitions          # no root needed
+sudo ./fiuto.sh --image disk.E01 --partition 002 --all
+sudo ./fiuto.sh --image disk.raw --unlock key.txt --all  # BitLocker / LUKS
+```
+
+Formats: **E01/Ex01** (via `ewfmount`), **raw/dd/img**. Partition tables are read
+with `mmls`, and offsets are computed from the actual sector size.
+
+**Every link in the chain is read-only by construction, not by convention**:
+`ewfmount` is read-only by nature, `losetup` gets `--read-only`, `cryptsetup`
+gets `--readonly`, `dislocker` gets `-r`, `mount` gets `ro,noexec,nodev,nosuid`.
+There is no code path that mounts writable, and there is a test that asserts it.
+Everything is unmounted in the exact reverse order at exit, so no orphan loop
+devices are left behind.
+
+What it deliberately does **not** do:
+
+- **it does not guess keys.** BitLocker and LUKS open only with `--unlock`
+  (passphrase, recovery key, or a file holding one). A 48-digit recovery key is
+  told apart from a user password automatically, because passing the wrong one
+  fails in a way that looks like "wrong key";
+- **FileVault 2 is recognised and declined.** The key lives in the macOS keybag
+  and Linux has no reliable tooling for it; the volume is identified and the
+  situation stated rather than worked around;
+- **VMDK, VHDX and QCOW2 are refused** with the `qemu-img convert` command to
+  run. They are sparse or snapshot formats: reading them as raw would produce
+  wrong data with no error at all.
+
+Encryption is detected **before** privileges are demanded: "this partition is
+BitLocker and you gave me no key" is knowable as a normal user, and is more
+useful than "you need root" — it saves re-running under sudo only to find out
+the key was missing. On a multi-partition image without `--partition`, FIUTO
+**refuses to choose**: picking one at random means analysing the wrong partition
+and never noticing.
+
+The manifest records the image and the partition as the exhibit, not the mount
+point: the latter is a temporary directory that will not exist when someone
+re-reads the manifest.
+
+In Docker the image needs `--privileged` (loop devices and FUSE):
+
+```bash
+docker run --rm -it --privileged \
+  -v /cases:/img:ro -v "$PWD/report":/report \
+  ghcr.io/fabriren/fiuto --image /img/disk.E01 --partition 002 --all
+```
+
 ### Sigma (`--sigma`, Windows)
 
 Sigma is how the community publishes detections: SigmaHQ, CERTs and vendors
@@ -1440,6 +1494,61 @@ system della workstation di analisi. Senza questa contabilità un "nessun match"
 si leggerebbe come "il disco è pulito"; con essa si legge per quello che è.
 
 Un file di regole che non compila viene segnalato e saltato; gli altri girano.
+
+### Immagini forensi e volumi cifrati (`--image`)
+
+Montare a mano una E01 è una catena di quattro comandi in cui è facile
+sbagliare proprio il pezzo che conta: dimenticare `-r` su `losetup`, o `ro` su
+`mount`, significa aver montato il reperto in scrittura senza accorgersene.
+
+```bash
+./fiuto.sh --image disco.E01 --list-partitions            # non serve root
+sudo ./fiuto.sh --image disco.E01 --partition 002 --all
+sudo ./fiuto.sh --image disco.raw --unlock chiave.txt --all  # BitLocker / LUKS
+```
+
+Formati: **E01/Ex01** (tramite `ewfmount`), **raw/dd/img**. La tabella delle
+partizioni si legge con `mmls`, e gli offset si calcolano sulla dimensione di
+settore reale.
+
+**Ogni anello della catena è in sola lettura per costruzione, non per
+convenzione**: `ewfmount` lo è per natura, `losetup` riceve `--read-only`,
+`cryptsetup` `--readonly`, `dislocker` `-r`, `mount`
+`ro,noexec,nodev,nosuid`. Non esiste un percorso di codice che monti in
+scrittura, e c'è un test che lo verifica. All'uscita si smonta tutto
+nell'ordine inverso esatto, quindi non restano loop device orfani.
+
+Cosa **non** fa, deliberatamente:
+
+- **non indovina le chiavi.** BitLocker e LUKS si aprono solo con `--unlock`
+  (passphrase, recovery key, o un file che la contiene). Una recovery key da 48
+  cifre viene distinta da una password utente automaticamente, perché passare
+  quella sbagliata fallisce in un modo che sembra "chiave errata";
+- **FileVault 2 viene riconosciuto e rifiutato.** La chiave sta nel keybag di
+  macOS e su Linux non esistono strumenti affidabili: il volume viene
+  identificato e la cosa viene detta, non aggirata;
+- **VMDK, VHDX e QCOW2 vengono rifiutati** con il comando `qemu-img convert` da
+  eseguire. Sono formati sparsi o a snapshot: leggerli come raw produrrebbe
+  dati sbagliati senza alcun errore.
+
+La cifratura si rileva **prima** di pretendere i privilegi: "questa partizione è
+BitLocker e non mi hai dato la chiave" si sa da utente normale, ed è più utile
+di "serve root" — evita di rilanciare con sudo per scoprire solo allora che
+mancava la chiave. Su un'immagine multi-partizione senza `--partition` FIUTO
+**si rifiuta di scegliere**: prenderne una a caso significa analizzare la
+partizione sbagliata e non accorgersene mai.
+
+Il manifesto registra come reperto l'immagine e la partizione, non il punto di
+mount: quest'ultimo è una directory temporanea che non esisterà più quando
+qualcuno rileggerà il manifesto.
+
+In Docker serve `--privileged` (loop device e FUSE):
+
+```bash
+docker run --rm -it --privileged \
+  -v /casi:/img:ro -v "$PWD/report":/report \
+  ghcr.io/fabriren/fiuto --image /img/disco.E01 --partition 002 --all
+```
 
 ### Sigma — detection della comunità (`--sigma`, Windows)
 
