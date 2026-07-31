@@ -35,7 +35,7 @@ Stato aggiornato al: **2026-07-31** (versione 2.3, **tutte le fasi complete**).
 | Area | Stato |
 |---|---|
 | CI (bash -n, ShellCheck, bats, parser Python su 3.9 + 3.12) | ✅ |
-| Suite di test — 258 test bats | ✅ |
+| Suite di test — 268 test bats | ✅ |
 | Replay transaction log registro (`.LOG1`/`.LOG2`) | ✅ |
 | Export JSONL / schema Timesketch (`--jsonl`) | ✅ |
 | macOS: FSEvents, Spotlight | ✅ |

@@ -2233,7 +2233,27 @@ effetti collaterali. Corse su `recover_hive` e sulla timeline unica con
 `--jobs`. La Master Timeline che, in parallelo, girava prima di vedere gli altri
 report e produceva una timeline vuota senza segnalarlo.
 
-La suite di test passa da 53 a **235 casi**.
+**Build macOS.** `./buildMac.sh` produce `fiuto-macos.sh`, che gira **su** un
+Mac usato come workstation di analisi. Non è un fork: concatena gli stessi
+sorgenti della build Linux più uno strato che traduce gli strumenti GNU verso
+l'userland BSD ridefinendoli come funzioni bash, così i 52 punti di chiamata di
+`stat -c` restano intatti. Richiede bash 4+ (`brew install bash`), e la build si
+rifiuta di partire sulla 3.2 che macOS spedisce ancora, indicando il comando per
+rimediare. Il montaggio delle immagini passa da `hdiutil`, il rilevamento dei
+volumi da `mount(8)` e `/Volumes`. LUKS e BitLocker non sono disponibili su
+macOS: il volume viene riconosciuto e dichiarato, non montato male. **Non ancora
+collaudata su un Mac reale**: verificate da qui l'allineamento delle due build e
+le traduzioni contro un userland BSD simulato.
+
+**Altre correzioni.** La cornice del menu non si chiudeva con il titolo italiano
+(19 caratteri in un campo da 18), e si calcola ora sul testo, tenendo conto che
+`${#stringa}` conta i caratteri mentre `printf` riempie a byte e le em dash ne
+occupano tre l'una. Una root annidata, il caso degli export di disco dentro una
+cartella di servizio (`ntfs/`, `C/`), veniva rifiutata senza spiegazioni: ora
+FIUTO scende di un livello e propone quella che trova. Su macOS i report non si
+aprivano, perché `xdg-open` è di freedesktop: il comando si sceglie a runtime.
+
+La suite di test passa da 53 a **268 casi**.
 
 ---
 
