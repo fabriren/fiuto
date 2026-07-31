@@ -4,7 +4,7 @@
 
 ## 🇬🇧 English Version
 
-**FIUTO** (**F**orensic **I**nvestigation **U**tility **T**ool for **O**ffline) is a unified DFIR (Digital Forensics and Incident Response) toolkit for comprehensive **offline disk analysis of Windows, Linux and macOS** volumes. It automatically **detects the operating system of each mounted volume** and proposes the relevant module set, generating detailed HTML reports for rapid and effective investigations.
+**FIUTO** (**F**orensic **I**nvestigation **U**tility **T**ool **O**ffline) is a unified DFIR (Digital Forensics and Incident Response) toolkit for comprehensive **offline disk analysis of Windows, Linux and macOS** volumes. It automatically **detects the operating system of each mounted volume** and proposes the relevant module set, generating detailed HTML reports for rapid and effective investigations.
 
 - **Windows** volumes → the 39 Windows artifact modules.
 - **Linux** volumes → 16 dedicated modules (system logs, journal, logins, shell/AI history, browsers, accounts, persistence, SSH, network, packages, trash, filesystem timeline, auditd, containers, master timeline).
@@ -1102,7 +1102,7 @@ FIUTO is a tool to accelerate legitimate digital forensic analysis, intended for
 
 ## 🇮🇹 Versione Italiana
 
-**FIUTO** (**F**orensic **I**nvestigation **U**tility **T**ool for **O**ffline) è un toolkit DFIR (Digital Forensics and Incident Response) unificato per l'analisi offline di dischi **Windows, Linux e macOS**. **Rileva automaticamente il sistema operativo di ogni volume montato** e propone il set di moduli pertinente, generando report HTML dettagliati per investigazioni rapide ed efficaci.
+**FIUTO** (**F**orensic **I**nvestigation **U**tility **T**ool **O**ffline) è un toolkit DFIR (Digital Forensics and Incident Response) unificato per l'analisi offline di dischi **Windows, Linux e macOS**. **Rileva automaticamente il sistema operativo di ogni volume montato** e propone il set di moduli pertinente, generando report HTML dettagliati per investigazioni rapide ed efficaci.
 
 - Volumi **Windows** → i 39 moduli per artefatti Windows.
 - Volumi **Linux** → 16 moduli dedicati (log di sistema, journal, login, history shell/AI, browser, account, persistenza, SSH, rete, pacchetti, cestino, timeline filesystem, auditd, container, master timeline).

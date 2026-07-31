@@ -247,3 +247,31 @@ setup() {
     done
     [ "$fail" -eq 0 ]
 }
+
+@test "il banner non dice più 'Tool for Offline'" {
+    ! grep -q 'ool for ' "$REPO_ROOT/src/lib/02-ui.sh"
+    grep -q 'ffline' "$REPO_ROOT/src/lib/02-ui.sh"
+}
+
+@test "il riquadro del banner resta allineato" {
+    # Togliere "for" accorcia la riga di quattro caratteri: senza restituirli
+    # al riempimento il bordo destro si apre.
+    #
+    # Niente pipeline nell'assegnazione: con pipefail un grep che non trova
+    # nulla fa fallire l'intera catena, e sotto errexit il test muore prima di
+    # poter dire cosa non andava.
+    print_banner 2>/dev/null | sed -e 's/\x1b\[[0-9;]*m//g' > "$BATS_TEST_TMPDIR/ban.txt" || true
+    local -a larghezze=()
+    local riga
+    while IFS= read -r riga; do
+        case "$riga" in
+            *╔*|*║*|*╚*) larghezze+=("${#riga}") ;;
+        esac
+    done < "$BATS_TEST_TMPDIR/ban.txt"
+    [ "${#larghezze[@]}" -gt 0 ] || { echo "nessuna riga di riquadro trovata"; false; }
+    local ref="${larghezze[0]}" w fail=0
+    for w in "${larghezze[@]}"; do
+        [ "$w" -eq "$ref" ] || fail=1
+    done
+    [ "$fail" -eq 0 ] || { echo "larghezze: ${larghezze[*]}"; false; }
+}

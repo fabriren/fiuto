@@ -299,7 +299,7 @@ print_banner() {
     echo "  ║      ██║       ██║  ╚██████╔╝     ██║     ╚██████╔╝      ║"
     echo "  ║      ╚═╝       ╚═╝   ╚═════╝      ╚═╝      ╚═════╝       ║"
     echo "  ║                                                          ║"
-    echo -e "  ║    ${CYAN}${BOLD}F${RESET}${CYAN}orensic ${BOLD}I${RESET}${CYAN}nvestigation ${BOLD}U${RESET}${CYAN}tility ${BOLD}T${RESET}${CYAN}ool for ${BOLD}O${RESET}${CYAN}ffline${RESET}       ${CYAN}${BOLD}║"
+    echo -e "  ║    ${CYAN}${BOLD}F${RESET}${CYAN}orensic ${BOLD}I${RESET}${CYAN}nvestigation ${BOLD}U${RESET}${CYAN}tility ${BOLD}T${RESET}${CYAN}ool ${BOLD}O${RESET}${CYAN}ffline${RESET}           ${CYAN}${BOLD}║"
     echo -e "  ║                    ${MAGENTA}${BOLD}v${FIUTO_VERSION} - zi®iginal${RESET}${CYAN}                      ║"
     echo "  ╚══════════════════════════════════════════════════════════╝"
     echo -e "${RESET}"
