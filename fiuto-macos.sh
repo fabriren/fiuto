@@ -40,7 +40,7 @@ set -uo pipefail
 
 # Versione del tool. Unica fonte: la usano il banner e il manifesto di catena
 # di custodia, che non devono poter divergere.
-FIUTO_VERSION="2.3"
+FIUTO_VERSION="2.3.1"
 
 # -- Cleanup globale file temporanei (signal-safe) ----------------
 # La trap EXIT viene invocata su ritorno normale, SIGINT (Ctrl+C),
@@ -300,7 +300,13 @@ print_banner() {
     echo "  ║      ╚═╝       ╚═╝   ╚═════╝      ╚═╝      ╚═════╝       ║"
     echo "  ║                                                          ║"
     echo -e "  ║    ${CYAN}${BOLD}F${RESET}${CYAN}orensic ${BOLD}I${RESET}${CYAN}nvestigation ${BOLD}U${RESET}${CYAN}tility ${BOLD}T${RESET}${CYAN}ool ${BOLD}O${RESET}${CYAN}ffline${RESET}           ${CYAN}${BOLD}║"
-    echo -e "  ║                    ${MAGENTA}${BOLD}v${FIUTO_VERSION} - zi®iginal${RESET}${CYAN}                      ║"
+    # Riga della versione centrata a calcolo: con il riempimento scritto a
+    # mano bastava passare da 2.3 a 2.3.1 per aprire il bordo destro di due
+    # caratteri. La larghezza interna del riquadro e' 58.
+    local _VTXT="v${FIUTO_VERSION} - zi®iginal"
+    local _VL=$(( (58 - ${#_VTXT}) / 2 )) _VR
+    _VR=$(( 58 - ${#_VTXT} - _VL ))
+    printf "  ║%*s${MAGENTA}${BOLD}%s${RESET}${CYAN}%*s║\n" "$_VL" "" "$_VTXT" "$_VR" ""
     echo "  ╚══════════════════════════════════════════════════════════╝"
     echo -e "${RESET}"
     local DATE_LABEL="$([ "$LANG" = "it" ] && echo "Data" || echo "Date")"

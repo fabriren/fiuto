@@ -40,7 +40,7 @@ set -uo pipefail
 
 # Versione del tool. Unica fonte: la usano il banner e il manifesto di catena
 # di custodia, che non devono poter divergere.
-FIUTO_VERSION="2.3"
+FIUTO_VERSION="2.3.1"
 
 # -- Cleanup globale file temporanei (signal-safe) ----------------
 # La trap EXIT viene invocata su ritorno normale, SIGINT (Ctrl+C),

@@ -2175,6 +2175,50 @@ FIUTO è uno strumento per velocizzare le analisi forensi digitale legittimo, da
 
 ## 📝 Changelog
 
+**Date:** 2026-07-31 | **Version:** 2.3.1
+
+Correzioni e rifiniture emerse usando la 2.3 su casi reali.
+
+**Il riquadro del menu non si chiudeva.** Il titolo italiano "SELEZIONA UN
+MODULO" è lungo 19 caratteri e il campo era `%-18s`: sforava di uno e spingeva
+fuori il bordo destro, su tutti e tre i sistemi. La cornice si calcola ora sul
+testo, tenendo conto che `${#stringa}` conta i caratteri mentre `printf` riempie
+a byte.
+
+**Una root annidata veniva rifiutata senza spiegazioni.** Gli export di disco
+arrivano dentro una cartella di servizio (`ntfs/`, `C/`, il nome del disco):
+FIUTO accettava la root, creava la cartella dei report e poi diceva "nessun
+volume valido" senza dire né perché né dove guardare, pur avendo la risposta a
+una directory di distanza. Ora scende di un livello e propone quella che trova.
+
+**Su macOS i report non si aprivano**, perché `xdg-open` è di freedesktop e lì
+non esiste. Il comando si sceglie a runtime; se non ce n'è nessuno lo si dice,
+invece di fallire in silenzio.
+
+**`--report-dir`.** La cartella dei report si poteva scegliere solo rispondendo
+al prompt, e il default è la directory di invocazione: analizzando un sistema
+vivo con root `/` i report finivano dentro il volume analizzato. Il percorso
+viene validato subito, prima di leggere qualunque cosa.
+
+**Le history dei REPL erano illeggibili.** python3, node e psql scrivono le voci
+multi-riga con spazi e backslash codificati in ottale: il report mostrava
+`\040\040value = ...` al posto del codice. Ora si decodifica, e solo per quei
+file: in una history di shell un `\040` letterale è un dato vero.
+
+**La dashboard si apre sul riepilogo.** Al termine di `--all` si apriva
+l'executive summary e subito dopo veniva chiesto di aprire anche la dashboard.
+Ora il riepilogo è la prima scheda della dashboard, che si apre già posizionata
+lì.
+
+**Altro.** FIUTO è "Forensic Investigation Utility Tool Offline", senza *for*.
+Trattini lunghi sostituiti con trattini semplici in tutte le stringhe di output
+(383 occorrenze su 104 file). La CI verifica ora anche la build macOS, che prima
+poteva restare indietro senza che nulla lo segnalasse.
+
+Suite di test: da 235 a **274 casi**.
+
+---
+
 **Date:** 2026-07-31 | **Version:** 2.3
 
 Il motore, non i moduli. La 2.2 aveva portato ventiquattro moduli nuovi; questa
