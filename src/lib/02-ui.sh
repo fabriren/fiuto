@@ -104,6 +104,25 @@ return_to_menu() {
     pause_key
 }
 
+# Comando per aprire un file con l'applicazione predefinita.
+#
+# xdg-open e' di freedesktop e su macOS non esiste: li' si chiama open. Il
+# rilevamento e' a runtime e non nello strato di compatibilita' perche' cosi'
+# vale anche per la build Linux eseguita su un Mac, e per i desktop che hanno
+# gio ma non xdg-open. Se non c'e' niente, si dice: aprire un file e' un
+# comodo, non un requisito, ma un comando che fallisce in silenzio lascia
+# l'utente a chiedersi perche' non succede nulla.
+report_opener() {
+    if [[ "$(uname -s 2>/dev/null)" == "Darwin" ]] && command -v open > /dev/null 2>&1; then
+        echo "open"; return 0
+    fi
+    local C
+    for C in xdg-open gio open; do
+        command -v "$C" > /dev/null 2>&1 && { echo "$C"; return 0; }
+    done
+    return 1
+}
+
 # Chiede all'utente se aprire il report nel browser.
 # In BATCH_MODE non apre e non chiede (nessun utente interattivo disponibile).
 open_report_prompt() {
@@ -114,7 +133,14 @@ open_report_prompt() {
     local NO_LABEL="$([ "$LANG" = "it" ] && echo "n" || echo "n")"
     echo -ne "  ${YELLOW}[?]${RESET} $(t open_browser) [${YES_LABEL}/${NO_LABEL}]: "
     read -r RESP
-    [[ "${RESP,,}" != "n" ]] && xdg-open "$RPATH" 2>/dev/null &
+    [[ "${RESP,,}" == "n" ]] && return 0
+    local OPENER
+    if OPENER=$(report_opener); then
+        "$OPENER" "$RPATH" > /dev/null 2>&1 &
+    else
+        warn "$(L "Nessun comando per aprire i file (xdg-open, open). Apri a mano:" \
+                 "No command available to open files (xdg-open, open). Open it manually:") $RPATH"
+    fi
 }
 
 # Info / warning / error

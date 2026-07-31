@@ -207,3 +207,87 @@ _load_ioc() {
     [[ "$out" == *'\040'* ]]
     rm -f "$f"
 }
+
+# ------------------------------------------------------------ root annidata
+
+# Gli export di disco arrivano dentro una cartella di servizio ("ntfs", "C",
+# il nome del disco). Chi analizza indica quella che vede, e FIUTO rispondeva
+# "nessun volume valido" senza dire perche' ne' dove guardare, pur avendo la
+# risposta a una directory di distanza.
+@test "find_nested_root trova una root Windows un livello sotto" {
+    d=$(mktemp -d)
+    mkdir -p "$d/ntfs/Windows/System32" "$d/ntfs/Users"
+    run find_nested_root "$d"
+    [ "$status" -eq 0 ]
+    [[ "$output" == "$d/ntfs	windows" ]]
+    rm -rf "$d"
+}
+
+@test "find_nested_root riconosce anche Linux e macOS" {
+    d=$(mktemp -d)
+    mkdir -p "$d/img/etc"; : > "$d/img/etc/passwd"
+    run find_nested_root "$d"
+    [[ "$output" == *"	linux" ]]
+    rm -rf "$d"
+}
+
+@test "find_nested_root non inventa una root dove non c'è" {
+    # Scendere a tentoni troverebbe prima o poi qualcosa che somiglia a una
+    # root e la analizzerebbe al posto di quella giusta.
+    d=$(mktemp -d)
+    mkdir -p "$d/documenti" "$d/foto"
+    run find_nested_root "$d"
+    [ "$status" -ne 0 ]
+    rm -rf "$d"
+}
+
+@test "find_nested_root scende di un solo livello" {
+    d=$(mktemp -d)
+    mkdir -p "$d/a/b/Windows/System32"
+    run find_nested_root "$d"
+    [ "$status" -ne 0 ]
+    rm -rf "$d"
+}
+
+# -------------------------------------------------------------- apertura
+
+# xdg-open e' di freedesktop e su macOS non esiste: li' il comando e' open.
+# Un'apertura che fallisce in silenzio lascia l'utente a chiedersi perche' non
+# succede nulla.
+@test "su macOS il comando per aprire i report è open" {
+    # PATH ristretto passato a `run`, che esegue la funzione gia' caricata:
+    # cosi' il lookup avviene nel PATH finto senza dover avere bash dentro.
+    d=$(mktemp -d)
+    printf '#!/bin/sh\necho Darwin\n' > "$d/uname"
+    printf '#!/bin/sh\nexit 0\n' > "$d/open"
+    chmod +x "$d/uname" "$d/open"
+    PATH="$d" run report_opener
+    [ "$output" = "open" ]
+    rm -rf "$d"
+}
+
+@test "su Linux resta xdg-open" {
+    run report_opener
+    [ "$output" = "xdg-open" ]
+}
+
+@test "senza alcun comando di apertura la funzione fallisce invece di tacere" {
+    d=$(mktemp -d)
+    printf '#!/bin/sh\necho Linux\n' > "$d/uname"; chmod +x "$d/uname"
+    PATH="$d" run report_opener
+    [ "$status" -ne 0 ]
+    rm -rf "$d"
+}
+
+@test "xdg-open non viene mai invocato direttamente" {
+    # La parola resta legittimamente nei sorgenti: nell'elenco dei comandi
+    # cercati e nel messaggio che dice quali sono stati cercati. Cio' che non
+    # deve piu' esistere e' una CHIAMATA diretta, che su macOS fallirebbe.
+    invocazioni=$(grep -rn '^[^#]*[^-a-z]xdg-open ["$]' "$REPO_ROOT/src" --include='*.sh' || true)
+    [ -z "$invocazioni" ] || { echo "$invocazioni"; false; }
+}
+
+@test "il suggerimento all'uscita non nomina un comando assente" {
+    # Suggerire xdg-open su un Mac manda l'utente a sbattere.
+    grep -q 'if _OPENER=$(report_opener); then' "$REPO_ROOT/src/main.sh"
+}

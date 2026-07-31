@@ -74,6 +74,32 @@ detect_os_type() {
     echo "unknown"
 }
 
+# Cerca una root riconoscibile un livello sotto quella indicata.
+#
+# Gli export e i backup di un disco arrivano quasi sempre dentro una cartella
+# di servizio: "ntfs", "C", il nome del disco, la data dell'acquisizione. Chi
+# analizza indica la cartella che vede, e FIUTO rispondeva "nessun volume
+# valido" senza dire ne' perche' ne' dove guardare — pur avendo la risposta a
+# una directory di distanza.
+#
+# Si scende di UN livello soltanto, e solo se quel livello contiene davvero una
+# struttura riconoscibile: scendere a tentoni troverebbe prima o poi qualcosa
+# che somiglia a una root e la analizzerebbe al posto di quella giusta.
+find_nested_root() {
+    local ROOT="$1"
+    [[ -d "$ROOT" ]] || return 1
+    local D OS
+    while IFS= read -r D; do
+        [[ -d "$D" ]] || continue
+        OS=$(detect_os_type "$D")
+        if [[ "$OS" != "unknown" ]]; then
+            printf '%s\t%s\n' "$D" "$OS"
+            return 0
+        fi
+    done < <(find "$ROOT" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | head -20)
+    return 1
+}
+
 # Etichetta leggibile dell'OS rilevato (per badge/menu)
 os_label() {
     case "${1:-$OS_TYPE}" in

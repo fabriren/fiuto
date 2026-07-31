@@ -379,6 +379,25 @@ return_to_menu() {
     pause_key
 }
 
+# Comando per aprire un file con l'applicazione predefinita.
+#
+# xdg-open e' di freedesktop e su macOS non esiste: li' si chiama open. Il
+# rilevamento e' a runtime e non nello strato di compatibilita' perche' cosi'
+# vale anche per la build Linux eseguita su un Mac, e per i desktop che hanno
+# gio ma non xdg-open. Se non c'e' niente, si dice: aprire un file e' un
+# comodo, non un requisito, ma un comando che fallisce in silenzio lascia
+# l'utente a chiedersi perche' non succede nulla.
+report_opener() {
+    if [[ "$(uname -s 2>/dev/null)" == "Darwin" ]] && command -v open > /dev/null 2>&1; then
+        echo "open"; return 0
+    fi
+    local C
+    for C in xdg-open gio open; do
+        command -v "$C" > /dev/null 2>&1 && { echo "$C"; return 0; }
+    done
+    return 1
+}
+
 # Chiede all'utente se aprire il report nel browser.
 # In BATCH_MODE non apre e non chiede (nessun utente interattivo disponibile).
 open_report_prompt() {
@@ -389,7 +408,14 @@ open_report_prompt() {
     local NO_LABEL="$([ "$LANG" = "it" ] && echo "n" || echo "n")"
     echo -ne "  ${YELLOW}[?]${RESET} $(t open_browser) [${YES_LABEL}/${NO_LABEL}]: "
     read -r RESP
-    [[ "${RESP,,}" != "n" ]] && xdg-open "$RPATH" 2>/dev/null &
+    [[ "${RESP,,}" == "n" ]] && return 0
+    local OPENER
+    if OPENER=$(report_opener); then
+        "$OPENER" "$RPATH" > /dev/null 2>&1 &
+    else
+        warn "$(L "Nessun comando per aprire i file (xdg-open, open). Apri a mano:" \
+                 "No command available to open files (xdg-open, open). Open it manually:") $RPATH"
+    fi
 }
 
 # Info / warning / error
@@ -1809,6 +1835,32 @@ detect_os_type() {
     fi
 
     echo "unknown"
+}
+
+# Cerca una root riconoscibile un livello sotto quella indicata.
+#
+# Gli export e i backup di un disco arrivano quasi sempre dentro una cartella
+# di servizio: "ntfs", "C", il nome del disco, la data dell'acquisizione. Chi
+# analizza indica la cartella che vede, e FIUTO rispondeva "nessun volume
+# valido" senza dire ne' perche' ne' dove guardare — pur avendo la risposta a
+# una directory di distanza.
+#
+# Si scende di UN livello soltanto, e solo se quel livello contiene davvero una
+# struttura riconoscibile: scendere a tentoni troverebbe prima o poi qualcosa
+# che somiglia a una root e la analizzerebbe al posto di quella giusta.
+find_nested_root() {
+    local ROOT="$1"
+    [[ -d "$ROOT" ]] || return 1
+    local D OS
+    while IFS= read -r D; do
+        [[ -d "$D" ]] || continue
+        OS=$(detect_os_type "$D")
+        if [[ "$OS" != "unknown" ]]; then
+            printf '%s\t%s\n' "$D" "$OS"
+            return 0
+        fi
+    done < <(find "$ROOT" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | head -20)
+    return 1
 }
 
 # Etichetta leggibile dell'OS rilevato (per badge/menu)
@@ -3271,6 +3323,31 @@ _apply_win_root() {
     local ROOT="$1"
     WIN_ROOT="$ROOT"
     OS_TYPE=$(detect_os_type "$ROOT")
+
+    # Un export di disco sta quasi sempre dentro una cartella di servizio
+    # ("ntfs", "C", il nome del disco). Prima di dichiarare la root inutile,
+    # si guarda un livello sotto: la risposta e' spesso li', e tacerla
+    # lascerebbe l'analista davanti a un menu vuoto senza sapere perche'.
+    if [[ "$OS_TYPE" == "unknown" ]]; then
+        local _NESTED _NPATH _NOS
+        if _NESTED=$(find_nested_root "$ROOT"); then
+            IFS=$'\t' read -r _NPATH _NOS <<< "$_NESTED"
+            warn "$(L "In questa directory non c'e' una struttura di sistema riconoscibile." \
+                     "No recognisable system structure in this directory.")"
+            info "$(L "Ne ho trovata una un livello sotto:" "I found one one level down:") ${BOLD}${_NPATH}${RESET}  ${CYAN}[${_NOS}]${RESET}"
+            if ask_yn "$(L "Uso quella?" "Use that one?")"; then
+                ROOT="$_NPATH"
+                WIN_ROOT="$ROOT"
+                OS_TYPE="$_NOS"
+            fi
+        else
+            warn "$(L "Nessuna struttura Windows, Linux o macOS riconoscibile in:" \
+                     "No recognisable Windows, Linux or macOS structure in:") $ROOT"
+            info "$(L "Attesi al primo livello: Windows/System32 o Users (Windows), etc/passwd (Linux), System/Library/CoreServices (macOS)." \
+                     "Expected at the top level: Windows/System32 or Users (Windows), etc/passwd (Linux), System/Library/CoreServices (macOS).")"
+        fi
+    fi
+
     ok "$(L "Root impostata:" "Root set:") ${BOLD}$WIN_ROOT${RESET}  ${CYAN}[$(os_label)]${RESET}"
 
     # Recupera info macchina (hostname, OS, IP, dominio)
@@ -3749,9 +3826,21 @@ render_menu_from_registry() {
     local _OSL; _OSL=$(os_label)
     local _TITLE; _TITLE="$(L "SELEZIONA UN MODULO" "SELECT A MODULE")"
 
-    echo -e "  ${CYAN}${BOLD}╔══════════════════════════════════════════════════╗${RESET}"
-    printf  "  ${CYAN}${BOLD}║   F I U T O  —  %-8s —  %-18s║${RESET}\n" "$_OSL" "$_TITLE"
-    echo -e "  ${CYAN}${BOLD}╚══════════════════════════════════════════════════╝${RESET}"
+    # La cornice si calcola sul testo, non a mano. Con le larghezze fisse
+    # "SELEZIONA UN MODULO" (19 caratteri) sforava il campo da 18 e spingeva
+    # fuori il bordo destro: il riquadro non si chiudeva. Un valore scritto a
+    # mano va rifatto a ogni traduzione e a ogni etichetta di OS nuova.
+    local _INNER="   F I U T O  —  ${_OSL}  —  ${_TITLE}   "
+    local _W=$(( ${#_INNER} > 50 ? ${#_INNER} : 50 ))
+    local _BAR; _BAR=$(printf '═%.0s' $(seq 1 "$_W"))
+    # Il riempimento si scrive a mano invece di usare %-*s: ${#stringa} conta i
+    # CARATTERI, mentre la larghezza di printf conta i BYTE. Con tre em dash da
+    # tre byte l'una il conto salta di sei, e la cornice si richiude storta —
+    # in modo diverso a seconda della lingua e dell'etichetta di OS.
+    local _PAD=$(( _W - ${#_INNER} ))
+    echo -e "  ${CYAN}${BOLD}╔${_BAR}╗${RESET}"
+    printf  "  ${CYAN}${BOLD}║%s%*s║${RESET}\n" "$_INNER" "$_PAD" ""
+    echo -e "  ${CYAN}${BOLD}╚${_BAR}╝${RESET}"
     echo ""
     if [[ -n "$REPORT_BASE_DIR" ]]; then
         local _RW_LABEL _RW_COLOR
@@ -19937,7 +20026,15 @@ main() {
                             echo ""
                         fi
                     done
-                    echo -e "  ${DIM}$(L "Apri con:" "Open with:") xdg-open \"<$(L "percorso" "path")>\"${RESET}"
+                    # Il comando suggerito e' quello che esiste davvero su
+                    # questa macchina: su macOS xdg-open non c'e'. Se non ce
+                    # n'e' nessuno non se ne inventa uno: suggerire un comando
+                    # assente manda l'utente a sbattere.
+                    if _OPENER=$(report_opener); then
+                        echo -e "  ${DIM}$(L "Apri con:" "Open with:") ${_OPENER} \"<$(L "percorso" "path")>\"${RESET}"
+                    else
+                        echo -e "  ${DIM}$(L "Apri i report con il tuo browser." "Open the reports with your browser.")${RESET}"
+                    fi
                     echo ""
                 fi
                 echo -e "  ${DIM}$(L "Uscita." "Exiting.")${RESET}"; echo ""; exit 0 ;;

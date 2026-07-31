@@ -176,6 +176,31 @@ _apply_win_root() {
     local ROOT="$1"
     WIN_ROOT="$ROOT"
     OS_TYPE=$(detect_os_type "$ROOT")
+
+    # Un export di disco sta quasi sempre dentro una cartella di servizio
+    # ("ntfs", "C", il nome del disco). Prima di dichiarare la root inutile,
+    # si guarda un livello sotto: la risposta e' spesso li', e tacerla
+    # lascerebbe l'analista davanti a un menu vuoto senza sapere perche'.
+    if [[ "$OS_TYPE" == "unknown" ]]; then
+        local _NESTED _NPATH _NOS
+        if _NESTED=$(find_nested_root "$ROOT"); then
+            IFS=$'\t' read -r _NPATH _NOS <<< "$_NESTED"
+            warn "$(L "In questa directory non c'e' una struttura di sistema riconoscibile." \
+                     "No recognisable system structure in this directory.")"
+            info "$(L "Ne ho trovata una un livello sotto:" "I found one one level down:") ${BOLD}${_NPATH}${RESET}  ${CYAN}[${_NOS}]${RESET}"
+            if ask_yn "$(L "Uso quella?" "Use that one?")"; then
+                ROOT="$_NPATH"
+                WIN_ROOT="$ROOT"
+                OS_TYPE="$_NOS"
+            fi
+        else
+            warn "$(L "Nessuna struttura Windows, Linux o macOS riconoscibile in:" \
+                     "No recognisable Windows, Linux or macOS structure in:") $ROOT"
+            info "$(L "Attesi al primo livello: Windows/System32 o Users (Windows), etc/passwd (Linux), System/Library/CoreServices (macOS)." \
+                     "Expected at the top level: Windows/System32 or Users (Windows), etc/passwd (Linux), System/Library/CoreServices (macOS).")"
+        fi
+    fi
+
     ok "$(L "Root impostata:" "Root set:") ${BOLD}$WIN_ROOT${RESET}  ${CYAN}[$(os_label)]${RESET}"
 
     # Recupera info macchina (hostname, OS, IP, dominio)

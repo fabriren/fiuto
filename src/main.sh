@@ -333,7 +333,15 @@ main() {
                             echo ""
                         fi
                     done
-                    echo -e "  ${DIM}$(L "Apri con:" "Open with:") xdg-open \"<$(L "percorso" "path")>\"${RESET}"
+                    # Il comando suggerito e' quello che esiste davvero su
+                    # questa macchina: su macOS xdg-open non c'e'. Se non ce
+                    # n'e' nessuno non se ne inventa uno: suggerire un comando
+                    # assente manda l'utente a sbattere.
+                    if _OPENER=$(report_opener); then
+                        echo -e "  ${DIM}$(L "Apri con:" "Open with:") ${_OPENER} \"<$(L "percorso" "path")>\"${RESET}"
+                    else
+                        echo -e "  ${DIM}$(L "Apri i report con il tuo browser." "Open the reports with your browser.")${RESET}"
+                    fi
                     echo ""
                 fi
                 echo -e "  ${DIM}$(L "Uscita." "Exiting.")${RESET}"; echo ""; exit 0 ;;

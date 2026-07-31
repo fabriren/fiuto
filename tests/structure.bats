@@ -225,3 +225,25 @@ setup() {
     [ "$status" -ne 0 ]
     [[ "$output" == *"report"* ]]
 }
+
+# La cornice del menu aveva larghezze scritte a mano: "SELEZIONA UN MODULO"
+# (19 caratteri) sforava il campo da 18 e spingeva fuori il bordo destro.
+# Il calcolo ha due insidie: ${#stringa} conta i CARATTERI mentre la larghezza
+# di printf conta i BYTE, e le em dash ne occupano tre l'una.
+@test "la cornice del menu si chiude in tutte le lingue e su tutti gli OS" {
+    REPORT_BASE_DIR=/tmp; WIN_ROOT=/mnt/x; GENERATED_REPORTS=()
+    fail=0
+    for lang in it en; do
+        for os in windows:MODULES_WIN linux:MODULES_LINUX macos:MODULES_MACOS; do
+            LANG="$lang"; OS_TYPE="${os%%:*}"
+            mapfile -t box < <(render_menu_from_registry "${os##*:}" 2>/dev/null \
+                | sed -e 's/\x1b\[[0-9;]*m//g' | head -3)
+            top="${box[0]}"; mid="${box[1]}"; bot="${box[2]}"
+            # Le tre righe devono avere la stessa larghezza IN CARATTERI.
+            [ "${#top}" -eq "${#mid}" ] && [ "${#mid}" -eq "${#bot}" ] \
+                || { echo "$lang/$OS_TYPE: bordi ${#top}/${#mid}/${#bot}"; fail=1; }
+            [[ "$mid" == *"║" ]] || { echo "$lang/$OS_TYPE: la riga centrale non finisce con ║"; fail=1; }
+        done
+    done
+    [ "$fail" -eq 0 ]
+}

@@ -353,9 +353,21 @@ render_menu_from_registry() {
     local _OSL; _OSL=$(os_label)
     local _TITLE; _TITLE="$(L "SELEZIONA UN MODULO" "SELECT A MODULE")"
 
-    echo -e "  ${CYAN}${BOLD}╔══════════════════════════════════════════════════╗${RESET}"
-    printf  "  ${CYAN}${BOLD}║   F I U T O  —  %-8s —  %-18s║${RESET}\n" "$_OSL" "$_TITLE"
-    echo -e "  ${CYAN}${BOLD}╚══════════════════════════════════════════════════╝${RESET}"
+    # La cornice si calcola sul testo, non a mano. Con le larghezze fisse
+    # "SELEZIONA UN MODULO" (19 caratteri) sforava il campo da 18 e spingeva
+    # fuori il bordo destro: il riquadro non si chiudeva. Un valore scritto a
+    # mano va rifatto a ogni traduzione e a ogni etichetta di OS nuova.
+    local _INNER="   F I U T O  —  ${_OSL}  —  ${_TITLE}   "
+    local _W=$(( ${#_INNER} > 50 ? ${#_INNER} : 50 ))
+    local _BAR; _BAR=$(printf '═%.0s' $(seq 1 "$_W"))
+    # Il riempimento si scrive a mano invece di usare %-*s: ${#stringa} conta i
+    # CARATTERI, mentre la larghezza di printf conta i BYTE. Con tre em dash da
+    # tre byte l'una il conto salta di sei, e la cornice si richiude storta —
+    # in modo diverso a seconda della lingua e dell'etichetta di OS.
+    local _PAD=$(( _W - ${#_INNER} ))
+    echo -e "  ${CYAN}${BOLD}╔${_BAR}╗${RESET}"
+    printf  "  ${CYAN}${BOLD}║%s%*s║${RESET}\n" "$_INNER" "$_PAD" ""
+    echo -e "  ${CYAN}${BOLD}╚${_BAR}╝${RESET}"
     echo ""
     if [[ -n "$REPORT_BASE_DIR" ]]; then
         local _RW_LABEL _RW_COLOR
