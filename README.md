@@ -919,9 +919,70 @@ tail -f fiuto_reports/session_*.log
 
 ---
 
+## 🧱 Architecture: `fiuto.sh` is generated
+
+FIUTO ships as a **single file**: you copy `fiuto.sh` onto a forensic
+workstation and it runs, with nothing to install. The source, though, is split
+by operating system under `src/`, because a single 19,000-line file is
+unmaintainable.
+
+```
+build.sh                  concatenates src/build.order into fiuto.sh
+fiuto.sh                  GENERATED, do not edit by hand
+src/
+  header.sh               shebang, version, "generated file" banner
+  build.order             concatenation order (the single source of truth)
+  lib/                    22 shared libraries (core, fs, report, registry,
+                          custody, time, IoC, summary, redact, image, ...)
+  modules/win/            51 module files, one per module
+  modules/linux/          20 module files
+  modules/macos/          18 module files
+  modules/xplat/          4 modules shared by all three systems
+  main.sh                 main() and entry point
+```
+
+Menu numbers and file counts do not match one to one: the four modules in
+`modules/xplat/` appear in more than one menu. Windows shows 54 (51 of its own
+plus SQLite Recovery, EFI System Partition and YARA), Linux 24 and macOS 22
+(their own plus all four, since they also use the cross-OS Master Timeline,
+while Windows has one of its own as module 37).
+
+> **The rule:** never edit `fiuto.sh`. Edit the file under `src/`, then run
+> `./build.sh`. A change made in the generated file is lost at the next build,
+> silently. The banner at the top of `fiuto.sh` says so, and CI enforces it.
+
+```bash
+./build.sh                # regenerate fiuto.sh from src/
+./build.sh --check        # verify fiuto.sh matches its sources (what CI runs)
+./build.sh -o /tmp/x.sh   # build to a different path
+```
+
+The build is a **pure concatenation**: no transformation, no substitution. That
+is deliberate, it keeps the generated file readable and auditable, and a diff
+between two builds says exactly what changed in the sources. `build.sh` also
+refuses to run if a file under `src/` is missing from `build.order`, so a new
+module cannot be silently left out of the distributed script.
+
+The generated file **is committed**, because being a single file is a real
+property of the tool, not a build artefact. CI's `./build.sh --check` job makes
+sure the two forms can never diverge unnoticed.
+
+### Adding a module
+
+1. Create `src/modules/<os>/NN-name.sh` with a `module_<name>()` function.
+2. Add the path to `src/build.order`.
+3. Add the registry entry in `src/lib/12-registries.sh`.
+4. `./build.sh && bats tests/`
+
+Structural tests check that every registry entry points at an existing
+function, that guards exist, that names are unique, and that the module counts
+match the tables in this README, so a half-wired module fails the suite instead
+of silently never running.
+
 ## 🧪 Development and tests
 
 ```bash
+./build.sh                               # first: regenerate fiuto.sh from src/
 bats tests/                              # test suite (bats-core)
 shellcheck -S warning -x fiuto.sh        # lint
 python3 tests/lint_embedded_python.py fiuto.sh   # compile the embedded parsers
@@ -1875,9 +1936,73 @@ tail -f fiuto_reports/session_*.log
 
 ---
 
+## 🧱 Architettura: `fiuto.sh` è generato
+
+FIUTO si distribuisce come **file singolo**: copi `fiuto.sh` su una workstation
+forense e funziona, senza installare niente. Il sorgente però è diviso per
+sistema operativo sotto `src/`, perché un unico file da 19.000 righe è
+impossibile da mantenere.
+
+```
+build.sh                  concatena src/build.order producendo fiuto.sh
+fiuto.sh                  GENERATO, non modificarlo a mano
+src/
+  header.sh               shebang, versione, banner "file generato"
+  build.order             ordine di concatenazione (unica fonte di verità)
+  lib/                    22 librerie condivise (core, fs, report, registro,
+                          custodia, tempo, IoC, riepilogo, redact, immagini...)
+  modules/win/            51 file di modulo, uno per modulo
+  modules/linux/          20 file di modulo
+  modules/macos/          18 file di modulo
+  modules/xplat/          4 moduli condivisi dai tre sistemi
+  main.sh                 main() ed entry point
+```
+
+I numeri dei menu e i conteggi dei file non coincidono uno a uno: i quattro
+moduli in `modules/xplat/` compaiono in più di un menu. Windows ne mostra 54
+(51 propri più SQLite Recovery, EFI System Partition e YARA), Linux 24 e macOS
+22 (i propri più tutti e quattro, perché usano anche la Master Timeline
+cross-OS, mentre Windows ne ha una sua come modulo 37).
+
+> **La regola:** non modificare mai `fiuto.sh`. Si modifica il file sotto
+> `src/` e si esegue `./build.sh`. Una modifica fatta nel file generato viene
+> persa al build successivo, in silenzio. Il banner in testa a `fiuto.sh` lo
+> dice, e la CI lo fa rispettare.
+
+```bash
+./build.sh                # rigenera fiuto.sh da src/
+./build.sh --check        # verifica che fiuto.sh sia allineato (quello che fa la CI)
+./build.sh -o /tmp/x.sh   # genera su un percorso diverso
+```
+
+Il build è una **concatenazione pura**: nessuna trasformazione, nessuna
+sostituzione. È deliberato, mantiene il file generato leggibile e verificabile,
+e un diff fra due build dice esattamente cosa è cambiato nei sorgenti.
+`build.sh` si rifiuta inoltre di procedere se un file sotto `src/` non compare
+in `build.order`, così un modulo nuovo non può restare fuori dallo script
+distribuito senza che nessuno se ne accorga.
+
+Il file generato **è versionato**, perché essere un file singolo è una
+proprietà reale del tool e non un artefatto di build. Il job
+`./build.sh --check` della CI garantisce che le due forme non possano divergere
+in silenzio.
+
+### Aggiungere un modulo
+
+1. Crea `src/modules/<os>/NN-nome.sh` con una funzione `module_<nome>()`.
+2. Aggiungi il percorso a `src/build.order`.
+3. Aggiungi la voce di registro in `src/lib/12-registries.sh`.
+4. `./build.sh && bats tests/`
+
+I test strutturali verificano che ogni voce di registro punti a una funzione
+esistente, che le guardie esistano, che i nomi siano univoci e che i conteggi
+dei moduli coincidano con le tabelle di questo README: un modulo collegato a
+metà fa fallire la suite invece di non partire mai in silenzio.
+
 ## 🧪 Sviluppo e test
 
 ```bash
+./build.sh                               # prima: rigenera fiuto.sh da src/
 bats tests/                              # suite di test (bats-core)
 shellcheck -S warning -x fiuto.sh        # lint
 python3 tests/lint_embedded_python.py fiuto.sh   # compila i parser incorporati
