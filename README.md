@@ -20,6 +20,27 @@ Everything runs strictly **offline**, parsing the read-only mounted filesystem.
 
 At startup FIUTO lists the mounted volumes with an OS badge (`[Windows]` / `[Linux]` / `[macOS]`) and, once a volume is selected, shows only the modules that apply to that operating system.
 
+### The engine, *new in v2.3*
+
+Beyond collecting artefacts, FIUTO says what it did and what it could not do:
+
+- **Chain of custody**, `evidence_manifest.json` with the SHA-256 of every file
+  read and every report produced, the command run, the operator and the host.
+- **Executive summary**, findings ranked by severity with their MITRE technique,
+  and cross-module time correlations, presented as hypotheses to verify.
+- **Detection engines**, `--yara` and `--sigma`, each declaring its own scope:
+  what was scanned, and which rules could not be evaluated and why.
+- **Forensic images**, `--image` mounts E01/raw, LUKS and BitLocker, read-only
+  by construction at every link of the chain.
+- **Time window**, `--since`/`--until`, with the volume timezone detected and
+  declared but never silently converted.
+- **`--redact`**, a shareable copy without credentials, beside an untouched
+  original.
+- **`--jobs N`**, parallel execution whose result does not depend on the degree
+  of parallelism.
+- **Typed IoC engine**, `--ioc` with per-type boundaries, defanged input, STIX
+  2.x and MISP import.
+
 ### Comprehensive Windows Artifact Coverage
 
 On Windows volumes FIUTO collects and analyzes:
@@ -33,54 +54,54 @@ On Windows volumes FIUTO collects and analyzes:
 - **Virtual memory** (Pagefile, Hibernation, SRUM)
 - **Removable devices** (USB history, connection timeline)
 - **Active Directory** (NTDS.dit, domain hashes, PAD offline analysis)
-- **AI assistant chat history** (ChatGPT, Copilot, Claude, Cursor, Gemini, Codex, Windsurf, Continue) — *new in v1.2*
+- **AI assistant chat history** (ChatGPT, Copilot, Claude, Cursor, Gemini, Codex, Windsurf, Continue), *new in v1.2*
 - **And much more...**
 
-### Linux Artifact Coverage — *new in v2.0*
+### Linux Artifact Coverage, *new in v2.0*
 
 On Linux volumes FIUTO collects and analyzes:
 
 - **System logs** (`/var/log`: syslog, auth, kern, secure…) and **systemd journal** (`*.journal`)
-- **Login history** (`wtmp` / `btmp` / `lastlog` — successful and failed logins with source IP)
+- **Login history** (`wtmp` / `btmp` / `lastlog`, successful and failed logins with source IP)
 - **Shell history** (bash/zsh/sh + python/mysql/psql) and **AI CLI history** (claude, aider, aichat, ollama…)
-- **Browser history** (Firefox `places.sqlite`, Chrome/Chromium/Brave/Edge — incl. snap/flatpak paths)
+- **Browser history** (Firefox `places.sqlite`, Chrome/Chromium/Brave/Edge, incl. snap/flatpak paths)
 - **User accounts** (`passwd`, `shadow`, `group`, `sudoers`, `sudoers.d`)
 - **Persistence** (cron, systemd units/timers, autostart, `rc.local`, shell init, `ld.so.preload`)
 - **SSH artifacts** (`authorized_keys`, `known_hosts`, `sshd_config`, private-key presence)
 - **Network config** (`hosts`, NetworkManager Wi-Fi PSK, netplan, iptables/nftables)
-- **Installed packages** (dpkg, rpm, apt history, snap — installation timeline)
+- **Installed packages** (dpkg, rpm, apt history, snap, installation timeline)
 - **Trash & recent files** (`~/.local/share/Trash` with deletion timestamps, `recently-used.xbel`)
 - **Filesystem MAC-time timeline** of forensically sensitive areas
-- **auditd** (`/var/log/audit`) — syscalls, authentications, EXECVE with hex-decoded arguments, policy violations
-- **Containers** (Docker/Podman) — offline inventory from on-disk metadata, with detection of escape-prone configurations (privileged, host root or Docker socket bind-mounted, `CAP_SYS_ADMIN`, host PID/network namespace)
-- **PAM** — authentication backdoors: suspicious directives and `.so` modules owned by no package
-- **Kernel modules** — LKM rootkits, `install` directives in `modprobe.d`, unpackaged `.ko`
-- **Web server logs** — nginx/apache, ranked by HTTP status so a successful attack stands out from the background noise
-- **Cloud and development credentials** — `~/.aws`, `~/.kube`, `~/.docker`, `~/.ssh`: presence and non-secret identifiers, never the secrets themselves
-- **SUID/SGID, capabilities and world-writable files** — the privilege escalation surface
+- **auditd** (`/var/log/audit`), syscalls, authentications, EXECVE with hex-decoded arguments, policy violations
+- **Containers** (Docker/Podman), offline inventory from on-disk metadata, with detection of escape-prone configurations (privileged, host root or Docker socket bind-mounted, `CAP_SYS_ADMIN`, host PID/network namespace)
+- **PAM**, authentication backdoors: suspicious directives and `.so` modules owned by no package
+- **Kernel modules**, LKM rootkits, `install` directives in `modprobe.d`, unpackaged `.ko`
+- **Web server logs**, nginx/apache, ranked by HTTP status so a successful attack stands out from the background noise
+- **Cloud and development credentials**, `~/.aws`, `~/.kube`, `~/.docker`, `~/.ssh`: presence and non-secret identifiers, never the secrets themselves
+- **SUID/SGID, capabilities and world-writable files**, the privilege escalation surface
 
-### macOS Artifact Coverage — *new in v2.0*
+### macOS Artifact Coverage, *new in v2.0*
 
 On macOS volumes FIUTO collects and analyzes:
 
-- **System logs** (`system.log`, `install.log`, ASL) — *unified `.tracev3` logs are out of scope*
-- **User accounts** (dslocal `*.plist` — UID, home, shell, password-hash presence)
-- **Persistence** (`LaunchAgents` / `LaunchDaemons` system & per-user, cron) — binary plists rendered readable
+- **System logs** (`system.log`, `install.log`, ASL), *unified `.tracev3` logs are out of scope*
+- **User accounts** (dslocal `*.plist`, UID, home, shell, password-hash presence)
+- **Persistence** (`LaunchAgents` / `LaunchDaemons` system & per-user, cron), binary plists rendered readable
 - **Login Items / BTM** (`backgrounditems.btm`)
-- **Quarantine / downloads** (`QuarantineEventsV2` — download URL + timestamp)
-- **TCC privacy** (`TCC.db` — camera/mic/disk permissions)
-- **KnowledgeC** (`knowledgeC.db` — app usage / device activity)
+- **Quarantine / downloads** (`QuarantineEventsV2`, download URL + timestamp)
+- **TCC privacy** (`TCC.db`, camera/mic/disk permissions)
+- **KnowledgeC** (`knowledgeC.db`, app usage / device activity)
 - **Browser history** (Safari `History.db`, Chrome, Firefox)
 - **Shell & AI history** (`.zsh_history`, `.bash_history`, AI CLI)
 - **Recent items** (`SFL`/`SFL2`, `~/.Trash`)
-- **FSEvents** (`/.fseventsd`) — filesystem change history, the macOS counterpart of the USN Journal
-- **Spotlight** (`.Spotlight-V100/store.db`) — heuristic extraction of download URLs and user paths
-- **Messages** (`chat.db`) — iMessage and forwarded SMS, with links and credential references flagged
-- **Cookies and downloads** — Safari `Cookies.binarycookies` (values never printed, only their length) and `Downloads.plist`
-- **XProtect and Gatekeeper** — signature version, manually granted authorisations, third-party kernel extensions
-- **Application inventory** — signature presence and bundles outside the standard directories
-- **Time Machine and snapshots** — earlier versions of files; their absence is reported as an indicator
-- **Unified logs** (`*.tracev3`) — LZ4 chunk decompression and string extraction; **partial by design**, see the note below
+- **FSEvents** (`/.fseventsd`), filesystem change history, the macOS counterpart of the USN Journal
+- **Spotlight** (`.Spotlight-V100/store.db`), heuristic extraction of download URLs and user paths
+- **Messages** (`chat.db`), iMessage and forwarded SMS, with links and credential references flagged
+- **Cookies and downloads**, Safari `Cookies.binarycookies` (values never printed, only their length) and `Downloads.plist`
+- **XProtect and Gatekeeper**, signature version, manually granted authorisations, third-party kernel extensions
+- **Application inventory**, signature presence and bundles outside the standard directories
+- **Time Machine and snapshots**, earlier versions of files; their absence is reported as an indicator
+- **Unified logs** (`*.tracev3`), LZ4 chunk decompression and string extraction; **partial by design**, see the note below
 
 ### Flexible Execution Modes
 
@@ -114,13 +135,23 @@ The module numbers shown by `--module`/`--modules` always refer to the **menu of
 - **Bash 4.0+**
 - **Python 3.9+** (with multi-version compatibility)
 - **Linux (or WSL) or macOS** (host for mounting/analyzing the offline target disks)
-- **Optional:** `journalctl` (Linux journal parsing), `rpm` CLI (offline RPM dump). `sqlite3` and `plistlib` ship with Python 3 — no extra install needed for Linux/macOS modules.
+- **Optional:** `journalctl` (Linux journal parsing), `rpm` CLI (offline RPM dump). `sqlite3` and `plistlib` ship with Python 3, no extra install needed for Linux/macOS modules.
+
+### Everything at once
+
+```bash
+pip install -r requirements.txt
+```
+
+`requirements.txt` pins the versions FIUTO is tested against. Or skip the
+question entirely with the [Docker image](#-docker-recommended), which ships all
+of them and can tell you so with `--deps`.
 
 ### Required Python Modules
 
 ```bash
 pip install regipy          # Offline registry hive parsing + .LOG1/.LOG2 replay
-pip install python-evtx     # Reading .evtx files
+pip install python-evtx     # Reading .evtx files (module 12 and the Sigma engine)
 ```
 
 ### Recommended for full Windows coverage
@@ -129,14 +160,37 @@ These libraries unlock the full output of some Windows modules. They are **optio
 
 ```bash
 pip install impacket          # SAM / NTDS.dit / AD hashes (modules 20, 24, 38)
-pip install libesedb-python   # ESE database parsing — SRUM (module 16)
+pip install libesedb-python   # ESE database parsing, SRUM (module 16)
 pip install mft               # MFT timeline (module 21)
-pip install python-snappy     # ChatGPT LevelDB decompression (module 39) — or: pip install cramjam
+pip install python-snappy     # ChatGPT LevelDB decompression (module 39), or: pip install cramjam
 pip install libpff-python     # Outlook PST/OST parsing (module 44)
 pip install libesedb-python   # WebCacheV01 and Windows.edb (modules 49, 50)
 ```
 
-> **Linux and macOS modules need no extra packages** — they rely only on the Python standard library (`sqlite3`, `plistlib`, …). Optionally, `journalctl` (for systemd journal) and the `rpm` CLI (for offline RPM dumps) improve coverage if present.
+### Required by the detection engines
+
+Unlike the ones above, these do not degrade: without them the module refuses to
+run, because a YARA scan without YARA is not a scan.
+
+```bash
+pip install yara-python     # --yara
+pip install pyyaml          # --sigma (Sigma rules are YAML)
+```
+
+### System tools for `--image`
+
+Needed only to mount forensic images and encrypted volumes; everything else
+works without them.
+
+| Tool | Package | What it unlocks |
+|---|---|---|
+| `ewfmount` | `ewf-tools` | E01 / Ex01 images |
+| `mmls` | `sleuthkit` | partition table and offsets |
+| `losetup`, `mount` | `util-linux` | raw/dd images (needs root) |
+| `cryptsetup` | `cryptsetup-bin` | LUKS volumes |
+| `dislocker` | `dislocker` | BitLocker volumes |
+
+> **Linux and macOS modules need no extra packages**, they rely only on the Python standard library (`sqlite3`, `plistlib`, …). Optionally, `journalctl` (for systemd journal) and the `rpm` CLI (for offline RPM dumps) improve coverage if present.
 
 ### Support Scripts
 
@@ -152,7 +206,7 @@ The script uses internal bash helpers for:
 
 The biggest source of friction with FIUTO is not the tool: it is regipy,
 python-evtx, libesedb, libpff, yara-python and PyYAML. While they are missing,
-the modules that use them degrade — they say so, but they degrade — and "no
+the modules that use them degrade, they say so, but they degrade, and "no
 match" becomes ambiguous. The image removes that ambiguity.
 
 ```bash
@@ -174,8 +228,8 @@ Two flags are not decoration:
   manifest records an operator who is not the person who ran the analysis. The
   entrypoint warns about this too.
 
-Neither warning is blocking — someone who knows what they are doing must be able
-to proceed — but neither stays implicit.
+Neither warning is blocking, someone who knows what they are doing must be able
+to proceed, but neither stays implicit.
 
 ```bash
 docker run --rm ghcr.io/fabriren/fiuto --deps
@@ -216,10 +270,12 @@ docker build -t fiuto .
 3. **Install Python dependencies**
 
    ```bash
+   pip install -r requirements.txt
+   # Or the bare minimum:
    pip install regipy python-evtx
-   # On macOS with Homebrew:
-   # python3 -m pip install --user regipy python-evtx
    ```
+
+   Prefer no installation at all? Use the [Docker image](#-docker-recommended).
 
 4. **Mount the target disk read-only (examples)**
 
@@ -230,7 +286,7 @@ docker build -t fiuto .
    # Linux (ext4)
    sudo mount -o ro /dev/sda2 /mnt/disk
 
-   # macOS (APFS/HFS+) — read-only
+   # macOS (APFS/HFS+), read-only
    sudo mount -o ro /dev/sdb2 /mnt/disk
    ```
 
@@ -327,7 +383,7 @@ fiuto_reports/
 | 42 | LSA Secrets & DCC2            | Registry SECURITY                   | Service-account passwords, cached domain credentials            |
 | 43 | Volume Shadow Copies          | System Volume Information           | Earlier volume snapshots, differential analysis                 |
 | 44 | Outlook PST / OST             | *.pst, *.ost (libpff)               | Local mail, attachments, deleted items                          |
-| 45 | Cloud Sync                    | OneDrive, Dropbox, Google Drive     | Synced files — the modern exfiltration path                     |
+| 45 | Cloud Sync                    | OneDrive, Dropbox, Google Drive     | Synced files, the modern exfiltration path                     |
 | 46 | BITS Jobs                     | qmgr.db                             | Background downloads used as LOLBin (T1197)                     |
 | 47 | Thumbcache                    | thumbcache_*.db                     | Thumbnails of **deleted** files, carved                         |
 | 48 | Chat Desktop                  | Slack / Teams / Discord (LevelDB)   | Internal social engineering, files shared in private chats      |
@@ -362,7 +418,7 @@ fiuto_reports/
 | 16 | Master Timeline     | (Aggregated)                                                       | Cross-module chronological timeline (runs last with `--all`)    |
 | 17 | PAM                 | `/etc/pam.d`, `security/*.so`                                    | Authentication backdoors, unpackaged modules                    |
 | 18 | Kernel Modules      | `lib/modules`, `modprobe.d`, initramfs                           | LKM rootkits, `install` directives, unpackaged `.ko`            |
-| 19 | Web Server Logs     | nginx / apache access+error                                        | Webshell, traversal, SQLi — ranked by HTTP status               |
+| 19 | Web Server Logs     | nginx / apache access+error                                        | Webshell, traversal, SQLi, ranked by HTTP status               |
 | 20 | Cloud Credentials   | `~/.aws`, `~/.kube`, `~/.docker`, `~/.ssh`                     | Keys granting access to the wider infrastructure                |
 | 21 | SUID & Capabilities | filesystem scan                                                    | Privilege escalation surface, unexpected SUID                   |
 | 22 | SQLite Recovery *(cross-OS)* | freelist, unallocated space                               | Content of **deleted** records still on disk                    |
@@ -439,7 +495,7 @@ Scan artifacts for matches with indicators of compromise.
 Windows does not write registry changes straight into the primary hive: it
 queues them in the transaction logs (`.LOG1` / `.LOG2`) and consolidates them
 only on a clean unmount. A hive taken from a machine powered off abruptly, from
-a disk image or from a snapshot is therefore almost always *dirty* — the most
+a disk image or from a snapshot is therefore almost always *dirty*, the most
 recent writes, frequently the attacker's, exist **only** in the logs.
 
 FIUTO replays those logs by default onto a **temporary copy**; the evidence
@@ -476,7 +532,7 @@ touching them.
 ./fiuto.sh /mnt/disk --all --no-custody     # disable the manifest entirely
 ```
 
-Files above the size limit (1 GB by default — `pagefile.sys`, `$MFT`,
+Files above the size limit (1 GB by default, `pagefile.sys`, `$MFT`,
 `Windows.edb`) are still listed, with the reason the hash is missing rather
 than silently omitting it.
 
@@ -493,7 +549,7 @@ ends up in a client email or a ticket attachment.
 ```
 
 **The original is never touched.** A `report.redacted.html` appears next to it.
-Redacting in place would destroy evidence for a communication need — a trade the
+Redacting in place would destroy evidence for a communication need, a trade the
 tool has no business making on your behalf. The custody manifest lists both,
 with distinct roles.
 
@@ -501,8 +557,8 @@ with distinct roles.
 hex strings: the first is a exhibit's integrity fingerprint and removing it would
 break the chain of custody in the very file you are about to share; the second is
 a credential. What tells them apart is the label beside them, so the rules look at
-the field, not at the value. Labels stay — knowing *that* there was a password is
-part of the analysis — and only values go.
+the field, not at the value. Labels stay, knowing *that* there was a password is
+part of the analysis, and only values go.
 
 Every copy declares in its header that it is not the original, and lists how
 many occurrences each rule removed. A file that looks like a report but is not
@@ -519,10 +575,10 @@ Indicators are **typed on load** and matched with the boundaries their type
 deserves. Plain substring matching, which is what FIUTO did until 2.2, was wrong
 in two opposite directions:
 
-- **false positives** — `10.0.0.5` matches inside `110.0.0.55`, `evil.com`
+- **false positives**, `10.0.0.5` matches inside `110.0.0.55`, `evil.com`
   matches inside `notevil.com.au`. In a report with a hundred thousand rows that
   is not annoying noise: it is noise that hides the real hits;
-- **false negatives** — indicators almost always arrive defanged (`hxxp://`,
+- **false negatives**, indicators almost always arrive defanged (`hxxp://`,
   `1[.]2[.]3[.]4`, `evil[.]com`), because that is how they are written in a mail
   or an advisory. Searched literally they match nothing, and the analyst
   concludes the disk is clean.
@@ -533,7 +589,7 @@ not a longer suffix (`evil.com.other.net`). Hashes are case-insensitive tokens.
 A value between slashes (`/inv[o0]ke/`) is a regular expression.
 
 Types are inferred from the value; `type:value` overrides the guess where the
-guess cannot win (`file:payload.com` — a filename or a domain?). The count per
+guess cannot win (`file:payload.com`, a filename or a domain?). The count per
 type is printed on load, which is what makes a misread file obvious: forty
 `literal` where forty hashes were expected is a format problem, and without that
 line it would only surface as an absence of matches.
@@ -548,8 +604,8 @@ loading braces as a literal indicator would make it match everywhere.
 ./fiuto.sh /mnt/disk --all --jobs 4
 ```
 
-Opt-in, not the default. Modules are independent — different files in, different
-folders out — but on a volume mounted from a spinning disk or over the network,
+Opt-in, not the default. Modules are independent, different files in, different
+folders out, but on a volume mounted from a spinning disk or over the network,
 N readers are *slower* than one. The bottleneck here is almost always I/O rather
 than CPU, and only the person running the analysis knows which one they have.
 
@@ -558,14 +614,14 @@ parallelism**: same reports, same order in the summary. A result that changes
 with `--jobs` is a result you cannot rely on, and in expert-witness work that is
 worse than a slow tool. There are tests for exactly this.
 
-Modules flagged `defer` — the Master Timeline, which aggregates the others — run
+Modules flagged `defer`, the Master Timeline, which aggregates the others, run
 last, alone, once the pool has drained *and* the other results have been
 collected. They read the list of generated reports, so running them any earlier
 would produce an empty timeline without saying so.
 
 Registry hive recovery takes a lock: with several modules asking for the same
 hive at once, the second would otherwise read the reconstructed copy while the
-first is still writing it. A truncated hive raises no error — it just yields
+first is still writing it. A truncated hive raises no error, it just yields
 partial results, which is worse.
 
 ESC to skip a module is not available in parallel: intercepting it needs
@@ -583,7 +639,7 @@ team or a national CERT hands you `.yar` files. FIUTO applies them.
 ./fiuto.sh /mnt/disk --all --yara /rules/ --yara-max-mb 256
 ```
 
-Requires `yara-python`. There is no fallback if it is missing — a YARA scan
+Requires `yara-python`. There is no fallback if it is missing, a YARA scan
 without YARA is not a scan, and the module says so instead of pretending.
 
 **The delicate part is scope.** Walking a terabyte volume file by file is not
@@ -595,7 +651,7 @@ replaces that set with a path of your choosing.
 
 The report then **lists exactly what was scanned**, per location and with file
 counts, plus what was skipped and why: files over the per-file cap, unreadable
-files, and whether the overall file cap was hit — in which case the scan is
+files, and whether the overall file cap was hit, in which case the scan is
 labelled PARTIAL. Symlinks are never followed: on a mounted volume they would
 lead out of the evidence and into the analysis workstation's own file system.
 Without that accounting, "no match" would read as "the disk is clean"; with it,
@@ -640,7 +696,7 @@ What it deliberately does **not** do:
 
 Encryption is detected **before** privileges are demanded: "this partition is
 BitLocker and you gave me no key" is knowable as a normal user, and is more
-useful than "you need root" — it saves re-running under sudo only to find out
+useful than "you need root", it saves re-running under sudo only to find out
 the key was missing. On a multi-partition image without `--partition`, FIUTO
 **refuses to choose**: picking one at random means analysing the wrong partition
 and never noticing.
@@ -670,7 +726,7 @@ into a triage.
 
 Requires `pyyaml` and `python-evtx`.
 
-**The supported subset is declared, not implied.** Sigma is a broad language —
+**The supported subset is declared, not implied.** Sigma is a broad language,
 base64 modifiers, CIDR, parenthesised conditions, temporal aggregations.
 Implementing a part of it and pretending to support all of it would mean a rule
 that was never evaluated shows up as a rule that did not fire: a silent false
@@ -696,8 +752,8 @@ evaluation PARTIAL if the record cap was reached.
 
 ### Executive summary
 
-Ninety HTML reports are a dump, not an analysis. At the end of `--all` — and
-from `[S]` in the menu, for the reports produced so far — FIUTO writes an
+Ninety HTML reports are a dump, not an analysis. At the end of `--all`, and
+from `[S]` in the menu, for the reports produced so far, FIUTO writes an
 `executive_summary.html` and a machine-readable `findings.json` next to them.
 
 It answers two questions: **where do I start** and **what happened alongside
@@ -706,20 +762,20 @@ analyst's conclusion, and the page says so at the top.
 
 Findings come from three substrates, in decreasing order of reliability:
 
-1. **rows the modules already flagged** — every module passes its own keyword
+1. **rows the modules already flagged**, every module passes its own keyword
    list to the log renderer; a flagged row is a judgement by someone who knows
    the artefact;
 2. **IoC matches**, when `--ioc` was used;
 3. **an explicit rule table**, deliberately small, each rule carrying a MITRE
    ATT&CK technique and an explanation of why that data matters.
 
-Rules run **only on the data** — table rows and log lines — never on the
+Rules run **only on the data**, table rows and log lines, never on the
 explanatory notes FIUTO itself writes into the reports. A detection engine
 reading the whole page would fire on its own prose; there is a test for this.
 
 **Cross-module correlation** is what no single report can show. Events from all
 reports are clustered in 30-minute windows; when a window contains modules
-matching a known scenario, the summary states the hypothesis — for example
+matching a known scenario, the summary states the hypothesis, for example
 removable media connected while LNK files were opened and the USN journal
 recorded changes. These are **hypotheses to verify**, and the page labels them
 as such: temporal coincidence is not causation.
@@ -727,7 +783,7 @@ as such: temporal coincidence is not causation.
 The **priority score** is the sum of finding weights (critical 40, high 15,
 medium 5, low 1) capped at 100. It orders the work queue; it does not measure
 compromise, and the report prints the formula so the number is never taken for
-more than it is. Equally, no findings is not a clean bill of health — it means
+more than it is. Equally, no findings is not a clean bill of health, it means
 a small, conservative rule set found nothing.
 
 ### Time window (`--since` / `--until`)
@@ -750,7 +806,7 @@ The filter applies to tables and to `<pre>` log blocks alike, and to the JSONL
 export, so the two views of a module cannot contradict each other. Two rules
 keep it from removing evidence:
 
-- **rows carrying no date are always kept** — they cannot be evaluated;
+- **rows carrying no date are always kept**, they cannot be evaluated;
 - a row carrying **several** dates is kept if *any* of them falls in the window
   (a file created before the window but used inside it stays).
 
@@ -760,8 +816,8 @@ be mistaken for an empty one. Line numbers in `<pre>` blocks stay those of the
 original file: the gaps are the visible sign that something was removed.
 
 **On timezones.** FIUTO detects the volume's timezone (`/etc/timezone`,
-`/etc/localtime`, `SYSTEM\Control\TimeZoneInformation`) and declares it — at
-startup, in the manifest and in every JSONL record — but does **not** convert
+`/etc/localtime`, `SYSTEM\Control\TimeZoneInformation`) and declares it, at
+startup, in the manifest and in every JSONL record, but does **not** convert
 anything. Artefacts on a single volume mix UTC (registry, Windows event logs)
 and local time (syslog, shell history); converting blindly would shift events by
 hours, which is far worse than dates that are honestly ambiguous. The window
@@ -878,7 +934,7 @@ parsers embedded as heredocs on both Python 3.9 and 3.12.
 That last job is not decoration: `bash -n` treats heredocs as opaque text, so a
 syntax error inside an embedded parser stays invisible until that module runs on
 a real disk. It is how a long-standing defect in module 38 (PAD Offline) was
-found — the block never compiled, so the module had never produced output.
+found, the block never compiled, so the module had never produced output.
 
 ## 🤝 Contributing
 
@@ -896,7 +952,7 @@ If you have improvements, bug reports, or additional modules:
 
 This project is **free** and distributed under the **MIT License**.
 
-If FIUTO has been useful to you and you'd like to support its development, a small donation via PayPal is always appreciated — but entirely optional! 🙏
+If FIUTO has been useful to you and you'd like to support its development, a small donation via PayPal is always appreciated, but entirely optional! 🙏
 
 [![Donate via PayPal](https://img.shields.io/badge/Donate-PayPal-blue.svg)](https://paypal.me/rendina)
 
@@ -950,6 +1006,29 @@ Tutto rigorosamente **offline**, sul filesystem montato in sola lettura.
 
 All'avvio FIUTO elenca i volumi montati con un badge OS (`[Windows]` / `[Linux]` / `[macOS]`) e, una volta selezionato il volume, mostra solo i moduli applicabili a quel sistema operativo.
 
+### Il motore, *novità della v2.3*
+
+Oltre a raccogliere artefatti, FIUTO dichiara cosa ha fatto e cosa non ha potuto fare:
+
+- **Catena di custodia**, `evidence_manifest.json` con lo SHA-256 di ogni file
+  letto e di ogni report prodotto, il comando eseguito, l'operatore e l'host.
+- **Executive summary**, riscontri ordinati per severità con la loro tecnica
+  MITRE, e correlazioni temporali cross-modulo presentate come ipotesi da
+  verificare.
+- **Motori di detection**, `--yara` e `--sigma`, ognuno con il proprio ambito
+  dichiarato: cosa è stato guardato, e quali regole non sono state valutate e
+  perché.
+- **Immagini forensi**, `--image` monta E01/raw, LUKS e BitLocker, in sola
+  lettura per costruzione a ogni anello della catena.
+- **Finestra temporale**, `--since`/`--until`, con il fuso del volume rilevato e
+  dichiarato ma mai convertito in silenzio.
+- **`--redact`**, copia condivisibile senza credenziali, accanto a un originale
+  che non viene toccato.
+- **`--jobs N`**, esecuzione parallela il cui esito non dipende dal grado di
+  parallelismo.
+- **Motore IoC tipizzato**, `--ioc` con i confini giusti per tipo, input
+  defanged, import STIX 2.x e MISP.
+
 ### Copertura Completa di Artefatti Windows
 
 Sui volumi Windows FIUTO raccoglie e analizza:
@@ -963,16 +1042,16 @@ Sui volumi Windows FIUTO raccoglie e analizza:
 - **Memoria virtuale** (Pagefile, Hibernation, SRUM)
 - **Dispositivi rimovibili** (Cronologia USB, storia delle connessioni)
 - **Active Directory** (NTDS.dit, hash domain, PAD offline analysis)
-- **Cronologia chat con assistenti AI** (ChatGPT, Copilot, Claude, Cursor, Gemini, Codex, Windsurf, Continue) — *novità v1.2*
+- **Cronologia chat con assistenti AI** (ChatGPT, Copilot, Claude, Cursor, Gemini, Codex, Windsurf, Continue), *novità v1.2*
 - **E molto altro...**
 
-### Copertura Artefatti Linux — *novità v2.0*
+### Copertura Artefatti Linux, *novità v2.0*
 
 Sui volumi Linux: log di sistema (`/var/log`) e **systemd journal**; **login** (`wtmp`/`btmp`/`lastlog`); **history shell** (bash/zsh/sh + python/mysql/psql) e **AI CLI**; **browser** (Firefox/Chrome/Chromium/Brave, anche snap/flatpak); **account** (`passwd`/`shadow`/`group`/`sudoers`); **persistenza** (cron, systemd, autostart, `rc.local`, init shell, `ld.so.preload`); **SSH** (`authorized_keys`, `known_hosts`, `sshd_config`); **rete** (`hosts`, PSK Wi-Fi NetworkManager, netplan, iptables/nftables); **pacchetti** (dpkg/rpm/apt history/snap); **cestino e recenti** (`Trash` con data cancellazione, `recently-used.xbel`); **timeline MAC-time**.
 
-### Copertura Artefatti macOS — *novità v2.0*
+### Copertura Artefatti macOS, *novità v2.0*
 
-Sui volumi macOS: **log** (`system.log`, `install.log`, ASL — i unified log `.tracev3` sono fuori scope); **account** dslocal (`*.plist`); **persistenza** (`LaunchAgents`/`LaunchDaemons` di sistema e per-utente, cron — plist binari resi leggibili); **Login Items/BTM**; **quarantine** (`QuarantineEventsV2`, URL+data download); **TCC** (permessi privacy); **KnowledgeC** (uso app); **browser** (Safari/Chrome/Firefox); **history shell & AI**; **recenti** (`SFL`/`SFL2`, `.Trash`).
+Sui volumi macOS: **log** (`system.log`, `install.log`, ASL, i unified log `.tracev3` sono fuori scope); **account** dslocal (`*.plist`); **persistenza** (`LaunchAgents`/`LaunchDaemons` di sistema e per-utente, cron, plist binari resi leggibili); **Login Items/BTM**; **quarantine** (`QuarantineEventsV2`, URL+data download); **TCC** (permessi privacy); **KnowledgeC** (uso app); **browser** (Safari/Chrome/Firefox); **history shell & AI**; **recenti** (`SFL`/`SFL2`, `.Trash`).
 
 ### Modalità di Esecuzione Flessibili
 
@@ -1004,11 +1083,21 @@ Sui volumi macOS: **log** (`system.log`, `install.log`, ASL — i unified log `.
 - **Python 3.9+** (con module di compatibilità multiple versioni)
 - **Linux (anche WSL) o macOS** (per montare/analizzare dischi Windows offline)
 
+### Tutto in una volta
+
+```bash
+pip install -r requirements.txt
+```
+
+`requirements.txt` fissa le versioni con cui FIUTO è testato. Oppure salta del
+tutto la questione con l'[immagine Docker](#-docker-consigliato), che le contiene
+tutte e sa dirtelo con `--deps`.
+
 ### Moduli Python Richiesti
 
 ```bash
 pip install regipy          # Parsing hive di registro offline + replay .LOG1/.LOG2
-pip install python-evtx     # Lettura dei file .evtx
+pip install python-evtx     # Lettura dei file .evtx (modulo 12 e motore Sigma)
 ```
 
 ### Consigliati per la copertura Windows completa
@@ -1017,14 +1106,37 @@ Queste librerie abilitano l'output completo di alcuni moduli Windows. Sono **opz
 
 ```bash
 pip install impacket          # Hash SAM / NTDS.dit / AD (moduli 20, 24, 38)
-pip install libesedb-python   # Parsing database ESE — SRUM (modulo 16)
+pip install libesedb-python   # Parsing database ESE, SRUM (modulo 16)
 pip install mft               # MFT timeline (modulo 21)
-pip install python-snappy     # Decompressione LevelDB ChatGPT (modulo 39) — oppure: pip install cramjam
+pip install python-snappy     # Decompressione LevelDB ChatGPT (modulo 39), oppure: pip install cramjam
 pip install libpff-python     # Parsing PST/OST di Outlook (modulo 44)
 pip install libesedb-python   # WebCacheV01 e Windows.edb (moduli 49, 50)
 ```
 
-> **I moduli Linux e macOS non richiedono pacchetti aggiuntivi** — usano solo la libreria standard di Python (`sqlite3`, `plistlib`, …). Facoltativamente, `journalctl` (per il journal systemd) e la CLI `rpm` (per il dump RPM offline) migliorano la copertura se presenti.
+### Richiesti dai motori di detection
+
+A differenza dei precedenti questi non degradano: senza, il modulo si rifiuta di
+partire, perché una scansione YARA senza YARA non è una scansione.
+
+```bash
+pip install yara-python     # --yara
+pip install pyyaml          # --sigma (le regole Sigma sono YAML)
+```
+
+### Strumenti di sistema per `--image`
+
+Servono solo a montare immagini forensi e volumi cifrati; tutto il resto
+funziona senza.
+
+| Strumento | Pacchetto | Cosa abilita |
+|---|---|---|
+| `ewfmount` | `ewf-tools` | immagini E01 / Ex01 |
+| `mmls` | `sleuthkit` | tabella delle partizioni e offset |
+| `losetup`, `mount` | `util-linux` | immagini raw/dd (serve root) |
+| `cryptsetup` | `cryptsetup-bin` | volumi LUKS |
+| `dislocker` | `dislocker` | volumi BitLocker |
+
+> **I moduli Linux e macOS non richiedono pacchetti aggiuntivi**, usano solo la libreria standard di Python (`sqlite3`, `plistlib`, …). Facoltativamente, `journalctl` (per il journal systemd) e la CLI `rpm` (per il dump RPM offline) migliorano la copertura se presenti.
 
 ### Script di Supporto
 
@@ -1040,7 +1152,7 @@ Lo script utilizza internamente helper bash per:
 
 L'attrito maggiore con FIUTO non è il tool: sono regipy, python-evtx, libesedb,
 libpff, yara-python e PyYAML. Finché mancano, i moduli che le usano si degradano
-— lo dichiarano, ma si degradano — e "nessun match" diventa ambiguo. L'immagine
+, lo dichiarano, ma si degradano, e "nessun match" diventa ambiguo. L'immagine
 toglie quell'ambiguità.
 
 ```bash
@@ -1062,8 +1174,8 @@ Le due opzioni non sono decorative:
   registra un operatore che non è chi ha eseguito l'analisi. Anche di questo
   l'entrypoint avvisa.
 
-Nessuno dei due avvisi è bloccante — chi sa cosa sta facendo deve poter
-procedere — ma nessuno dei due resta implicito.
+Nessuno dei due avvisi è bloccante, chi sa cosa sta facendo deve poter
+procedere, ma nessuno dei due resta implicito.
 
 ```bash
 docker run --rm ghcr.io/fabriren/fiuto --deps
@@ -1104,10 +1216,12 @@ docker build -t fiuto .
 3. **Installa le dipendenze Python**
 
    ```bash
+   pip install -r requirements.txt
+   # Oppure il minimo indispensabile:
    pip install regipy python-evtx
-   # Su macOS con Homebrew:
-   # python3 -m pip install --user regipy python-evtx
    ```
+
+   Preferisci non installare niente? Usa l'[immagine Docker](#-docker-consigliato).
 
 4. **Monta il disco target in sola lettura (esempi)**
 
@@ -1215,7 +1329,7 @@ fiuto_reports/
 | 42 | LSA Secrets & DCC2            | Registry SECURITY                   | Password account di servizio, credenziali di dominio in cache         |
 | 43 | Volume Shadow Copies          | System Volume Information           | Snapshot precedenti del volume, analisi differenziale                 |
 | 44 | Outlook PST / OST             | *.pst, *.ost (libpff)               | Posta locale, allegati, item cancellati                               |
-| 45 | Cloud Sync                    | OneDrive, Dropbox, Google Drive     | File sincronizzati — la via di esfiltrazione moderna                  |
+| 45 | Cloud Sync                    | OneDrive, Dropbox, Google Drive     | File sincronizzati, la via di esfiltrazione moderna                  |
 | 46 | BITS Jobs                     | qmgr.db                             | Download in background usati come LOLBin (T1197)                      |
 | 47 | Thumbcache                    | thumbcache_*.db                     | Miniature di file **cancellati**, estratte per carving                |
 | 48 | Chat Desktop                  | Slack / Teams / Discord (LevelDB)   | Social engineering interno, file condivisi in chat private            |
@@ -1250,7 +1364,7 @@ fiuto_reports/
 | 16 | Master Timeline     | (Aggregato)                                                        | Timeline cronologica cross-modulo (con `--all` gira per ultima) |
 | 17 | PAM                 | `/etc/pam.d`, `security/*.so`                                    | Backdoor di autenticazione, moduli non pacchettizzati           |
 | 18 | Kernel Modules      | `lib/modules`, `modprobe.d`, initramfs                           | Rootkit LKM, direttive `install`, `.ko` non pacchettizzati      |
-| 19 | Web Server Logs     | nginx / apache access+error                                        | Webshell, traversal, SQLi — ordinati per stato HTTP             |
+| 19 | Web Server Logs     | nginx / apache access+error                                        | Webshell, traversal, SQLi, ordinati per stato HTTP             |
 | 20 | Cloud Credentials   | `~/.aws`, `~/.kube`, `~/.docker`, `~/.ssh`                     | Chiavi che danno accesso all'infrastruttura                     |
 | 21 | SUID & Capabilities | scansione filesystem                                               | Superficie di privilege escalation, SUID inattesi               |
 | 22 | SQLite Recovery *(cross-OS)* | freelist, spazio non allocato                             | Contenuto di record **cancellati** ancora sul disco             |
@@ -1327,8 +1441,8 @@ Scansiona gli artefatti per trovare match con indicatori di compromissione.
 Windows non scrive subito le modifiche nell'hive primario: le accoda nei
 transaction log (`.LOG1` / `.LOG2`) e le consolida solo a uno smontaggio
 pulito. Un hive acquisito da una macchina spenta a caldo, da un'immagine o da
-uno snapshot è quindi quasi sempre *dirty*: le scritture più recenti — spesso
-proprio quelle dell'attaccante — esistono **solo** nei log.
+uno snapshot è quindi quasi sempre *dirty*: le scritture più recenti, spesso
+proprio quelle dell'attaccante, esistono **solo** nei log.
 
 FIUTO li riapplica di default su una **copia temporanea**; il volume di
 evidenza non viene mai toccato. Su un hive di test reale questo ha recuperato
@@ -1364,7 +1478,7 @@ futuro sono coperti senza doverli toccare.
 ./fiuto.sh /mnt/disk --all --no-custody     # disattiva del tutto il manifesto
 ```
 
-I file oltre la soglia (1 GB di default — `pagefile.sys`, `$MFT`,
+I file oltre la soglia (1 GB di default, `pagefile.sys`, `$MFT`,
 `Windows.edb`) restano elencati, con il motivo per cui manca l'hash invece di
 ometterlo in silenzio.
 
@@ -1389,8 +1503,8 @@ elenca entrambi, con ruoli distinti.
 entrambe stringhe esadecimali: il primo è l'impronta di integrità di un reperto
 e rimuoverlo spezzerebbe la catena di custodia proprio nel file che stai per
 condividere, il secondo è una credenziale. A distinguerli è l'etichetta accanto,
-quindi le regole guardano il campo e non il valore. Le etichette restano —
-sapere *che* c'era una password è un dato dell'analisi — e spariscono solo i
+quindi le regole guardano il campo e non il valore. Le etichette restano,
+sapere *che* c'era una password è un dato dell'analisi, e spariscono solo i
 valori.
 
 Ogni copia dichiara in testa di non essere l'originale, ed elenca quante
@@ -1408,10 +1522,10 @@ Gli indicatori vengono **tipizzati al caricamento** e confrontati con i confini
 che il loro tipo merita. Il match a sottostringa, che è quello che FIUTO faceva
 fino alla 2.2, sbagliava in due direzioni opposte:
 
-- **falsi positivi** — `10.0.0.5` corrisponde dentro `110.0.0.55`, `evil.com`
+- **falsi positivi**, `10.0.0.5` corrisponde dentro `110.0.0.55`, `evil.com`
   dentro `notevil.com.au`. In un report da centomila righe non è rumore
   fastidioso: è rumore che nasconde i match veri;
-- **falsi negativi** — gli indicatori arrivano quasi sempre defanged
+- **falsi negativi**, gli indicatori arrivano quasi sempre defanged
   (`hxxp://`, `1[.]2[.]3[.]4`, `evil[.]com`), perché è così che si scrivono in
   una mail o in un bollettino. Cercati alla lettera non corrispondono a niente,
   e l'analista conclude che il disco è pulito.
@@ -1422,7 +1536,7 @@ confini. Un dominio corrisponde nei propri sottodomini (`mail.evil.com` per
 sono token case-insensitive. Un valore fra slash (`/inv[o0]ke/`) è una regex.
 
 Il tipo si deduce dal valore; `tipo:valore` forza la mano dove l'euristica non
-può vincere (`file:payload.com` — nome di file o dominio?). Il conteggio per
+può vincere (`file:payload.com`, nome di file o dominio?). Il conteggio per
 tipo viene stampato al caricamento, ed è ciò che rende evidente un file letto
 male: quaranta `literal` al posto di quaranta hash sono un errore di formato, e
 senza quella riga lo si scoprirebbe solo dall'assenza di match.
@@ -1438,8 +1552,8 @@ ovunque.
 ./fiuto.sh /mnt/disk --all --jobs 4
 ```
 
-Opt-in, non il default. I moduli sono indipendenti — leggono file diversi e
-scrivono in cartelle diverse — ma su un volume montato da disco meccanico o via
+Opt-in, non il default. I moduli sono indipendenti, leggono file diversi e
+scrivono in cartelle diverse, ma su un volume montato da disco meccanico o via
 rete N lettori vanno *più piano* di uno. Il collo di bottiglia qui è quasi
 sempre l'I/O e non la CPU, e qual è lo sa solo chi sta analizzando.
 
@@ -1448,21 +1562,21 @@ report, stesso ordine nel riepilogo. Un risultato che cambia con `--jobs` è un
 risultato di cui non ci si può fidare, e in ambito peritale è peggio di un tool
 lento. Ci sono test dedicati esattamente a questo.
 
-I moduli marcati `defer` — la Master Timeline, che aggrega gli altri — girano
+I moduli marcati `defer`, la Master Timeline, che aggrega gli altri, girano
 per ultimi, da soli, quando il pool si è svuotato *e* gli esiti degli altri sono
 stati raccolti. Leggono l'elenco dei report generati, quindi eseguirli prima
 produrrebbe una timeline vuota senza dirlo.
 
 Il recupero degli hive di registro prende un lock: con più moduli che chiedono
 lo stesso hive insieme, il secondo leggerebbe la copia ricostruita mentre il
-primo la sta ancora scrivendo. Un hive troncato non dà errore — dà risultati
+primo la sta ancora scrivendo. Un hive troncato non dà errore, dà risultati
 parziali, che è peggio.
 
 In parallelo l'interruzione con ESC non è disponibile: intercettarla richiede il
 controllo esclusivo del terminale. Viene dichiarato all'avvio, invece di lasciare
 che il tasto smetta di funzionare senza spiegazione.
 
-### YARA — regole esterne (`--yara`)
+### YARA, regole esterne (`--yara`)
 
 YARA è il formato con cui l'industria distribuisce le firme: un feed di threat
 intelligence, l'IR di un vendor o il CERT nazionale mandano file `.yar`. FIUTO
@@ -1474,7 +1588,7 @@ li applica.
 ./fiuto.sh /mnt/disk --all --yara /regole/ --yara-max-mb 256
 ```
 
-Richiede `yara-python`. Se manca non c'è alcun ripiego — una scansione YARA
+Richiede `yara-python`. Se manca non c'è alcun ripiego, una scansione YARA
 senza YARA non è una scansione, e il modulo lo dice invece di fingere.
 
 **Il punto delicato è l'ambito.** Scansionare un volume da un terabyte file per
@@ -1488,7 +1602,7 @@ indicato da te.
 Il report **elenca esattamente cosa è stato scansionato**, posizione per
 posizione e con i conteggi, più cosa è stato saltato e perché: i file oltre il
 tetto per file, quelli illeggibili, e se il tetto complessivo è stato raggiunto
-— nel qual caso la scansione è marcata PARZIALE. I symlink non vengono mai
+, nel qual caso la scansione è marcata PARZIALE. I symlink non vengono mai
 seguiti: su un volume montato porterebbero fuori dall'evidenza, fino al file
 system della workstation di analisi. Senza questa contabilità un "nessun match"
 si leggerebbe come "il disco è pulito"; con essa si legge per quello che è.
@@ -1533,7 +1647,7 @@ Cosa **non** fa, deliberatamente:
 
 La cifratura si rileva **prima** di pretendere i privilegi: "questa partizione è
 BitLocker e non mi hai dato la chiave" si sa da utente normale, ed è più utile
-di "serve root" — evita di rilanciare con sudo per scoprire solo allora che
+di "serve root", evita di rilanciare con sudo per scoprire solo allora che
 mancava la chiave. Su un'immagine multi-partizione senza `--partition` FIUTO
 **si rifiuta di scegliere**: prenderne una a caso significa analizzare la
 partizione sbagliata e non accorgersene mai.
@@ -1550,7 +1664,7 @@ docker run --rm -it --privileged \
   ghcr.io/fabriren/fiuto --image /img/disco.E01 --partition 002 --all
 ```
 
-### Sigma — detection della comunità (`--sigma`, Windows)
+### Sigma, detection della comunità (`--sigma`, Windows)
 
 Sigma è il formato in cui la comunità pubblica le detection: SigmaHQ, i CERT e
 i vendor distribuiscono migliaia di regole YAML. Applicarle agli EVTX di un
@@ -1564,7 +1678,7 @@ trasforma una raccolta di log in un triage.
 Richiede `pyyaml` e `python-evtx`.
 
 **Il sottoinsieme supportato è dichiarato, non implicito.** Sigma è un
-linguaggio ampio — modificatori base64, CIDR, condizioni con parentesi,
+linguaggio ampio, modificatori base64, CIDR, condizioni con parentesi,
 aggregazioni temporali. Implementarne una parte e far finta di supportarlo
 tutto significherebbe che una regola mai valutata compare come una regola che
 non è scattata: un falso negativo silenzioso, il difetto peggiore che una
@@ -1589,8 +1703,8 @@ valutazione PARZIALE se il tetto è stato raggiunto.
 
 ### Executive summary (riepilogo di sessione)
 
-Novanta report HTML sono un dump, non un'analisi. Al termine di `--all` — e da
-`[S]` nel menu, sui report prodotti fino a quel momento — FIUTO scrive accanto
+Novanta report HTML sono un dump, non un'analisi. Al termine di `--all`, e da
+`[S]` nel menu, sui report prodotti fino a quel momento, FIUTO scrive accanto
 a loro un `executive_summary.html` e un `findings.json` leggibile da programma.
 
 Risponde a due domande: **da dove comincio** e **cosa è successo insieme a
@@ -1599,14 +1713,14 @@ conclusione dell'analista, e la pagina lo dice in testa.
 
 I riscontri vengono da tre sostrati, in ordine di affidabilità decrescente:
 
-1. **le righe che i moduli hanno già marcato** — ogni modulo passa le proprie
+1. **le righe che i moduli hanno già marcato**, ogni modulo passa le proprie
    parole chiave al renderer dei log, e una riga marcata è un giudizio di chi
    conosce l'artefatto;
 2. **le corrispondenze con gli IoC**, se è stato usato `--ioc`;
 3. **una tabella di regole esplicite**, deliberatamente piccola, ognuna con la
    sua tecnica MITRE ATT&CK e la spiegazione del perché quel dato conta.
 
-Le regole girano **solo sul dato** — righe di tabella e righe di log — mai sui
+Le regole girano **solo sul dato**, righe di tabella e righe di log, mai sui
 cartigli esplicativi che FIUTO stesso scrive nei report. Un motore di detection
 che leggesse l'intera pagina scatterebbe sulla propria prosa: c'è un test che
 lo presidia.
@@ -1614,7 +1728,7 @@ lo presidia.
 La **correlazione cross-modulo** è ciò che nessun report singolo può mostrare.
 Gli eventi di tutti i report vengono raggruppati in finestre di 30 minuti;
 quando una finestra contiene moduli che corrispondono a uno scenario noto, il
-riepilogo enuncia l'ipotesi — per esempio un supporto rimovibile collegato
+riepilogo enuncia l'ipotesi, per esempio un supporto rimovibile collegato
 mentre venivano aperti file LNK e il journal USN registrava modifiche. Sono
 **ipotesi da verificare**, e la pagina le presenta come tali: la coincidenza
 temporale non è un nesso di causa.
@@ -1647,7 +1761,7 @@ Il filtro vale sia per le tabelle sia per i blocchi di log `<pre>`, e per
 l'export JSONL, così le due viste di uno stesso modulo non possono
 contraddirsi. Due regole gli impediscono di cancellare evidenza:
 
-- **le righe prive di data vengono sempre mantenute** — non sono valutabili;
+- **le righe prive di data vengono sempre mantenute**, non sono valutabili;
 - una riga con **più** date resta se *almeno una* cade nella finestra (un file
   creato prima della finestra ma usato dentro non sparisce).
 
@@ -1658,8 +1772,8 @@ restano quelli del file originale, quindi i salti di numerazione sono il segnale
 visibile che qualcosa è stato tolto.
 
 **Sui fusi orari.** FIUTO rileva il fuso del volume (`/etc/timezone`,
-`/etc/localtime`, `SYSTEM\Control\TimeZoneInformation`) e lo dichiara — all'avvio,
-nel manifesto e in ogni record JSONL — ma **non converte niente**. Gli artefatti
+`/etc/localtime`, `SYSTEM\Control\TimeZoneInformation`) e lo dichiara, all'avvio,
+nel manifesto e in ogni record JSONL, ma **non converte niente**. Gli artefatti
 di uno stesso volume mescolano UTC (registro, log eventi Windows) e ora locale
 (syslog, shell history): una conversione applicata alla cieca sposterebbe gli
 eventi di ore, che è molto peggio di date dichiarate ambigue. Il confronto usa
@@ -1795,7 +1909,7 @@ Se hai miglioramenti, segnalazioni di bug o moduli aggiuntivi:
 
 Questo progetto è **gratuito** e distribuito sotto licenza **MIT**.
 
-Se FIUTO ti è stato utile e vuoi supportarne lo sviluppo, una piccola donazione tramite PayPal è sempre apprezzata — ma assolutamente facoltativa! 🙏
+Se FIUTO ti è stato utile e vuoi supportarne lo sviluppo, una piccola donazione tramite PayPal è sempre apprezzata, ma assolutamente facoltativa! 🙏
 
 [![Dona con PayPal](https://img.shields.io/badge/Dona-PayPal-blue.svg)](https://paypal.me/rendina)
 
@@ -1834,7 +1948,7 @@ FIUTO è uno strumento per velocizzare le analisi forensi digitale legittimo, da
 **Date:** 2026-07-31 | **Version:** 2.3
 
 Il motore, non i moduli. La 2.2 aveva portato ventiquattro moduli nuovi; questa
-release lavora su ciò che sta sotto — e su ciò che il tool dichiara di sé.
+release lavora su ciò che sta sotto, e su ciò che il tool dichiara di sé.
 
 **Catena di custodia.** Ogni sessione scrive un `evidence_manifest.json`: file
 consultati con dimensione, data e SHA-256, report prodotti con il loro hash,
@@ -1852,7 +1966,7 @@ sposterebbe gli eventi di ore.
 
 **Executive summary.** `executive_summary.html` e `findings.json`: riscontri
 ordinati per severità con la loro tecnica MITRE, e correlazioni temporali
-cross-modulo — supporto rimovibile collegato mentre venivano aperti LNK e l'USN
+cross-modulo, supporto rimovibile collegato mentre venivano aperti LNK e l'USN
 registrava modifiche, e simili. Sono ipotesi da verificare e la pagina lo dice.
 Il punteggio ordina la coda di lavoro e stampa la propria formula: non misura la
 compromissione, e l'assenza di riscontri non è un attestato di pulizia.
@@ -1878,7 +1992,7 @@ non viene toccato. Si oscura per contesto e non per forma: gli SHA-256 dei
 reperti restano, perché sono integrità e non segreti.
 
 **`--jobs N`.** Esecuzione parallela con esito invariante rispetto al grado di
-parallelismo — stessi report, stesso ordine — verificata dai test.
+parallelismo, stessi report, stesso ordine, verificata dai test.
 
 **Immagine Docker** con tutte le dipendenze, pubblicata su GHCR dai soli tag.
 `--deps` dichiara quali parser contiene, e la CI fallisce se ne manca uno.
@@ -1895,31 +2009,31 @@ La suite di test passa da 53 a **235 casi**.
 
 **Date:** 2026-07-30 | **Version:** 2.2
 
-**Twenty-four new modules.** Windows: eleven. **SetupAPI Device Log** — the only source dating a USB device's *first* connection (the USBSTOR registry keeps the last one). **PowerShell Transcript** — full sessions including command output, invisible to PSReadLine (module 1) when commands come from scripts, `-EncodedCommand` or remoting. **LSA Secrets & DCC2** — cleartext service-account passwords and cached domain credentials from the SECURITY hive, complementing SAM (module 20). **Volume Shadow Copies** — inventory and differential-analysis workflow; their *absence* is reported as an indicator, since deleting them is a standard ransomware step. **Outlook PST/OST** — first local-mail coverage, with risky-attachment and IoC flagging. **Cloud Sync** — OneDrive/Dropbox/Google Drive accounts and synced files: the modern exfiltration path, which leaves no USB artefact. **BITS Jobs** — background downloads abused as a LOLBin (T1197), flagging non-Microsoft hosts, cleartext HTTP and risky targets. **Thumbcache** — thumbnails of deleted files, recovered by signature carving and shown as a gallery beside the report. **Chat Desktop** — Slack/Teams/Discord message fragments carved from LevelDB, flagging sensitive terms. **WebCacheV01** — IE/Edge Legacy history and, more importantly, everything routed through the WinINET APIs, including non-browser code. **Windows Search Index** — indexed paths and content excerpts, which survive file deletion.
+**Twenty-four new modules.** Windows: eleven. **SetupAPI Device Log**, the only source dating a USB device's *first* connection (the USBSTOR registry keeps the last one). **PowerShell Transcript**, full sessions including command output, invisible to PSReadLine (module 1) when commands come from scripts, `-EncodedCommand` or remoting. **LSA Secrets & DCC2**, cleartext service-account passwords and cached domain credentials from the SECURITY hive, complementing SAM (module 20). **Volume Shadow Copies**, inventory and differential-analysis workflow; their *absence* is reported as an indicator, since deleting them is a standard ransomware step. **Outlook PST/OST**, first local-mail coverage, with risky-attachment and IoC flagging. **Cloud Sync**, OneDrive/Dropbox/Google Drive accounts and synced files: the modern exfiltration path, which leaves no USB artefact. **BITS Jobs**, background downloads abused as a LOLBin (T1197), flagging non-Microsoft hosts, cleartext HTTP and risky targets. **Thumbcache**, thumbnails of deleted files, recovered by signature carving and shown as a gallery beside the report. **Chat Desktop**, Slack/Teams/Discord message fragments carved from LevelDB, flagging sensitive terms. **WebCacheV01**, IE/Edge Legacy history and, more importantly, everything routed through the WinINET APIs, including non-browser code. **Windows Search Index**, indexed paths and content excerpts, which survive file deletion.
 
-Both ESE-based modules fall back to string extraction when libesedb cannot open the database — the normal case for a file acquired from a running machine — and state in the report which parser actually produced the data.
+Both ESE-based modules fall back to string extraction when libesedb cannot open the database, the normal case for a file acquired from a running machine, and state in the report which parser actually produced the data.
 
-**Linux: five new modules** — PAM (authentication backdoors), kernel modules and LKM rootkits, web server logs, cloud/development credentials, SUID/capabilities.
+**Linux: five new modules**, PAM (authentication backdoors), kernel modules and LKM rootkits, web server logs, cloud/development credentials, SUID/capabilities.
 
-**macOS: six new modules** — Messages, Safari cookies and downloads, XProtect/Gatekeeper, application inventory, Time Machine/snapshots, and unified logs.
+**macOS: six new modules**, Messages, Safari cookies and downloads, XProtect/Gatekeeper, application inventory, Time Machine/snapshots, and unified logs.
 
 **Chain of custody.** Every session now writes an `evidence_manifest.json` recording tool version, command line, operator, analysed volume, and the SHA-256 of every evidence file consulted and every report produced. Until 2.1 hashing was scattered across a handful of modules and there was no way to answer "which files were read, in what state, and are the attached reports the ones produced then?".
 
-**Executive summary.** At the end of `--all`, an `executive_summary.html` plus a machine-readable `findings.json`: findings ordered by severity, each with its MITRE ATT&CK technique, the data it matched and why that data matters — and cross-module time correlations, which is what no single report can show (removable media connected while LNK files were opened and USN recorded changes, and so on). Findings come mostly from what the modules already flagged themselves; the explicit rule table is deliberately small, and it runs only on the data, never on the explanatory prose FIUTO writes into its own reports. The priority score orders the work queue and prints its own formula: it does not measure compromise, and no findings is not a clean bill of health.
+**Executive summary.** At the end of `--all`, an `executive_summary.html` plus a machine-readable `findings.json`: findings ordered by severity, each with its MITRE ATT&CK technique, the data it matched and why that data matters, and cross-module time correlations, which is what no single report can show (removable media connected while LNK files were opened and USN recorded changes, and so on). Findings come mostly from what the modules already flagged themselves; the explicit rule table is deliberately small, and it runs only on the data, never on the explanatory prose FIUTO writes into its own reports. The priority score orders the work queue and prints its own formula: it does not measure compromise, and no findings is not a clean bill of health.
 
-**Time window `--since` / `--until`.** On a large disk the incident is three days inside years of artefacts. The window applies to tables, to `<pre>` log blocks and to the JSONL export together, so no two views of a module can disagree. It never removes what it cannot judge: rows without a date are kept, and a row with several dates survives if any of them falls in the window. Every filtered block declares how many rows it hid, and the manifest records the window — a filtered report must not be mistakable for an empty one. The volume timezone is detected and declared, but **nothing is converted**: artefacts on one volume mix UTC and local time, and a blind conversion would shift events by hours.
+**Time window `--since` / `--until`.** On a large disk the incident is three days inside years of artefacts. The window applies to tables, to `<pre>` log blocks and to the JSONL export together, so no two views of a module can disagree. It never removes what it cannot judge: rows without a date are kept, and a row with several dates survives if any of them falls in the window. Every filtered block declares how many rows it hid, and the manifest records the window, a filtered report must not be mistakable for an empty one. The volume timezone is detected and declared, but **nothing is converted**: artefacts on one volume mix UTC and local time, and a blind conversion would shift events by hours.
 
-**Two cross-OS modules**, available on all three systems. **SQLite Recovery** — nearly every modern artefact is a SQLite database, and every module reading one sees only the *live* records; a deleted record stays in the file until overwritten, in the freelist or in a page's unallocated space. This module carves it back, which is often the only place a "cleared" history still exists. **EFI System Partition** — code in the ESP runs before the OS, the kernel and any EDR, and survives a full system reinstall; the module inventories it, hashes everything and flags structural anomalies.
+**Two cross-OS modules**, available on all three systems. **SQLite Recovery**, nearly every modern artefact is a SQLite database, and every module reading one sees only the *live* records; a deleted record stays in the file until overwritten, in the freelist or in a page's unallocated space. This module carves it back, which is often the only place a "cleared" history still exists. **EFI System Partition**, code in the ESP runs before the OS, the kernel and any EDR, and survives a full system reinstall; the module inventories it, hashes everything and flags structural anomalies.
 
-**On unified logs.** `.tracev3` was previously declared out of scope. The new module decompresses the LZ4 (`bv41`) chunks the format is built from and extracts the readable strings that emerge — paths, bundle ids, URLs. It does **not** reconstruct log messages: that requires interpreting the catalogue and resolving string references in `.uuidtext` and the dyld shared cache, which is a project of its own. The report states this rather than implying full support; for complete analysis use `log show --archive` on a Mac.
+**On unified logs.** `.tracev3` was previously declared out of scope. The new module decompresses the LZ4 (`bv41`) chunks the format is built from and extracts the readable strings that emerge, paths, bundle ids, URLs. It does **not** reconstruct log messages: that requires interpreting the catalogue and resolving string references in `.uuidtext` and the dyld shared cache, which is a project of its own. The report states this rather than implying full support; for complete analysis use `log show --archive` on a Mac.
 
 **Note on Linux module numbering.** Adding auditd and Containers in this release shifted the Linux Master Timeline from 14 to 16. Scripts pinning `--module 14` on Linux volumes need updating. The registry now supports a `defer` flag so the Master Timeline keeps its number while still running last under `--all`: further modules can be appended without renumbering anything again.
 
-**Internals.** Module dispatch is now data-driven for Windows too: three parallel dispatchers were removed (a hand-written menu and two separate 39-branch `case` statements). Registry entries support bilingual labels and optional guards. Module numbering is unchanged — `--module N` keeps invoking the same modules.
+**Internals.** Module dispatch is now data-driven for Windows too: three parallel dispatchers were removed (a hand-written menu and two separate 39-branch `case` statements). Registry entries support bilingual labels and optional guards. Module numbering is unchanged, `--module N` keeps invoking the same modules.
 
 **Date:** 2026-07-29 | **Version:** 2.1
 
-**Forensic correctness.** Windows registry **transaction logs (`.LOG1`/`.LOG2`) are now replayed by default** onto a temporary copy before parsing — the evidence volume is never written to. Without this step the most recent hive writes are invisible: on a real test hive the replay recovered **+2,456 keys and +3,905 values**. Applies to the four system hives and to every per-user `NTUSER.DAT` / `UsrClass.dat`. Disable with `--no-log-replay`.
+**Forensic correctness.** Windows registry **transaction logs (`.LOG1`/`.LOG2`) are now replayed by default** onto a temporary copy before parsing, the evidence volume is never written to. Without this step the most recent hive writes are invisible: on a real test hive the replay recovered **+2,456 keys and +3,905 values**. Applies to the four system hives and to every per-user `NTUSER.DAT` / `UsrClass.dat`. Disable with `--no-log-replay`.
 
 **New modules.** Linux: **auditd** (`/var/log/audit`, hex-decoded EXECVE arguments and proctitle, breakdown by record type) and **Container forensics** (offline Docker/Podman inventory with container-escape indicators: privileged, host root or Docker socket bind-mounted, `CAP_SYS_ADMIN`, host PID/network namespace). macOS: **FSEvents** (`/.fseventsd` binary parser, the macOS counterpart of the USN Journal) and **Spotlight** (heuristic extraction of download provenance).
 
@@ -1927,13 +2041,13 @@ Both ESE-based modules fall back to string extraction when libesedb cannot open 
 
 **Quality.** First test suite (53 bats tests) and CI: bash syntax, ShellCheck at zero warnings, and compilation of every embedded Python parser on Python 3.9 and 3.12.
 
-**Bug fixes.** Module 38 (PAD Offline) was **entirely non-functional**: four f-strings with nested quoting meant the embedded parser never compiled. `ci_find_file` was defined twice with incompatible semantics, silently breaking relative-path lookups (`recently-used.xbel`). Five `find | xargs` pipelines dropped files whose names contain spaces — which is the norm for Scheduled Tasks and Recent items.
+**Bug fixes.** Module 38 (PAD Offline) was **entirely non-functional**: four f-strings with nested quoting meant the embedded parser never compiled. `ci_find_file` was defined twice with incompatible semantics, silently breaking relative-path lookups (`recently-used.xbel`). Five `find | xargs` pipelines dropped files whose names contain spaces, which is the norm for Scheduled Tasks and Recent items.
 
 **Date:** 2026-06-05 | **Version:** 2.0
-**Multi-OS support**: FIUTO now auto-detects each mounted volume's operating system and proposes the relevant module set — Windows (39 modules, unchanged), **Linux (14 new modules)** and **macOS (11 new modules)**, all strictly offline. Linux coverage: system logs, systemd journal, login history (wtmp/btmp/lastlog), shell & AI CLI history, browsers, accounts, persistence, SSH, network, packages, trash, filesystem timeline, cross-module master timeline. macOS coverage: system logs, dslocal accounts, persistence (LaunchAgents/Daemons), Login Items/BTM, quarantine, TCC, KnowledgeC, browsers, shell & AI history, recent items, cross-module master timeline. New OS-aware menu/dispatch with a data-driven module registry for the Linux/macOS sets, an aggregated **Full HTML dashboard** generated when running all modules, an in-report search bar, and a cross-module **Master Timeline** that collects every timestamped finding.
+**Multi-OS support**: FIUTO now auto-detects each mounted volume's operating system and proposes the relevant module set, Windows (39 modules, unchanged), **Linux (14 new modules)** and **macOS (11 new modules)**, all strictly offline. Linux coverage: system logs, systemd journal, login history (wtmp/btmp/lastlog), shell & AI CLI history, browsers, accounts, persistence, SSH, network, packages, trash, filesystem timeline, cross-module master timeline. macOS coverage: system logs, dslocal accounts, persistence (LaunchAgents/Daemons), Login Items/BTM, quarantine, TCC, KnowledgeC, browsers, shell & AI history, recent items, cross-module master timeline. New OS-aware menu/dispatch with a data-driven module registry for the Linux/macOS sets, an aggregated **Full HTML dashboard** generated when running all modules, an in-report search bar, and a cross-module **Master Timeline** that collects every timestamped finding.
 
 **Date:** 2026-06-05 | **Version:** 1.2
-New **Module 39 — AI Chat / Query History**: recovers AI assistant conversations (ChatGPT, Copilot, Claude, Cursor, Gemini, Codex, Windsurf, Continue) from offline disks. Includes a dependency-free pure-Python Snappy decompressor for ChatGPT LevelDB/IndexedDB (SSTable, WAL and external blob files), user/AI role attribution with product labelling, sensitive-string highlighting, IoC matching and Master Timeline integration.
+New **Module 39, AI Chat / Query History**: recovers AI assistant conversations (ChatGPT, Copilot, Claude, Cursor, Gemini, Codex, Windsurf, Continue) from offline disks. Includes a dependency-free pure-Python Snappy decompressor for ChatGPT LevelDB/IndexedDB (SSTable, WAL and external blob files), user/AI role attribution with product labelling, sensitive-string highlighting, IoC matching and Master Timeline integration.
 
 **Date:** 2026-04-18 | **Version:** 1.1
 Bug fix.
