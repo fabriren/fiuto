@@ -872,7 +872,7 @@ python3 tests/lint_embedded_python.py fiuto.sh   # compile the embedded parsers
 ```
 
 CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs on every push:
-bash syntax, ShellCheck, the bats suite, the Docker image, and compilation of the ~99 Python
+bash syntax, ShellCheck, the bats suite, the Docker image, and compilation of the ~102 Python
 parsers embedded as heredocs on both Python 3.9 and 3.12.
 
 That last job is not decoration: `bash -n` treats heredocs as opaque text, so a
@@ -1770,7 +1770,7 @@ python3 tests/lint_embedded_python.py fiuto.sh   # compila i parser incorporati
 ```
 
 La CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) gira a ogni push:
-sintassi bash, ShellCheck, suite bats, immagine Docker e compilazione dei ~99 parser Python
+sintassi bash, ShellCheck, suite bats, immagine Docker e compilazione dei ~102 parser Python
 incorporati come heredoc, sia su Python 3.9 sia su 3.12.
 
 Quest'ultimo job non è un ornamento: `bash -n` tratta gli heredoc come testo
@@ -1830,6 +1830,68 @@ FIUTO è uno strumento per velocizzare le analisi forensi digitale legittimo, da
 ---
 
 ## 📝 Changelog
+
+**Date:** 2026-07-31 | **Version:** 2.3
+
+Il motore, non i moduli. La 2.2 aveva portato ventiquattro moduli nuovi; questa
+release lavora su ciò che sta sotto — e su ciò che il tool dichiara di sé.
+
+**Catena di custodia.** Ogni sessione scrive un `evidence_manifest.json`: file
+consultati con dimensione, data e SHA-256, report prodotti con il loro hash,
+comando eseguito, operatore, host. La copertura è automatica perché i file
+vengono annotati nelle funzioni che *tutti* i moduli attraversano, non
+modulo per modulo.
+
+**Finestra temporale `--since`/`--until`.** Su un disco grande l'incidente sta
+in tre giorni dentro anni di artefatti. Il filtro vale per tabelle, log e
+export JSONL insieme, non rimuove mai ciò che non può giudicare (le righe senza
+data restano), e ogni blocco filtrato dichiara quante righe ha nascosto. Il
+fuso del volume viene rilevato e **dichiarato ma non convertito**: gli artefatti
+di uno stesso volume mescolano UTC e ora locale, e una conversione alla cieca
+sposterebbe gli eventi di ore.
+
+**Executive summary.** `executive_summary.html` e `findings.json`: riscontri
+ordinati per severità con la loro tecnica MITRE, e correlazioni temporali
+cross-modulo — supporto rimovibile collegato mentre venivano aperti LNK e l'USN
+registrava modifiche, e simili. Sono ipotesi da verificare e la pagina lo dice.
+Il punteggio ordina la coda di lavoro e stampa la propria formula: non misura la
+compromissione, e l'assenza di riscontri non è un attestato di pulizia.
+
+**YARA e Sigma.** `--yara` applica regole esterne a un ambito **limitato e
+elencato nel report**, perché un "nessun match" senza l'elenco di cosa è stato
+guardato si legge come "il disco è pulito". `--sigma` valuta le detection della
+comunità sugli EVTX con un sottoinsieme del linguaggio **dichiarato**: le regole
+non valutabili vengono contate ed elencate con il motivo, perché una regola
+ignorata in silenzio è indistinguibile da una che non ha trovato nulla.
+
+**Immagini forensi.** `--image` monta E01/Ex01 e raw, apre LUKS e BitLocker con
+`--unlock`, e ogni anello della catena è in sola lettura per costruzione.
+FileVault, VMDK, VHDX e QCOW2 sono riconosciuti e rifiutati invece di essere
+letti male.
+
+**Motore IoC riscritto.** Indicatori tipizzati con i confini giusti (`10.0.0.5`
+non corrisponde più dentro `110.0.0.55`), input defanged normalizzato
+(`hxxp://`, `evil[.]com`), import STIX 2.x e MISP.
+
+**`--redact`.** Copia condivisibile senza credenziali, accanto all'originale che
+non viene toccato. Si oscura per contesto e non per forma: gli SHA-256 dei
+reperti restano, perché sono integrità e non segreti.
+
+**`--jobs N`.** Esecuzione parallela con esito invariante rispetto al grado di
+parallelismo — stessi report, stesso ordine — verificata dai test.
+
+**Immagine Docker** con tutte le dipendenze, pubblicata su GHCR dai soli tag.
+`--deps` dichiara quali parser contiene, e la CI fallisce se ne manca uno.
+
+**Difetti corretti.** `--all --jsonl` non produceva alcun JSONL da quando il
+flag esiste: l'esecuzione batch ridefinisce `register_report` e saltava gli
+effetti collaterali. Corse su `recover_hive` e sulla timeline unica con
+`--jobs`. La Master Timeline che, in parallelo, girava prima di vedere gli altri
+report e produceva una timeline vuota senza segnalarlo.
+
+La suite di test passa da 53 a **232 casi**.
+
+---
 
 **Date:** 2026-07-30 | **Version:** 2.2
 

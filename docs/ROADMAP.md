@@ -1,10 +1,11 @@
 # FIUTO — Piano di implementazione
 
-Documento di lavoro per portare FIUTO da 2.1 a 3.0. È pensato per essere
+Documento di lavoro per portare FIUTO da 2.1 a 3.0. Le fasi 1-7 sono complete
+e rilasciate nella 2.3; restano le voci elencate in fondo come debito noto. È pensato per essere
 ripreso a distanza di tempo, anche da un'altra sessione o da un'altra persona:
 ogni fase dichiara **cosa fare**, **dove**, **come verificarlo** e **perché**.
 
-Stato aggiornato al: **2026-07-31** (versione 2.2, **tutte le fasi complete**).
+Stato aggiornato al: **2026-07-31** (versione 2.3, **tutte le fasi complete**).
 
 ---
 

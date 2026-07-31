@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ================================================================
-#  fiuto.sh  –  v2.2
+#  fiuto.sh  –  v2.3
 #  Toolkit DFIR unificato per analisi offline di dischi Windows/Linux/macOS
 #
 #  Uso:
@@ -8,6 +8,7 @@
 #    ./fiuto.sh /mnt/disk              # specifica la root (Windows/Linux/macOS)
 #    ./fiuto.sh /mnt/disk --all        # esegui tutto
 #    ./fiuto.sh /mnt/disk --module 3   # modulo specifico
+#    ./fiuto.sh --image disco.E01 --partition 2 --all   # da immagine forense
 # ================================================================
 #
 #  ATTENZIONE — QUESTO FILE E' GENERATO. NON MODIFICARLO A MANO.
@@ -30,7 +31,7 @@ set -uo pipefail
 
 # Versione del tool. Unica fonte: la usano il banner e il manifesto di catena
 # di custodia, che non devono poter divergere.
-FIUTO_VERSION="2.2"
+FIUTO_VERSION="2.3"
 
 # -- Cleanup globale file temporanei (signal-safe) ----------------
 # La trap EXIT viene invocata su ritorno normale, SIGINT (Ctrl+C),
