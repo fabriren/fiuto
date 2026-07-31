@@ -289,6 +289,32 @@ HTMLEOF
     open_report_prompt "$DASH"
 }
 
+
+# Elenco dei moduli per --help, reso DAI REGISTRI.
+#
+# Era scritto a mano, ed era rimasto fermo a 39 voci con l'intestazione
+# "moduli disponibili (1-50)" mentre i registri ne contavano 54, 24 e 22. E'
+# la stessa deriva che nella Fase 1 aveva portato a togliere il menu scritto a
+# mano: un elenco che non si aggiorna da solo non si aggiorna.
+print_module_list() {
+    local _reg _name _label _entry _f _nm _color _desc
+    for _reg in MODULES_WIN:Windows MODULES_LINUX:Linux MODULES_MACOS:macOS; do
+        _name="${_reg%%:*}"; _label="${_reg##*:}"
+        local -n _R="$_name"
+        echo ""
+        printf "  ${BOLD}%s${RESET} ${DIM}(1-%d)${RESET}\n" "$_label" "${#_R[@]}"
+        local _i=1 _line=""
+        for _entry in "${_R[@]}"; do
+            IFS='|' read -r _f _nm _color _desc <<< "$_entry"
+            _line+=$(printf "%3d %-26s" "$_i" "$(reg_text "$_nm")")
+            if (( _i % 3 == 0 )); then echo -e "   ${_line}"; _line=""; fi
+            _i=$((_i + 1))
+        done
+        [[ -n "$_line" ]] && echo -e "   ${_line}"
+        unset -n _R
+    done
+}
+
 # Estrae dalla forma bilingue "italiano§english" la variante per la lingua
 # corrente. Senza separatore il testo vale per entrambe.
 reg_text() {

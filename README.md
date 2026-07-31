@@ -1889,7 +1889,7 @@ effetti collaterali. Corse su `recover_hive` e sulla timeline unica con
 `--jobs`. La Master Timeline che, in parallelo, girava prima di vedere gli altri
 report e produceva una timeline vuota senza segnalarlo.
 
-La suite di test passa da 53 a **232 casi**.
+La suite di test passa da 53 a **235 casi**.
 
 ---
 

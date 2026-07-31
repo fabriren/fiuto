@@ -72,7 +72,7 @@ main() {
                     echo -e "    riapplicati su una copia temporanea: senza questo passaggio le"
                     echo -e "    scritture piu' recenti dell'hive non sono visibili.${RESET}"
                     echo ""
-                    echo -e "  ${BOLD}Moduli disponibili (1-50):${RESET}"
+                    echo -e "  ${BOLD}Moduli disponibili per sistema operativo:${RESET}"
                 else
                     echo -e "${CYAN}${BOLD}fiuto.sh${RESET} — DFIR Toolkit for offline Windows disk analysis"
                     echo ""
@@ -110,28 +110,12 @@ main() {
                     echo -e "    onto a temporary copy: without this step the most recent hive"
                     echo -e "    writes are not visible.${RESET}"
                     echo ""
-                    echo -e "  ${BOLD}Available modules (1-50):${RESET}"
+                    echo -e "  ${BOLD}Available modules, by operating system:${RESET}"
                 fi
-                echo -e "    1  PowerShell History        2  Notepad TabState"
-                echo -e "    3  IFEO Hijacking            4  BAM"
-                echo -e "    5  Run Keys                  6  Prefetch"
-                echo -e "    7  Scheduled Tasks           8  USB Devices"
-                echo -e "    9  LNK Files                10  RDP Cache"
-                echo -e "   11  Services                 12  Event Log (EVTX)"
-                echo -e "   13  Amcache                  14  Recycle Bin"
-                echo -e "   15  WMI Subscriptions        16  SRUM"
-                echo -e "   17  Browser History          18  UserAssist"
-                echo -e "   19  ShellBags                20  SAM"
-                echo -e "   21  MFT Timeline             22  OpenSave MRU"
-                echo -e "   23  USN Journal              24  NTDS.dit"
-                echo -e "   25  Hibernation/Pagefile     26  WER Files (Error Reports)"
-                echo -e "   27  Credential Manager       28  WLAN Profiles"
-                echo -e "   29  AppX / UWP               30  Browser Downloads"
-                echo -e "   31  Clipboard History        32  Office MRU"
-                echo -e "   33  Defender Quarantine      34  PS ScriptBlock Log"
-                echo -e "   35  JumpLists                36  Network Artifacts"
-                echo -e "   37  Master Timeline          38  PAD Offline AD"
-                echo -e "   39  AI Chat History"
+                print_module_list
+                echo ""
+                echo -e "  ${DIM}$(L "I numeri di --module e --modules si riferiscono al sistema rilevato sul volume." \
+                                     "The numbers used by --module and --modules refer to the OS detected on the volume.")${RESET}"
                 echo ""
                 exit 0
                 ;;

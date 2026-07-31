@@ -167,3 +167,37 @@ setup() {
     head -1 "$SCRIPT" | grep -q 'bash'
     grep -q 'set -uo pipefail' "$SCRIPT"
 }
+
+# L'elenco dei moduli in --help era scritto a mano ed era rimasto fermo a 39
+# voci mentre i registri ne contavano 54, 24 e 22. Ora si rende dai registri:
+# questi test impediscono che qualcuno lo riscriva a mano.
+@test "--help dichiara per ogni OS il numero di moduli del suo registro" {
+    out=$(print_module_list)
+    fail=0
+    for reg in MODULES_WIN MODULES_LINUX MODULES_MACOS; do
+        declare -n R="$reg"
+        grep -q "(1-${#R[@]})" <<< "$out" || { echo "conteggio errato per $reg: ${#R[@]}"; fail=1; }
+        unset -n R
+    done
+    [ "$fail" -eq 0 ]
+}
+
+@test "--help non contiene un conteggio di moduli scritto a mano" {
+    ! grep -qE '(Moduli disponibili|Available modules).*\([0-9]+-[0-9]+\)' "$REPO_ROOT/fiuto.sh"
+}
+
+@test "ogni nome di modulo dei registri compare in --help" {
+    fail=0
+    out=$(print_module_list)
+    for reg in MODULES_WIN MODULES_LINUX MODULES_MACOS; do
+        declare -n R="$reg"
+        for entry in "${R[@]}"; do
+            IFS='|' read -r _f nm _rest <<< "$entry"
+            label=$(reg_text "$nm")
+            # I nomi lunghi vengono troncati dalla colonna: basta il prefisso.
+            grep -qF "${label:0:20}" <<< "$out" || { echo "assente da --help: $label"; fail=1; }
+        done
+        unset -n R
+    done
+    [ "$fail" -eq 0 ]
+}

@@ -3655,6 +3655,32 @@ HTMLEOF
     open_report_prompt "$DASH"
 }
 
+
+# Elenco dei moduli per --help, reso DAI REGISTRI.
+#
+# Era scritto a mano, ed era rimasto fermo a 39 voci con l'intestazione
+# "moduli disponibili (1-50)" mentre i registri ne contavano 54, 24 e 22. E'
+# la stessa deriva che nella Fase 1 aveva portato a togliere il menu scritto a
+# mano: un elenco che non si aggiorna da solo non si aggiorna.
+print_module_list() {
+    local _reg _name _label _entry _f _nm _color _desc
+    for _reg in MODULES_WIN:Windows MODULES_LINUX:Linux MODULES_MACOS:macOS; do
+        _name="${_reg%%:*}"; _label="${_reg##*:}"
+        local -n _R="$_name"
+        echo ""
+        printf "  ${BOLD}%s${RESET} ${DIM}(1-%d)${RESET}\n" "$_label" "${#_R[@]}"
+        local _i=1 _line=""
+        for _entry in "${_R[@]}"; do
+            IFS='|' read -r _f _nm _color _desc <<< "$_entry"
+            _line+=$(printf "%3d %-26s" "$_i" "$(reg_text "$_nm")")
+            if (( _i % 3 == 0 )); then echo -e "   ${_line}"; _line=""; fi
+            _i=$((_i + 1))
+        done
+        [[ -n "$_line" ]] && echo -e "   ${_line}"
+        unset -n _R
+    done
+}
+
 # Estrae dalla forma bilingue "italiano§english" la variante per la lingua
 # corrente. Senza separatore il testo vale per entrambe.
 reg_text() {
@@ -19609,7 +19635,7 @@ main() {
                     echo -e "    riapplicati su una copia temporanea: senza questo passaggio le"
                     echo -e "    scritture piu' recenti dell'hive non sono visibili.${RESET}"
                     echo ""
-                    echo -e "  ${BOLD}Moduli disponibili (1-50):${RESET}"
+                    echo -e "  ${BOLD}Moduli disponibili per sistema operativo:${RESET}"
                 else
                     echo -e "${CYAN}${BOLD}fiuto.sh${RESET} — DFIR Toolkit for offline Windows disk analysis"
                     echo ""
@@ -19647,28 +19673,12 @@ main() {
                     echo -e "    onto a temporary copy: without this step the most recent hive"
                     echo -e "    writes are not visible.${RESET}"
                     echo ""
-                    echo -e "  ${BOLD}Available modules (1-50):${RESET}"
+                    echo -e "  ${BOLD}Available modules, by operating system:${RESET}"
                 fi
-                echo -e "    1  PowerShell History        2  Notepad TabState"
-                echo -e "    3  IFEO Hijacking            4  BAM"
-                echo -e "    5  Run Keys                  6  Prefetch"
-                echo -e "    7  Scheduled Tasks           8  USB Devices"
-                echo -e "    9  LNK Files                10  RDP Cache"
-                echo -e "   11  Services                 12  Event Log (EVTX)"
-                echo -e "   13  Amcache                  14  Recycle Bin"
-                echo -e "   15  WMI Subscriptions        16  SRUM"
-                echo -e "   17  Browser History          18  UserAssist"
-                echo -e "   19  ShellBags                20  SAM"
-                echo -e "   21  MFT Timeline             22  OpenSave MRU"
-                echo -e "   23  USN Journal              24  NTDS.dit"
-                echo -e "   25  Hibernation/Pagefile     26  WER Files (Error Reports)"
-                echo -e "   27  Credential Manager       28  WLAN Profiles"
-                echo -e "   29  AppX / UWP               30  Browser Downloads"
-                echo -e "   31  Clipboard History        32  Office MRU"
-                echo -e "   33  Defender Quarantine      34  PS ScriptBlock Log"
-                echo -e "   35  JumpLists                36  Network Artifacts"
-                echo -e "   37  Master Timeline          38  PAD Offline AD"
-                echo -e "   39  AI Chat History"
+                print_module_list
+                echo ""
+                echo -e "  ${DIM}$(L "I numeri di --module e --modules si riferiscono al sistema rilevato sul volume." \
+                                     "The numbers used by --module and --modules refer to the OS detected on the volume.")${RESET}"
                 echo ""
                 exit 0
                 ;;
