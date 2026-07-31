@@ -3,6 +3,11 @@ name: CI
 on:
   push:
     branches: ["**"]
+    # Senza questa riga il workflow non scatta mai su un tag, e il job che
+    # pubblica su GHCR — condizionato proprio ai tag — non puo' girare per
+    # definizione. Un meccanismo di rilascio che non parte mai e' peggio di
+    # nessun meccanismo: sembra esserci.
+    tags: ["v*"]
   pull_request:
   workflow_dispatch:
 
@@ -63,6 +68,11 @@ jobs:
           bats --version
       - name: Installa le dipendenze dei motori di detection
         run: python3 -m pip install --quiet yara-python pyyaml
+      - name: Installa gli strumenti per le immagini forensi
+        # Senza sleuthkit ed ewf-tools sei test sul montaggio non girano.
+        # FIUTO_TEST_REQUIRE_DEPS li fa fallire invece di saltarli in silenzio,
+        # quindi vanno installati davvero.
+        run: sudo apt-get install -y --no-install-recommends sleuthkit ewf-tools fdisk
       - name: Esegui la suite
         run: bats --tap tests/
 

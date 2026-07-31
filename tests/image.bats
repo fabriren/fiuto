@@ -25,11 +25,22 @@ teardown() {
     rm -rf "${TMPDIR:-/tmp}/fiuto_image_$$"
 }
 
-_need() { command -v "$1" > /dev/null 2>&1 || skip "$1 non installato"; }
+# Va chiamata dal CORPO del test, mai dentro una command substitution: skip
+# esce solo dalla subshell, e il test proseguirebbe con uno stato rotto invece
+# di essere saltato. E' il difetto che ha fatto fallire la CI: sei test
+# abortivano dove avrebbero dovuto saltare.
+_need() {
+    command -v "$1" > /dev/null 2>&1 && return 0
+    if [[ -n "${FIUTO_TEST_REQUIRE_DEPS:-}" ]]; then
+        echo "$1 assente ma FIUTO_TEST_REQUIRE_DEPS è impostata"
+        return 1
+    fi
+    skip "$1 non installato"
+}
 
-# Disco raw con tabella DOS e due partizioni.
+# Disco raw con tabella DOS e due partizioni. Non contiene controlli sugli
+# strumenti: quelli stanno nel corpo del test, per il motivo sopra.
 _disk() {
-    _need sfdisk
     truncate -s 64M "$FIXTURE/disco.raw"
     sfdisk --quiet "$FIXTURE/disco.raw" > /dev/null 2>&1 <<'EOF'
 label: dos
@@ -65,7 +76,7 @@ EOF
 # ------------------------------------------------------- partizioni --------
 
 @test "la tabella delle partizioni viene letta con gli offset in byte" {
-    _need mmls
+    _need mmls; _need sfdisk
     D=$(_disk)
     ROWS=$(image_partitions "$D")
     [ "$(wc -l <<< "$ROWS")" -eq 2 ]
@@ -76,7 +87,7 @@ EOF
 @test "le voci non montabili non compaiono fra le partizioni" {
     # mmls elenca anche lo spazio non allocato e la tabella stessa: proporle
     # come montabili farebbe scegliere quella sbagliata.
-    _need mmls
+    _need mmls; _need sfdisk
     D=$(_disk)
     ! image_partitions "$D" | grep -qi "unallocated"
 }
@@ -84,7 +95,7 @@ EOF
 @test "su un disco multi-partizione senza --partition si rifiuta di scegliere" {
     # Sceglierne una a caso significa analizzare la partizione sbagliata e non
     # accorgersene mai.
-    _need mmls
+    _need mmls; _need sfdisk
     IMAGE_PATH=$(_disk)
     run image_open
     [ "$status" -ne 0 ]
@@ -92,7 +103,7 @@ EOF
 }
 
 @test "una partizione inesistente è un errore, non un ripiego sulla prima" {
-    _need mmls
+    _need mmls; _need sfdisk
     IMAGE_PATH=$(_disk)
     IMAGE_PARTITION=99
     run image_open
@@ -143,7 +154,7 @@ EOF
     # nell'immagine prima di decidere se serve sudo.
     _need ewfacquire
     _need ewfmount
-    _need mmls
+    _need mmls; _need sfdisk
     D=$(_disk)
     ( cd "$FIXTURE" && ewfacquire -q -u -t e01 -f encase6 -c deflate:none -S 0 -C 1 \
         -D t -e t -E t -m removable -M logical -N test "$D" ) > /dev/null 2>&1 \
@@ -195,7 +206,7 @@ EOF
 
 @test "senza privilegi il montaggio si ferma dicendo perché" {
     [ "$(id -u)" -eq 0 ] && skip "il test presuppone un utente non privilegiato"
-    _need mmls
+    _need mmls; _need sfdisk
     IMAGE_PATH=$(_disk)
     IMAGE_PARTITION=002
     run image_open
