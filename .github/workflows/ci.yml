@@ -36,6 +36,13 @@ jobs:
       - uses: actions/checkout@v4
       - name: ./build.sh --check
         run: ./build.sh --check
+      # Le build sono due e si rigenerano separatamente: chi modifica un
+      # sorgente e lancia solo ./build.sh lascia indietro fiuto-macos.sh, e
+      # sul Mac finisce una versione vecchia senza che nulla lo segnali.
+      - name: ./buildMac.sh --check
+        run: ./buildMac.sh --check
+      - name: Sintassi di entrambe le build
+        run: bash -n fiuto.sh && bash -n fiuto-macos.sh
 
   shellcheck:
     name: ShellCheck
@@ -48,7 +55,7 @@ jobs:
           sudo apt-get install -y shellcheck
           shellcheck --version
       - name: Lint (severità >= warning)
-        run: shellcheck -S warning -x fiuto.sh
+        run: shellcheck -S warning -x fiuto.sh fiuto-macos.sh build.sh buildMac.sh
 
   tests:
     name: Bats
@@ -96,7 +103,7 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - name: Compila ogni heredoc Python
-        run: python3 tests/lint_embedded_python.py fiuto.sh
+        run: python3 tests/lint_embedded_python.py fiuto.sh fiuto-macos.sh
 
   docker:
     # L'attrito maggiore per chi usa FIUTO sono le dipendenze: l'immagine le
