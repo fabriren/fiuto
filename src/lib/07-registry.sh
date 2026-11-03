@@ -217,3 +217,146 @@ except Exception as e:
     print(f"ERROR: {e}", file=sys.stderr)
 PYEOF
 }
+
+# ----------------------------------------------------------------
+#  Confronto fra due hive (tipicamente il vivo e la copia RegBack)
+#
+#  regipy_query confonde "chiave assente" e "hive illeggibile": entrambi
+#  finiscono in un ERROR su stderr con ritorno 0. In un confronto va distinto,
+#  perche' "assente da RegBack" e' proprio il riscontro che si cerca: se un
+#  hive danneggiato venisse letto come "chiave assente", ogni chiave della
+#  copia live sembrerebbe nuova rispetto al backup. Le funzioni sotto
+#  restituiscono quindi sempre uno stato esplicito per ciascun lato.
+# ----------------------------------------------------------------
+
+# regipy_diff_key <hive_live> <hive_regback> <chiave>
+#
+# Confronta i VALORI di una chiave fra i due hive. Righe separate da \x1f
+# (unit separator), NON da tab: un valore assente da un lato produce un campo
+# vuoto adiacente a un altro delimitatore, e bash `read` collassa le run di
+# whitespace (tab incluso) anche con IFS impostato esplicitamente — un campo
+# vuoto fra due tab sparirebbe e sfaserebbe le colonne successive. \x1f non è
+# whitespace per bash, quindi i campi vuoti sopravvivono al parsing.
+#   nome_valore \x1f valore_live \x1f valore_regback \x1f verdetto
+# verdetto ∈ NEW (solo nel vivo) | CHANGED (in entrambi, diverso) |
+#            REMOVED (solo nel backup) | UNCHANGED
+#
+# Se uno dei due hive non si apre affatto, stampa una sola riga:
+#   HIVE_ERROR \x1f stato_live \x1f stato_regback
+# e nessun'altra: un hive illeggibile non va confrontato chiave per chiave.
+regipy_diff_key() {
+    local LIVE="$1" REGBACK="$2" KEY="$3"
+    "$PY3" - "$LIVE" "$REGBACK" "$KEY" << 'PYEOF'
+import sys
+from regipy.registry import RegistryHive
+
+live_path, regback_path, key_path = sys.argv[1], sys.argv[2], sys.argv[3]
+SEP = '\x1f'
+
+
+def clean(s):
+    """Un valore di registro e' dato dell'attaccante: puo' contenere a sua
+    volta \\x1f, \\n o \\r (REG_MULTI_SZ li usa come separatore interno) e
+    spaccherebbe il record TSV-like in due righe, disallineando i campi
+    successivi letti da bash."""
+    return s.replace('\x1f', ' ').replace('\n', ' ').replace('\r', ' ')
+
+
+def load_values(path):
+    """-> (stato, dict) con stato in HIVE_ERROR | ABSENT | OK."""
+    try:
+        hive = RegistryHive(path)
+    except Exception:
+        return 'HIVE_ERROR', {}
+    try:
+        key = hive.get_key(key_path)
+    except Exception:
+        return 'ABSENT', {}
+    try:
+        return 'OK', {clean(v.name): clean(str(v.value)) for v in key.get_values()}
+    except Exception:
+        # Un valore malformato fa fallire l'enumerazione: e' indistinguibile
+        # da un hive danneggiato per chi chiama, quindi va segnalato uguale,
+        # non letto come "nessun valore" (= nessuna differenza).
+        return 'HIVE_ERROR', {}
+
+
+live_state, live_vals = load_values(live_path)
+rb_state, rb_vals = load_values(regback_path)
+
+if live_state == 'HIVE_ERROR' or rb_state == 'HIVE_ERROR':
+    print(SEP.join(['HIVE_ERROR', live_state, rb_state]))
+    sys.exit(0)
+
+names = sorted(set(live_vals) | set(rb_vals))
+if not names:
+    # La chiave esiste ma senza valori propri (o esiste solo da un lato):
+    # la sua stessa presenza/assenza e' il dato.
+    if live_state == 'OK' and rb_state == 'ABSENT':
+        print(SEP.join(['<key>', '', '', 'NEW']))
+    elif live_state == 'ABSENT' and rb_state == 'OK':
+        print(SEP.join(['<key>', '', '', 'REMOVED']))
+    sys.exit(0)
+
+for n in names:
+    lv, rv = live_vals.get(n), rb_vals.get(n)
+    if lv is not None and rv is None:
+        verdict = 'NEW'
+    elif lv is None and rv is not None:
+        verdict = 'REMOVED'
+    elif lv != rv:
+        verdict = 'CHANGED'
+    else:
+        verdict = 'UNCHANGED'
+    print(SEP.join([n, lv or '', rv or '', verdict]))
+PYEOF
+}
+
+# regipy_diff_subkeys <hive_live> <hive_regback> <chiave>
+#
+# Confronta i NOMI delle sottochiavi dirette (non il contenuto: usata per SAM,
+# dove il set di account e' interessante ma l'hash non va mai mostrato).
+# Righe separate da \x1f (vedi nota su regipy_diff_key): nome_sottochiave \x1f
+# verdetto (NEW | REMOVED). Stessa regola HIVE_ERROR di regipy_diff_key.
+regipy_diff_subkeys() {
+    local LIVE="$1" REGBACK="$2" KEY="$3"
+    "$PY3" - "$LIVE" "$REGBACK" "$KEY" << 'PYEOF'
+import sys
+from regipy.registry import RegistryHive
+
+live_path, regback_path, key_path = sys.argv[1], sys.argv[2], sys.argv[3]
+SEP = '\x1f'
+
+
+def clean(s):
+    return s.replace('\x1f', ' ').replace('\n', ' ').replace('\r', ' ')
+
+
+def load_names(path):
+    try:
+        hive = RegistryHive(path)
+    except Exception:
+        return 'HIVE_ERROR', set()
+    try:
+        key = hive.get_key(key_path)
+    except Exception:
+        return 'ABSENT', set()
+    try:
+        return 'OK', {clean(k.name) for k in key.iter_subkeys()}
+    except Exception:
+        return 'HIVE_ERROR', set()
+
+
+live_state, live_names = load_names(live_path)
+rb_state, rb_names = load_names(regback_path)
+
+if live_state == 'HIVE_ERROR' or rb_state == 'HIVE_ERROR':
+    print(SEP.join(['HIVE_ERROR', live_state, rb_state]))
+    sys.exit(0)
+
+for n in sorted(live_names - rb_names):
+    print(SEP.join([n, 'NEW']))
+for n in sorted(rb_names - live_names):
+    print(SEP.join([n, 'REMOVED']))
+PYEOF
+}

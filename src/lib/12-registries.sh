@@ -86,6 +86,7 @@ MODULES_WIN=(
     "module_xplat_sqlite_recovery|SQLite Recovery|MAGENTA|Record cancellati da freelist e spazio libero§Deleted records from freelist and free space"
     "module_xplat_esp_bootkit|EFI System Partition|RED|Bootkit e persistenza pre-boot§Bootkits and pre-boot persistence"
     "module_xplat_yara|YARA|RED|Scansione con regole esterne (--yara)§Scan with external rules (--yara)|_guard_yara"
+    "module_regback|RegBack|CYAN|Confronto registro vivo vs backup periodico (RegIdleBackup)§Live registry vs periodic backup (RegIdleBackup)"
 )
 
 MODULES_LINUX=(

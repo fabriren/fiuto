@@ -335,7 +335,7 @@ fiuto_reports/
 
 ---
 
-## 📊 The 54 Windows analysis modules
+## 📊 The 55 Windows analysis modules
 
 | #  | Module Name                   | Windows Artifact                    | Usage                                                           |
 | -- | ----------------------------- | ----------------------------------- | --------------------------------------------------------------- |
@@ -393,6 +393,7 @@ fiuto_reports/
 | 52 | EFI System Partition *(cross-OS)* | ESP                             | Bootkits: code running **before** the OS and any EDR            |
 | 53 | YARA *(cross-OS)*                 | YAR                             | External rules applied to a declared, bounded scope (`--yara`)  |
 | 54 | Sigma                             | SIG                             | Community detections over EVTX, declared subset (`--sigma`)     |
+| 55 | RegBack                           | Windows/System32/config/RegBack | Live registry vs periodic backup, time-bounded diff             |
 
 ---
 
@@ -1393,7 +1394,7 @@ fiuto_reports/
 
 ---
 
-## 📊 I 54 Moduli di Analisi Windows
+## 📊 I 55 Moduli di Analisi Windows
 
 | #  | Nome Modulo                   | Artefatto Windows                   | Utilizzo                                                              |
 | -- | ----------------------------- | ----------------------------------- | --------------------------------------------------------------------- |
@@ -1451,6 +1452,7 @@ fiuto_reports/
 | 52 | EFI System Partition *(cross-OS)* | ESP                             | Bootkit: codice eseguito **prima** del sistema e di ogni EDR          |
 | 53 | YARA *(cross-OS)*                 | YAR                             | Regole esterne su un ambito limitato e dichiarato (`--yara`)          |
 | 54 | Sigma                             | SIG                             | Detection della comunita' sugli EVTX, sottoinsieme dichiarato (`--sigma`) |
+| 55 | RegBack                           | Windows/System32/config/RegBack | Confronto registro vivo vs backup periodico, differenziale a tempo delimitato |
 
 ---
 
