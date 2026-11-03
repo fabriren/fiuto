@@ -87,6 +87,7 @@ MODULES_WIN=(
     "module_xplat_esp_bootkit|EFI System Partition|RED|Bootkit e persistenza pre-boot§Bootkits and pre-boot persistence"
     "module_xplat_yara|YARA|RED|Scansione con regole esterne (--yara)§Scan with external rules (--yara)|_guard_yara"
     "module_regback|RegBack|CYAN|Confronto registro vivo vs backup periodico (RegIdleBackup)§Live registry vs periodic backup (RegIdleBackup)"
+    "module_win10_timeline|Windows 10 Timeline|CYAN|ActivitiesCache.db - finestre di uso attivo per app§ActivitiesCache.db - active-use windows per app"
 )
 
 MODULES_LINUX=(

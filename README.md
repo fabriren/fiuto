@@ -335,7 +335,7 @@ fiuto_reports/
 
 ---
 
-## 📊 The 55 Windows analysis modules
+## 📊 The 56 Windows analysis modules
 
 | #  | Module Name                   | Windows Artifact                    | Usage                                                           |
 | -- | ----------------------------- | ----------------------------------- | --------------------------------------------------------------- |
@@ -394,6 +394,7 @@ fiuto_reports/
 | 53 | YARA *(cross-OS)*                 | YAR                             | External rules applied to a declared, bounded scope (`--yara`)  |
 | 54 | Sigma                             | SIG                             | Community detections over EVTX, declared subset (`--sigma`)     |
 | 55 | RegBack                           | Windows/System32/config/RegBack | Live registry vs periodic backup, time-bounded diff             |
+| 56 | Windows 10 Timeline               | ActivitiesCache.db              | Active-use windows per app, covers what Prefetch/Amcache miss   |
 
 ---
 
@@ -1394,7 +1395,7 @@ fiuto_reports/
 
 ---
 
-## 📊 I 55 Moduli di Analisi Windows
+## 📊 I 56 Moduli di Analisi Windows
 
 | #  | Nome Modulo                   | Artefatto Windows                   | Utilizzo                                                              |
 | -- | ----------------------------- | ----------------------------------- | --------------------------------------------------------------------- |
@@ -1453,6 +1454,7 @@ fiuto_reports/
 | 53 | YARA *(cross-OS)*                 | YAR                             | Regole esterne su un ambito limitato e dichiarato (`--yara`)          |
 | 54 | Sigma                             | SIG                             | Detection della comunita' sugli EVTX, sottoinsieme dichiarato (`--sigma`) |
 | 55 | RegBack                           | Windows/System32/config/RegBack | Confronto registro vivo vs backup periodico, differenziale a tempo delimitato |
+| 56 | Windows 10 Timeline               | ActivitiesCache.db              | Finestre di uso attivo per app, copre cio' che Prefetch/Amcache non vedono |
 
 ---
 

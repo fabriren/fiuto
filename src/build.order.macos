@@ -68,6 +68,7 @@ src/modules/win/49-webcache.sh
 src/modules/win/50-search-index.sh
 src/modules/win/51-sigma.sh
 src/modules/win/52-regback.sh
+src/modules/win/53-win10-timeline.sh
 src/modules/linux/01-syslog.sh
 src/modules/linux/02-journal.sh
 src/modules/linux/03-logins.sh
