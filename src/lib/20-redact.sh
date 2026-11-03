@@ -96,7 +96,7 @@ LABELS = (r'password|passwd|pwd|psk|pre[- ]?shared[- ]?key|keymaterial|'
           r'bearer|token|api[_-]?key|apikey|aws_secret_access_key|'
           r'connection\s*string|nt\s*hash|ntlm\s*hash|lm\s*hash|hash\s*nt')
 sub('campo etichettato',
-    r'(\b(?:' + LABELS + r')\b\s*(?:[:=]|&gt;|&#61;)\s*)(?:&quot;|["\']?)([^\s<"\'&]{3,})',
+    r"(\b(?:" + LABELS + r")\b\s*(?:[:=]|&gt;|&#61;)\s*)(?:&quot;|[\x22\x27]?)([^\s<\x22\x27&]{3,})",
     lambda m: m.group(1) + MARK)
 
 # 3) Riversamenti SAM/NTDS: utente:RID:LM:NT:::. Utente e RID restano — sono
@@ -130,11 +130,11 @@ total = sum(counts.values())
 banner = (
     '<div class="card" style="margin:1rem 0;border-color:#f0883e">'
     '<div style="padding:1rem 1.5rem;font-size:.82rem;line-height:1.7">'
-    '<b>' + L('COPIA OSCURATA - non e\' il report originale',
+    '<b>' + L("COPIA OSCURATA - non e' il report originale",
               'REDACTED COPY - this is not the original report') + '</b><br>'
     + L('Da questa copia sono stati rimossi i valori delle credenziali (hash NTLM, PSK, '
         'token, chiavi private). Il report originale, integro, sta nello stesso percorso '
-        'senza il suffisso <code>.redacted</code>: e\' quello da conservare come reperto e '
+        "senza il suffisso <code>.redacted</code>: e' quello da conservare come reperto e "
         'da citare in una perizia.',
         'Credential values (NTLM hashes, PSKs, tokens, private keys) have been removed from '
         'this copy. The original, intact report sits in the same path without the '
@@ -142,7 +142,7 @@ banner = (
         'in a report.')
     + '<br><br>'
     + L('Gli hash SHA-256 dei reperti <b>non</b> sono stati toccati: sono dati di '
-        'integrita\', non segreti, e rimuoverli spezzerebbe la catena di custodia.',
+        "integrita', non segreti, e rimuoverli spezzerebbe la catena di custodia.",
         'Evidence SHA-256 hashes were <b>not</b> touched: they are integrity data, not '
         'secrets, and removing them would break the chain of custody.'))
 if rows:
